@@ -157,6 +157,8 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 }
 .dialog small { font-size: 14px; color: var(--muted); }
 .dialog h2 { margin: 4px 0 0; font-size: 28px; }
+.reward { text-align: center; font-weight: 700; color: var(--accent); }
+.reward.muted { color: var(--muted); font-weight: 400; font-size: 14px; }
 .results { display: flex; flex-direction: column; gap: 8px; }
 .result {
   display: flex; justify-content: space-between; align-items: center;

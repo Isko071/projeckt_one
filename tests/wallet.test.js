@@ -151,3 +151,15 @@ test('подписчики получают новый баланс; слома�
   W.spend(100, 'bet'); W.add(50, 'win');
   assert.deepEqual(seen, [4900, 4950]);
 });
+
+test('награды: настроены для сапёра и ятзи и укладываются в дневной лимит', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const r = plain(W.CONFIG.rewards);
+  assert.deepEqual(r, { minesweeper: { novice: 100, amateur: 250, expert: 400 }, yahtzee: { easy: 100, hard: 250 } });
+  const now = D(2026, 8, 1);
+  // 3 победы эксперта и новичок: 400*3 = 1200, затем 100 влезает, ещё 400 упирается в лимит 1500
+  for (let i = 0; i < 3; i++) assert.equal(W.earn('minesweeper', r.minesweeper.expert, now).granted, 400);
+  assert.equal(W.earn('yahtzee', r.yahtzee.easy, now).granted, 100);
+  const last = W.earn('minesweeper', r.minesweeper.expert, now);
+  assert.deepEqual(plain(last), { granted: 200, capped: true });
+});

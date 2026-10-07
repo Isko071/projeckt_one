@@ -53,6 +53,7 @@ function startGame() {
   app.display = null;
   app.modal = null;
   game = createGame([first, second]);
+  app.reward = null;
   app.screen = 'game';
   window.PlatformWallet.markPlayed(); // партия начата: серия дней и бонус дня
 }
@@ -249,7 +250,7 @@ function gameOverHtml() {
   }).join('');
   return '<div class="overlay" role="dialog" aria-label="' + esc(tr('over.aria')) + '"><div class="dialog">' +
     '<div><small>' + esc(tr('over.title')) + '</small><h2>' + title + '</h2></div>' +
-    '<div class="results">' + rows + '</div>' +
+    '<div class="results">' + rows + '</div>' + rewardHtml() +
     '<div class="dialog-actions"><button class="btn-secondary" id="menu" data-key="menu">' + esc(tr('over.toMenu')) + '</button>' +
     '<button class="btn-primary" id="again" data-key="again">' + esc(tr('over.again')) + '</button></div></div></div>';
 }
@@ -364,7 +365,24 @@ function morph(from, to) {
   while (from.childNodes.length > to.childNodes.length) from.removeChild(from.lastChild);
 }
 
+// Награда за победу над компьютером: один раз за партию, размер зависит от уровня
+function settleReward() {
+  var totals = game.players.map(totalScore);
+  var won = app.mode === 'cpu' && totals[0] > totals[1];
+  var base = won ? window.PlatformWallet.CONFIG.rewards.yahtzee[app.level] : 0;
+  var res = base ? window.PlatformWallet.earn('yahtzee', base) : { granted: 0, capped: false };
+  app.reward = { won: won, granted: res.granted, capped: res.capped };
+}
+
+function rewardHtml() {
+  var r = app.reward;
+  if (!r || !r.won) return '';
+  if (r.granted > 0) return '<div class="reward">' + esc(tr('reward.earned', { n: r.granted.toLocaleString('ru-RU'), unit: window.I18n.plural(r.granted, 'wallet.unit') })) + '</div>';
+  return '<div class="reward muted">' + esc(tr('reward.limit')) + '</div>';
+}
+
 function render() {
+  if (game && game.gameOver && !app.reward) settleReward();
   var tpl = document.createElement('template');
   tpl.innerHTML = '<div class="screen" data-morph-key="' + app.screen + '">' +
     (app.screen === 'start' ? startHtml() : gameHtml()) + '</div>' + modalHtml();
