@@ -19,10 +19,16 @@
     <div class="stub-label" data-i18n="gamepage.label"></div>
     <h1 data-i18n="games.yahtzee.title"></h1>
     <p data-i18n="gamepage.stub"></p>
+    <p class="player-line" id="player-line"></p>
   </div>
 </main>
 <script src="../../locales/ru.js"></script>
 <script src="../../shared/i18n.js"></script>
-<script>I18n.apply();</script>
+<script src="../../shared/profile.js"></script>
+<script>
+  I18n.apply();
+  // Имя игрока берётся из общего профиля платформы
+  document.getElementById('player-line').textContent = I18n.t('gamepage.player', { name: PlatformProfile.getProfile().name });
+</script>
 </body>
 </html>

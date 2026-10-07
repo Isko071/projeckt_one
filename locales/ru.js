@@ -29,6 +29,17 @@ root.LOCALES.ru = {
   'gamepage.back': '← К каталогу',
   'gamepage.label': 'Страница игры',
   'gamepage.stub': 'Здесь откроется сама игра.',
+  'gamepage.player': 'Играет: {name}',
+
+  'profile.defaultName': 'Игрок',
+  'profile.title': 'Профиль',
+  'profile.menuLabel': 'Меню профиля',
+  'profile.name': 'Имя',
+  'profile.avatar': 'Аватар',
+  'profile.avatarN': 'Аватар {n}',
+  'profile.save': 'Сохранить',
+  'profile.cancel': 'Отмена',
+  'profile.note': 'Имя и аватар хранятся только в этом браузере. Пароль не нужен.',
 
   'theme.toLight': 'Включить светлую тему',
   'theme.toDark': 'Включить тёмную тему'
