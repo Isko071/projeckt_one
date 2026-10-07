@@ -5,9 +5,9 @@
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
 //   PlatformWallet.add(n, source)          → пополнение (выигрыш в игре на аконы)
 //   PlatformWallet.earn(source, n, now)    → награда за одиночную игру с дневным лимитом → { granted, capped }
-//   PlatformWallet.dailyStatus(now), claimDaily(now)   — ежедневный бонус и серия дней
-//   PlatformWallet.reliefStatus(now), claimRelief(now) — помощь, когда аконов не хватает на минимальную ставку
-//   PlatformWallet.reset()                 → стартовое состояние
+//   PlatformWallet.markPlayed(now)         → отметить, что сегодня сыграли (продлевает серию, открывает бонус дня)
+//   PlatformWallet.dailyStatus(now), claimDaily(now)   — серия дней и ежедневный бонус
+//   PlatformWallet.reset()                 → стартовый баланс и пустой журнал (серия остаётся)
 // Когда появятся настоящие аккаунты, изменится только внутренность этого файла.
 (function (root) {
   var KEY = 'platform:wallet';
@@ -19,7 +19,7 @@
     dailyStep: 250,     // прибавка за каждый следующий день подряд
     dailyMax: 2000,     // потолок (достигается на 7-й день)
     earnDailyCap: 1500, // сколько можно заработать в одиночных играх за день
-    relief: 500,        // помощь при нехватке на минимальную ставку (раз в день)
+    milestones: { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 }, // разовые бонусы за длину серии
     logSize: 20
   };
 
@@ -32,7 +32,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, lastClaim: null, earnDay: null, earned: 0, reliefDay: null, log: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, log: [] };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -42,9 +42,12 @@
     var log = Array.isArray(raw.log) ? raw.log.filter(function (e) {
       return e && typeof e.source === 'string' && typeof e.amount === 'number' && isFinite(e.amount) && e.amount % 1 === 0;
     }).slice(0, CONFIG.logSize).map(function (e) { return { source: e.source.slice(0, 40), amount: e.amount, time: num(e.time, 0) }; }) : [];
+    var streak = Math.min(num(raw.streak, 0), 100000);
+    var p = raw.pending;
+    var pending = p && typeof p === 'object' && num(p.amount, -1) >= 1 ? { amount: num(p.amount, 0), bonus: num(p.bonus, 0), streak: Math.min(num(p.streak, 1), 100000) } : null;
     return {
-      balance: num(raw.balance, base.balance), streak: Math.min(num(raw.streak, 0), 7), lastClaim: day(raw.lastClaim),
-      earnDay: day(raw.earnDay), earned: num(raw.earned, 0), reliefDay: day(raw.reliefDay), log: log
+      balance: num(raw.balance, base.balance), streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
+      playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0), log: log
     };
   }
 
@@ -117,49 +120,71 @@
     return Math.min(CONFIG.dailyMax, CONFIG.dailyBase + CONFIG.dailyStep * (dayNumber - 1));
   }
 
-  // available — можно ли забрать бонус сегодня; day — номер дня серии (1..7), amount — сумма
+  // Серия, как она выглядит сегодня: если вчера не играли, она сгорела
+  function liveStreak(s, today) {
+    if (!s.playDay) return 0;
+    var gap = daysBetween(s.playDay, today);
+    return gap === 0 || gap === 1 ? s.streak : 0;
+  }
+
+  // Отметка «сегодня сыграли»: первая за день продлевает серию и готовит бонус дня
+  function markPlayed(now) {
+    var s = load(), today = dayOf(now);
+    if (s.playDay === today) return { counted: false, streak: s.streak };
+    if (s.pending) { // старый неполученный бонус не пропадает
+      s.balance += s.pending.amount + s.pending.bonus;
+      record(s, 'daily', s.pending.amount + s.pending.bonus, now);
+      s.pending = null;
+    }
+    s.streak = liveStreak(s, today) + 1;
+    s.best = Math.max(s.best, s.streak);
+    s.playDay = today;
+    s.pending = { amount: dailyAmount(Math.min(7, s.streak)), bonus: CONFIG.milestones[s.streak] || 0, streak: s.streak };
+    save(s);
+    return { counted: true, streak: s.streak, amount: s.pending.amount, bonus: s.pending.bonus };
+  }
+
+  // Состояние для интерфейса
   function dailyStatus(now) {
     var s = load(), today = dayOf(now);
-    if (s.lastClaim === today) return { available: false, day: s.streak, amount: dailyAmount(Math.min(7, s.streak + 1)), streak: s.streak };
-    var continues = s.lastClaim !== null && daysBetween(s.lastClaim, today) === 1;
-    var next = continues ? Math.min(7, s.streak + 1) : 1;
-    return { available: true, day: next, amount: dailyAmount(next), streak: continues ? s.streak : 0 };
+    var streak = liveStreak(s, today), playedToday = s.playDay === today;
+    var next = Math.min(7, streak + 1);
+    var milestones = Object.keys(CONFIG.milestones).map(Number).sort(function (a, b) { return a - b; });
+    var upcoming = milestones.filter(function (m) { return m > streak; })[0] || null;
+    return {
+      streak: streak, best: s.best, playedToday: playedToday,
+      atRisk: streak > 0 && !playedToday,       // вчера играли, сегодня ещё нет
+      pending: s.pending ? { amount: s.pending.amount, bonus: s.pending.bonus, streak: s.pending.streak } : null,
+      nextAmount: dailyAmount(next),            // бонус за следующий день серии
+      nextMilestone: upcoming, milestoneBonus: upcoming ? CONFIG.milestones[upcoming] : 0
+    };
   }
 
-  function claimDaily(now) {
-    var st = dailyStatus(now);
-    if (!st.available) return { claimed: false, amount: 0, day: st.day };
+  // Забрать бонус дня (доступен после первой игры за день)
+  function claimDaily() {
     var s = load();
-    s.streak = st.day;
-    s.lastClaim = dayOf(now);
-    s.balance += st.amount;
-    record(s, 'daily', st.amount, now);
+    if (!s.pending) return { claimed: false, amount: 0, bonus: 0, streak: s.streak };
+    var p = s.pending, total = p.amount + p.bonus;
+    s.balance += total;
+    record(s, 'daily', p.amount, undefined);
+    if (p.bonus) record(s, 'milestone', p.bonus, undefined);
+    s.pending = null;
     save(s);
-    return { claimed: true, amount: st.amount, day: st.day };
-  }
-
-  function reliefStatus(now) {
-    var s = load();
-    return { available: s.balance < CONFIG.minBet && s.reliefDay !== dayOf(now), amount: CONFIG.relief };
-  }
-  function claimRelief(now) {
-    if (!reliefStatus(now).available) return { claimed: false, amount: 0 };
-    var s = load();
-    s.reliefDay = dayOf(now);
-    s.balance += CONFIG.relief;
-    record(s, 'relief', CONFIG.relief, now);
-    save(s);
-    return { claimed: true, amount: CONFIG.relief };
+    return { claimed: true, amount: p.amount, bonus: p.bonus, streak: p.streak };
   }
 
   function getLog() { return load().log; }
-  function reset() { return save(fresh()).balance; }
+  function reset() {
+    var s = load(), f = fresh();
+    f.streak = s.streak; f.best = s.best; f.playDay = s.playDay; f.pending = s.pending;
+    return save(f).balance;
+  }
   function onChange(fn) { listeners.push(fn); }
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn,
-    dailyStatus: dailyStatus, claimDaily: claimDaily, reliefStatus: reliefStatus, claimRelief: claimRelief,
+    markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, reset: reset, onChange: onChange
   };
 })(typeof window !== 'undefined' ? window : globalThis);

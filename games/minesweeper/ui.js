@@ -85,7 +85,7 @@ function toStart() {
 // Применяет результат действия: анимации, таймер, конец партии
 function applyResult(res, wasReady) {
   if (!res || !res.changed) return;
-  if (wasReady) { app.startedAt = Date.now(); startTimer(); }
+  if (wasReady) { app.startedAt = Date.now(); startTimer(); window.PlatformWallet.markPlayed(); }
   app.anim = {};
   if (res.opened) res.opened.forEach(function (o) { app.anim[o.index] = Math.min(o.dist * 22, 200); });
   if (MS.isOver(game)) {

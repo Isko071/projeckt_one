@@ -38,25 +38,64 @@ test('кошелёк: ставка списывается, при нехватк
   assert.equal(W.getBalance(), 4500);
 });
 
-test('ежедневный бонус: 500, раз в день, серия растёт до 2000 на 7-й день', () => {
+test('бонус дня: только после игры; 500, потом +250 за день, потолок 2000 на 7-й день', () => {
   const W = load({ localStorage: fakeBackend() });
+  assert.equal(W.claimDaily().claimed, false, 'без игры бонуса нет');
   const amounts = [];
   for (let d = 1; d <= 9; d++) {
-    const r = W.claimDaily(D(2026, 3, d));
+    const m = W.markPlayed(D(2026, 3, d));
+    assert.equal(m.counted, true);
+    const r = W.claimDaily();
     assert.equal(r.claimed, true);
     amounts.push(r.amount);
   }
   assert.deepEqual(amounts, [500, 750, 1000, 1250, 1500, 1750, 2000, 2000, 2000]);
-  assert.equal(W.claimDaily(D(2026, 3, 9, 20)).claimed, false, 'второй раз за день нельзя');
-  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b));
+  assert.equal(W.claimDaily().claimed, false, 'второй раз за день нельзя');
+  // разовые бонусы серии: 3 дня +250, 7 дней +1000
+  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b) + 250 + 1000);
 });
 
-test('ежедневный бонус: пропущенный день сбрасывает серию; граница месяца и года', () => {
+test('серия: вторая игра в тот же день её не продлевает; бонус дня один', () => {
   const W = load({ localStorage: fakeBackend() });
-  W.claimDaily(D(2026, 12, 30)); W.claimDaily(D(2026, 12, 31));
-  assert.equal(W.claimDaily(D(2027, 1, 1)).day, 3, 'через границу года серия продолжается');
-  assert.equal(W.claimDaily(D(2027, 1, 3)).day, 1, 'пропуск дня — снова с первого');
-  assert.deepEqual(plain(W.dailyStatus(D(2027, 1, 3, 23))), { available: false, day: 1, amount: 750, streak: 1 });
+  assert.equal(W.markPlayed(D(2026, 3, 1, 9)).counted, true);
+  assert.equal(W.markPlayed(D(2026, 3, 1, 22)).counted, false);
+  assert.equal(W.dailyStatus(D(2026, 3, 1, 23)).streak, 1);
+  assert.equal(W.claimDaily().amount, 500);
+  assert.equal(W.claimDaily().claimed, false);
+});
+
+test('серия: пропущенный день сжигает её, лучший результат остаётся; граница года', () => {
+  const W = load({ localStorage: fakeBackend() });
+  W.markPlayed(D(2026, 12, 30)); W.markPlayed(D(2026, 12, 31));
+  assert.equal(W.markPlayed(D(2027, 1, 1)).streak, 3, 'через границу года серия продолжается');
+  assert.equal(W.dailyStatus(D(2027, 1, 2)).streak, 3, 'сегодня ещё не играли, но серия жива');
+  assert.equal(W.dailyStatus(D(2027, 1, 2)).atRisk, true);
+  assert.equal(W.dailyStatus(D(2027, 1, 3)).streak, 0, 'пропустили день — серия сгорела');
+  assert.equal(W.dailyStatus(D(2027, 1, 3)).atRisk, false);
+  assert.equal(W.markPlayed(D(2027, 1, 3)).streak, 1);
+  const st = W.dailyStatus(D(2027, 1, 3));
+  assert.equal(st.best, 3);
+  assert.equal(st.nextAmount, 750);
+  assert.equal(st.nextMilestone, 3);
+});
+
+test('неполученный бонус не пропадает: выплачивается при следующей игре', () => {
+  const W = load({ localStorage: fakeBackend() });
+  W.markPlayed(D(2026, 4, 1));               // бонус 500 ждёт
+  W.markPlayed(D(2026, 4, 2));               // забыли забрать вчерашний — он выплачен сам
+  assert.equal(W.getBalance(), 5500);
+  assert.equal(W.dailyStatus(D(2026, 4, 2)).pending.amount, 750);
+});
+
+test('длинные серии: разовые бонусы на 14, 30, 60 и 100 дни', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const bonuses = {};
+  for (let d = 0; d < 100; d++) {
+    const m = W.markPlayed(D(2026, 1, 1) + d * 86400000);
+    if (m.bonus) bonuses[m.streak] = m.bonus;
+    W.claimDaily();
+  }
+  assert.deepEqual(bonuses, { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 });
 });
 
 test('награды за одиночные игры: дневной лимит 1500, на следующий день снова', () => {
@@ -70,27 +109,16 @@ test('награды за одиночные игры: дневной лимит
   assert.equal(W.getBalance(), 5000 + 1500 + 400);
 });
 
-test('помощь при нехватке: только если меньше минимальной ставки и раз в день', () => {
-  const W = load({ localStorage: fakeBackend() });
-  const now = D(2026, 6, 1);
-  assert.equal(W.claimRelief(now).claimed, false, 'при 5000 помощь не нужна');
-  W.spend(4990, 'bet');
-  assert.equal(W.getBalance(), 10);
-  assert.equal(W.claimRelief(now).claimed, true);
-  assert.equal(W.getBalance(), 510);
-  W.spend(500, 'bet');
-  assert.equal(W.claimRelief(now).claimed, false, 'второй раз за день нельзя');
-  assert.equal(W.claimRelief(D(2026, 6, 2)).claimed, true);
-});
-
 test('журнал: последние 20 операций, новые сверху; сброс возвращает старт', () => {
   const W = load({ localStorage: fakeBackend() });
   for (let i = 1; i <= 25; i++) W.add(i, 'x' + i);
   const log = plain(W.getLog());
   assert.equal(log.length, 20);
   assert.equal(log[0].source, 'x25');
+  W.markPlayed(D(2026, 7, 1));
   assert.equal(W.reset(), 5000);
   assert.equal(W.getLog().length, 0);
+  assert.equal(W.dailyStatus(D(2026, 7, 1)).streak, 1, 'сброс не трогает серию');
 });
 
 test('повреждённые данные не ломают кошелёк', () => {
@@ -99,7 +127,7 @@ test('повреждённые данные не ломают кошелёк', (
     backend.data['platform:wallet'] = JSON.stringify(bad);
     const W = load({ localStorage: backend });
     assert.ok(Number.isInteger(W.getBalance()) && W.getBalance() >= 0, JSON.stringify(bad));
-    assert.ok(W.dailyStatus(D(2026, 1, 1)).amount >= 500);
+    assert.ok(W.dailyStatus(D(2026, 1, 1)).nextAmount >= 500);
   });
   const backend = fakeBackend();
   backend.data['platform:wallet'] = '{не json';
@@ -111,7 +139,8 @@ test('хранилище недоступно: кошелёк работает �
   assert.equal(W.getBalance(), 5000);
   W.spend(100, 'bet');
   assert.equal(W.getBalance(), 4900);
-  assert.equal(W.claimDaily(D(2026, 1, 1)).claimed, true);
+  W.markPlayed(D(2026, 1, 1));
+  assert.equal(W.claimDaily().claimed, true);
 });
 
 test('подписчики получают новый баланс; сломанный подписчик не мешает', () => {

@@ -23,6 +23,13 @@
     return text;
   }
 
+  // Слово в нужной форме: ключи <base>.one / .few / .many (русские правила склонения числительных)
+  function plural(n, base) {
+    var a = Math.abs(Math.floor(Number(n) || 0)), m10 = a % 10, m100 = a % 100;
+    var form = m10 === 1 && m100 !== 11 ? 'one' : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'few' : 'many');
+    return t(base + '.' + form);
+  }
+
   function setLocale(name) {
     if (root.LOCALES && root.LOCALES[name]) locale = name;
     return locale;
@@ -43,5 +50,5 @@
     if (document.documentElement) document.documentElement.setAttribute('lang', locale);
   }
 
-  root.I18n = { t: t, setLocale: setLocale, apply: apply, locale: function () { return locale; } };
+  root.I18n = { t: t, plural: plural, setLocale: setLocale, apply: apply, locale: function () { return locale; } };
 })(typeof window !== 'undefined' ? window : globalThis);

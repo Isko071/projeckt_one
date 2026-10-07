@@ -54,6 +54,7 @@ function startGame() {
   app.modal = null;
   game = createGame([first, second]);
   app.screen = 'game';
+  window.PlatformWallet.markPlayed(); // партия начата: серия дней и бонус дня
 }
 
 function toMenu() {
