@@ -26,10 +26,6 @@ root.LOCALES.ru = {
   'games.next.title': 'Скоро',
   'games.next.description': 'Новая игра уже в работе. Загляните позже.',
 
-  'gamepage.back': '← К каталогу',
-  'gamepage.label': 'Страница игры',
-  'gamepage.stub': 'Здесь откроется сама игра.',
-  'gamepage.player': 'Играет: {name}',
 
   'profile.defaultName': 'Игрок',
   'profile.title': 'Профиль',

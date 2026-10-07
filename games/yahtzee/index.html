@@ -5,30 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Ятзи</title>
-<link rel="icon" type="image/svg+xml" href="../../assets/logo.svg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c4161c'/%3E%3Crect x='12' y='12' width='40' height='40' rx='9' fill='%23fff' transform='rotate(-10 32 32)'/%3E%3Ccircle cx='23' cy='23' r='4' fill='%235b2a86'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%235b2a86'/%3E%3Ccircle cx='41' cy='41' r='4' fill='%235b2a86'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../../shared/theme.css">
-<link rel="stylesheet" href="../../catalog/catalog.css">
+<link rel="stylesheet" href="style.css">
+<!-- Хранилище и тема в <head>, чтобы тема применялась до первой отрисовки -->
 <script src="../../shared/storage.js"></script>
 <script src="../../shared/theme.js"></script>
 </head>
 <body>
-<!-- Заглушка: настоящая игра «Ятзи» переедет сюда на этапе 4 -->
-<main class="page-stub">
-  <a class="back-link" href="../../index.html" data-i18n="gamepage.back"></a>
-  <div class="stub-box">
-    <div class="stub-label" data-i18n="gamepage.label"></div>
-    <h1 data-i18n="games.yahtzee.title"></h1>
-    <p data-i18n="gamepage.stub"></p>
-    <p class="player-line" id="player-line"></p>
-  </div>
-</main>
+<noscript><p class="noscript">Для работы игры нужен включённый JavaScript.</p></noscript>
+<main class="app" id="app"></main>
+
 <script src="../../locales/ru.js"></script>
+<script src="ru.js"></script>
 <script src="../../shared/i18n.js"></script>
 <script src="../../shared/profile.js"></script>
-<script>
-  I18n.apply();
-  // Имя игрока берётся из общего профиля платформы
-  document.getElementById('player-line').textContent = I18n.t('gamepage.player', { name: PlatformProfile.getProfile().name });
-</script>
+<script src="logic.js"></script>
+<script src="ui.js"></script>
 </body>
 </html>
