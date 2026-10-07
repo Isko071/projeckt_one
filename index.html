@@ -25,7 +25,13 @@
       </svg>
       <span class="brand-name" data-i18n="platform.name"></span>
     </a>
-    <button class="icon-btn" id="theme-btn" type="button"></button>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="theme-btn" type="button"></button>
+      <button class="avatar-btn" id="avatar-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu" data-i18n-aria-label="profile.menuLabel"></button>
+    </div>
+    <div class="menu" id="profile-menu" role="menu" hidden>
+      <button class="menu-item" id="open-profile" type="button" role="menuitem" data-i18n="profile.title"></button>
+    </div>
   </header>
 
   <main class="content">
@@ -51,10 +57,31 @@
   </main>
 </div>
 
+<dialog class="dialog" id="profile-dialog" aria-labelledby="profile-title">
+  <form class="profile-form" id="profile-form" method="dialog">
+    <h2 class="dialog-title" id="profile-title" data-i18n="profile.title"></h2>
+    <label class="field">
+      <span class="field-label" data-i18n="profile.name"></span>
+      <input class="text-input" id="profile-name" name="name" type="text" maxlength="20" autocomplete="nickname">
+    </label>
+    <div class="field">
+      <span class="field-label" id="avatar-label" data-i18n="profile.avatar"></span>
+      <div class="avatars" id="avatars" role="group" aria-labelledby="avatar-label"></div>
+    </div>
+    <p class="dialog-note" data-i18n="profile.note"></p>
+    <div class="dialog-actions">
+      <button class="btn-secondary" id="profile-cancel" type="button" data-i18n="profile.cancel"></button>
+      <button class="btn-primary" type="submit" data-i18n="profile.save"></button>
+    </div>
+  </form>
+</dialog>
+
 <script src="locales/ru.js"></script>
 <script src="shared/i18n.js"></script>
+<script src="shared/profile.js"></script>
 <script src="games/games.js"></script>
 <script src="catalog/logic.js"></script>
 <script src="catalog/catalog.js"></script>
+<script src="catalog/profile-ui.js"></script>
 </body>
 </html>

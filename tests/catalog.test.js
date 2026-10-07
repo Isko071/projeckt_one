@@ -45,7 +45,7 @@ test('реестр: у готовых игр папка называется к�
 });
 
 test('словарь: ключи, используемые в catalog.js и страницах игр, существуют', () => {
-  const files = ['catalog/catalog.js', 'index.html', 'games/yahtzee/index.html'];
+  const files = ['catalog/catalog.js', 'catalog/profile-ui.js', 'shared/profile.js', 'index.html', 'games/yahtzee/index.html'];
   const keys = new Set();
   files.forEach((f) => {
     const text = fs.readFileSync(path.join(root, f), 'utf8');

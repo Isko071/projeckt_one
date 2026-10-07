@@ -128,7 +128,9 @@
 
   window.addEventListener('hashchange', syncFromHash);
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && selectedId !== null) go(null);
+    var dialogOpen = document.querySelector('dialog[open]');
+    var menuOpen = document.querySelector('.menu:not([hidden])');
+    if (e.key === 'Escape' && selectedId !== null && !dialogOpen && !menuOpen) go(null);
   });
   el.close.addEventListener('click', function () { go(null); });
 
