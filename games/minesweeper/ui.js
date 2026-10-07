@@ -85,7 +85,7 @@ function toStart() {
 // Применяет результат действия: анимации, таймер, конец партии
 function applyResult(res, wasReady) {
   if (!res || !res.changed) return;
-  if (wasReady) { app.startedAt = Date.now(); startTimer(); }
+  if (wasReady) { app.startedAt = Date.now(); startTimer(); window.PlatformWallet.markPlayed(); }
   app.anim = {};
   if (res.opened) res.opened.forEach(function (o) { app.anim[o.index] = Math.min(o.dist * 22, 200); });
   if (MS.isOver(game)) {
@@ -102,7 +102,8 @@ function finish() {
     var rr = MS.recordResult(app.bests, game.level, app.elapsed);
     app.bests = rr.bests;
     window.PlatformStorage.set(BEST_KEY, app.bests);
-    app.result = { won: true, time: app.elapsed, isRecord: rr.isRecord, best: rr.best };
+    var rw = window.PlatformWallet.earn('minesweeper', window.PlatformWallet.CONFIG.rewards.minesweeper[game.level]);
+    app.result = { won: true, time: app.elapsed, isRecord: rr.isRecord, best: rr.best, granted: rw.granted };
   } else {
     app.result = { won: false, time: app.elapsed, left: MS.cellsToOpen(game) };
     var n = 0;
@@ -240,7 +241,9 @@ function endHtml() {
   if (r.won) {
     body = '<small>' + esc(tr('win.sub', { name: name })) + '</small><div class="big-time">' + MS.formatTime(r.time) + '</div>' +
       (r.isRecord ? '<div class="record">' + esc(tr('win.record')) + '</div>' : '') +
-      '<div class="muted-text">' + esc(tr('win.best')) + ' <b>' + MS.formatTime(r.best) + '</b></div>';
+      '<div class="muted-text">' + esc(tr('win.best')) + ' <b>' + MS.formatTime(r.best) + '</b></div>' +
+      (r.granted > 0 ? '<div class="reward">' + esc(tr('reward.earned', { n: r.granted.toLocaleString('ru-RU'), unit: window.I18n.plural(r.granted, 'wallet.unit') })) + '</div>'
+        : '<div class="muted-text">' + esc(tr('reward.limit')) + '</div>');
   } else {
     body = '<div class="muted-text">' + esc(tr('lose.left')) + ' <b>' + r.left + '</b></div>' +
       '<div class="muted-text">' + esc(tr('lose.time')) + ' <b>' + MS.formatTime(r.time) + '</b></div>';

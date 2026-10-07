@@ -214,6 +214,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .end { text-align: center; align-items: stretch; }
 .big-time { font-size: 56px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
 .record { color: var(--accent); font-weight: 800; font-size: 18px; }
+.reward { color: var(--accent); font-weight: 800; font-size: 18px; }
 .end-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .sheet-overlay { align-items: flex-end; padding: 0; }
 .sheet-overlay .dialog { animation: sheet-up .32s cubic-bezier(.2, .8, .3, 1) both; }

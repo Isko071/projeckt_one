@@ -64,6 +64,8 @@
     'over.winner': 'Победил: {name}',
     'over.toMenu': 'В меню',
     'over.again': 'Играть снова',
+    'reward.earned': 'Награда за победу: +{n} {unit}',
+    'reward.limit': 'Дневной лимит наград исчерпан, завтра снова.',
 
     'rules.button': 'Правила',
     'rules.title': 'Правила',
