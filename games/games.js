@@ -12,7 +12,7 @@
       titleKey: 'games.yahtzee.title', descriptionKey: 'games.yahtzee.description'
     },
     {
-      id: 'minesweeper', status: 'soon', path: 'games/minesweeper/', cover: 'games/minesweeper/cover.svg',
+      id: 'minesweeper', status: 'available', path: 'games/minesweeper/', cover: 'games/minesweeper/cover.svg',
       titleKey: 'games.minesweeper.title', descriptionKey: 'games.minesweeper.description'
     },
     {
