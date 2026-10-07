@@ -1,175 +1,137 @@
-// Защищённые профили в каталоге: «Защитить паролем / Сохранить прогресс» и «Войти в профиль» (shared/vault.js).
+// Аккаунт в меню аватара: «Войти через Google» / «Выйти», состояние облака, выбор прогресса при конфликте.
 (function () {
-  var V = window.PlatformVault, P = window.PlatformProfile, I = window.I18n, t = I.t;
+  var C = window.PlatformCloud, I = window.I18n, t = I.t, P = window.PlatformProfile;
   var $ = function (id) { return document.getElementById(id); };
+  var dialog = $('account-dialog'), body = $('account-body'), menu = $('profile-menu'), avatarBtn = $('avatar-btn');
+  var actionBtn = $('cloud-action'), statusEl = $('cloud-status');
+  var conflictShown = false;
 
-  var dialog = $('account-dialog'), saveForm = $('save-form'), savedView = $('saved-view'), loginForm = $('login-form');
-  var saveItem = $('open-save'), loginItem = $('open-login'), menu = $('profile-menu'), avatarBtn = $('avatar-btn');
-  var lastFile = null, loginTab = 'local', chosen = null, fileText = '';
-
-  function show(which) {
-    saveForm.hidden = which !== 'save';
-    savedView.hidden = which !== 'saved';
-    loginForm.hidden = which !== 'login';
-  }
-  function showError(box, key, params) {
-    box.hidden = !key;
-    box.textContent = key ? t(key, params) : '';
-  }
-  function errorKey(e) {
-    var code = e && (e.code || e.message);
-    if (code === 'wrong-password') return 'account.error.wrong';
-    if (code === 'bad-file') return 'account.error.file';
-    if (code === 'weak-password') return 'account.error.weak';
-    if (code === 'no-crypto' || (e && e.name === 'TypeError' && !window.crypto)) return 'account.error.nocrypto';
-    return 'account.error.other';
-  }
+  function unit(n) { return I.plural(n, 'wallet.unit'); }
+  function days(n) { return I.plural(n, 'wallet.days'); }
+  function fmt(n) { return Number(n).toLocaleString('ru-RU'); }
   function closeMenu() { menu.hidden = true; avatarBtn.setAttribute('aria-expanded', 'false'); }
+
+  // ---------- Окно ----------
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function button(cls, text, onClick, autofocus) {
+    var b = el('button', cls, text);
+    b.type = 'button';
+    b.addEventListener('click', onClick);
+    if (autofocus) b.setAttribute('data-autofocus', '');
+    return b;
+  }
+  function openDialog(title, build, dismissable) {
+    $('account-title').textContent = title;
+    body.textContent = '';
+    build(body);
+    dialog.dataset.dismissable = dismissable === false ? 'no' : 'yes';
+    $('account-close').hidden = dismissable === false;
+    if (!dialog.open) dialog.showModal();
+    var auto = body.querySelector('[data-autofocus]');
+    if (auto) auto.focus();
+  }
   function closeDialog() { if (dialog.open) dialog.close(); }
 
+  function showError(key) {
+    openDialog(t('account.error.title'), function (b) {
+      b.appendChild(el('p', 'dialog-note', t(key)));
+      var row = el('div', 'dialog-actions');
+      row.appendChild(button('btn-primary', t('account.close'), closeDialog, true));
+      b.appendChild(row);
+    });
+  }
+
+  function signInError(e) {
+    var code = e && e.code;
+    if (code === 'auth/unauthorized-domain') return 'account.error.domain';
+    if (code === 'auth/popup-blocked') return 'account.error.popup';
+    if (code === 'unsupported') return 'account.error.unsupported';
+    if (code === 'auth/operation-not-allowed') return 'account.error.disabled';
+    if (code === 'auth/network-request-failed') return 'account.error.network';
+    return 'account.error.other';
+  }
+
+  function doSignIn() {
+    closeMenu();
+    C.signIn().then(function (r) { if (r && r.cancelled) return; }, function (e) { showError(signInError(e)); });
+  }
+
+  function confirmSignOut() {
+    closeMenu();
+    openDialog(t('account.signout.title'), function (b) {
+      b.appendChild(el('p', 'dialog-note', t('account.signout.text')));
+      var row = el('div', 'dialog-actions');
+      row.appendChild(button('btn-secondary', t('account.cancel'), closeDialog, true));
+      row.appendChild(button('btn-primary', t('account.signout.ok'), function () { runSignOut(false); }));
+      b.appendChild(row);
+    });
+  }
+
+  function runSignOut(force) {
+    C.signOut(force).then(function (r) {
+      if (r.ok) { window.location.reload(); return; }
+      openDialog(t('account.unsaved.title'), function (b) {
+        b.appendChild(el('p', 'dialog-note', t('account.unsaved.text')));
+        var row = el('div', 'dialog-actions');
+        row.appendChild(button('btn-secondary', t('account.unsaved.stay'), closeDialog, true));
+        row.appendChild(button('btn-primary', t('account.unsaved.force'), function () { runSignOut(true); }));
+        b.appendChild(row);
+      });
+    });
+  }
+
+  function showConflict() {
+    var c = C.getState().conflict;
+    if (!c) return;
+    conflictShown = true;
+    var when = '';
+    try { when = c.cloud.updatedAt ? t('account.conflict.updated', { date: new Date(c.cloud.updatedAt).toLocaleDateString(I.locale(), { day: 'numeric', month: 'short' }) }) : ''; } catch (e) { when = ''; }
+    openDialog(t('account.conflict.title'), function (b) {
+      b.appendChild(el('p', 'dialog-note', t('account.conflict.text')));
+      var list = el('div', 'conflict-list');
+      list.appendChild(el('div', 'conflict-row', t('account.conflict.cloud', { balance: fmt(c.cloud.balance === null ? 0 : c.cloud.balance), unit: unit(c.cloud.balance || 0), streak: c.cloud.streak, days: days(c.cloud.streak), date: when })));
+      list.appendChild(el('div', 'conflict-row', t('account.conflict.local', { balance: fmt(c.local.balance === null ? 0 : c.local.balance), unit: unit(c.local.balance || 0), streak: c.local.streak, days: days(c.local.streak) })));
+      b.appendChild(list);
+      b.appendChild(el('p', 'dialog-note', t('account.conflict.note')));
+      b.appendChild(button('btn-primary', t('account.conflict.useCloud'), function () { C.resolveConflict('cloud').then(closeDialog); }, true));
+      b.appendChild(button('btn-secondary', t('account.conflict.useLocal'), function () { C.resolveConflict('local').then(closeDialog); }));
+    }, false);
+  }
+
   // ---------- Меню ----------
-  function refreshMenu() {
-    var s = V.getSession();
-    saveItem.textContent = t(s ? 'account.save.menu.update' : 'account.save.menu.new');
-    avatarBtn.classList.toggle('dirty', !!(s && s.dirty));
-    saveItem.classList.toggle('dirty', !!(s && s.dirty));
-    saveItem.title = s && s.dirty ? t('account.dirty') : '';
+  function statusText(s) {
+    if (s.status === 'unsupported') return t('account.status.unsupported');
+    if (s.status === 'signedOut') return t('account.guest');
+    var key = { idle: 'idle', syncing: 'syncing', conflict: 'conflict', paused: 'paused' }[s.sync];
+    if (s.sync === 'error') key = s.error === 'denied' ? 'denied' : (s.error === 'no-storage' ? 'nostorage' : 'error');
+    return (s.user.name || s.user.email) + ': ' + t('account.status.' + (key || 'idle'));
   }
 
-  // ---------- Сохранение ----------
-  function openSave() {
-    closeMenu();
-    var s = V.getSession(), name = P.getProfile().name;
-    $('account-title').textContent = t(s ? 'account.save.title.update' : 'account.save.title.new');
-    $('save-intro').textContent = t(s ? 'account.save.intro.update' : 'account.save.intro.new', { name: s ? s.name : name });
-    $('save-pass').value = ''; $('save-pass2').value = '';
-    $('save-pass2-wrap').hidden = !!s;
-    showError($('save-error'), null);
-    $('save-submit').disabled = false; $('save-submit').textContent = t('account.save');
-    show('save');
-    dialog.showModal();
-    $('save-pass').focus();
+  function refresh() {
+    var s = C.getState();
+    if (s.status === 'signedIn') { actionBtn.textContent = t('account.google.signout'); actionBtn.hidden = false; }
+    else if (s.status === 'signedOut') { actionBtn.textContent = t('account.google.signin'); actionBtn.hidden = false; }
+    else actionBtn.hidden = true;
+    statusEl.textContent = statusText(s);
+    avatarBtn.classList.toggle('offline', s.status === 'signedIn' && s.sync === 'error');
+    if (s.sync === 'conflict' && !conflictShown) showConflict();
+    if (s.sync !== 'conflict') conflictShown = false;
   }
 
-  saveForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var pw = $('save-pass').value, existing = !!V.getSession(), err = $('save-error');
-    if (!V.checkPassword(pw)) return showError(err, 'account.error.weak', { n: V.MIN_PASSWORD });
-    if (!existing && pw !== $('save-pass2').value) return showError(err, 'account.error.mismatch');
-    showError(err, null);
-    var btn = $('save-submit');
-    btn.disabled = true; btn.textContent = t('account.saving');
-    V.saveCurrent(pw).then(function (r) {
-      lastFile = r;
-      $('saved-note').textContent = '';
-      show('saved');
-      refreshMenu();
-      $('saved-download').focus();
-    }).catch(function (e2) {
-      showError(err, errorKey(e2), { n: V.MIN_PASSWORD });
-    }).then(function () { btn.disabled = false; btn.textContent = t('account.save'); });
-  });
-
-  $('saved-download').addEventListener('click', function () {
-    if (!lastFile) return;
-    var blob = new Blob([lastFile.file], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'igroteka-' + lastFile.id + '.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    $('saved-note').textContent = t('account.saved.downloaded');
-  });
-  $('saved-copy').addEventListener('click', function () {
-    if (!lastFile) return;
-    var done = function (ok) { $('saved-note').textContent = t(ok ? 'account.saved.copied' : 'account.saved.nocopy'); };
-    try { navigator.clipboard.writeText(lastFile.file).then(function () { done(true); }, function () { done(false); }); } catch (e) { done(false); }
-  });
-  $('saved-done').addEventListener('click', closeDialog);
-
-  // ---------- Вход ----------
-  function setTab(name) {
-    loginTab = name;
-    $('tab-local').setAttribute('aria-selected', String(name === 'local'));
-    $('tab-file').setAttribute('aria-selected', String(name === 'file'));
-    $('login-local').hidden = name !== 'local';
-    $('login-file').hidden = name !== 'file';
-  }
-  function buildList() {
-    var list = $('login-list'), profiles = V.listProfiles();
-    list.textContent = '';
-    $('login-empty').hidden = profiles.length > 0;
-    if (!profiles.some(function (p) { return p.id === chosen; })) chosen = profiles.length ? profiles[0].id : null;
-    profiles.forEach(function (p) {
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'profile-option'; b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(p.id === chosen));
-      var dot = document.createElement('span'); dot.className = 'avatar-dot'; dot.style.background = P.avatarColor(p.avatar); dot.textContent = P.initial(p.name);
-      var name = document.createElement('span'); name.className = 'po-name'; name.textContent = p.name || t('profile.defaultName');
-      var when = document.createElement('small');
-      try { when.textContent = t('account.login.savedAt', { date: new Date(p.savedAt).toLocaleDateString(I.locale(), { day: 'numeric', month: 'short' }) }); } catch (e) { when.textContent = ''; }
-      b.appendChild(dot); b.appendChild(name); b.appendChild(when);
-      b.addEventListener('click', function () { chosen = p.id; buildList(); });
-      list.appendChild(b);
-    });
-  }
-  function openLogin() {
-    closeMenu();
-    $('account-title').textContent = t('account.login.title');
-    $('login-pass').value = ''; $('login-code').value = ''; $('login-file-input').value = ''; fileText = '';
-    showError($('login-error'), null);
-    $('login-submit').disabled = false; $('login-submit').textContent = t('account.login.submit');
-    buildList();
-    setTab(V.listProfiles().length ? 'local' : 'file');
-    show('login');
-    dialog.showModal();
-    $('login-pass').focus();
-  }
-
-  $('tab-local').addEventListener('click', function () { setTab('local'); });
-  $('tab-file').addEventListener('click', function () { setTab('file'); });
-  $('login-file-input').addEventListener('change', function (e) {
-    var f = e.target.files && e.target.files[0];
-    fileText = '';
-    if (!f) return;
-    if (f.size > 200000) return showError($('login-error'), 'account.error.file');
-    var reader = new FileReader();
-    reader.onload = function () { fileText = String(reader.result); showError($('login-error'), null); };
-    reader.onerror = function () { showError($('login-error'), 'account.error.file'); };
-    reader.readAsText(f);
-  });
-
-  loginForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var pw = $('login-pass').value, err = $('login-error'), btn = $('login-submit'), job;
-    if (loginTab === 'local') {
-      if (!chosen) return showError(err, 'account.error.empty');
-      job = function () { return V.login(chosen, pw); };
-    } else {
-      var text = fileText || $('login-code').value;
-      if (!text.trim()) return showError(err, 'account.error.file');
-      job = function () { return V.importFile(text, pw); };
-    }
-    showError(err, null);
-    btn.disabled = true; btn.textContent = t('account.login.entering');
-    job().then(function () {
-      window.location.reload(); // каталог и кошелёк перечитают новые данные
-    }).catch(function (e2) {
-      showError(err, errorKey(e2));
-      btn.disabled = false; btn.textContent = t('account.login.submit');
-    });
-  });
-
-  saveItem.addEventListener('click', openSave);
-  loginItem.addEventListener('click', openLogin);
+  actionBtn.addEventListener('click', function () { if (C.getState().status === 'signedIn') confirmSignOut(); else doSignIn(); });
   $('account-close').addEventListener('click', closeDialog);
-  dialog.addEventListener('click', function (e) { if (e.target === dialog) closeDialog(); });
-  dialog.addEventListener('close', function () { refreshMenu(); avatarBtn.focus(); });
+  dialog.addEventListener('click', function (e) { if (e.target === dialog && dialog.dataset.dismissable !== 'no') closeDialog(); });
+  dialog.addEventListener('cancel', function (e) { if (dialog.dataset.dismissable === 'no') e.preventDefault(); });
+  dialog.addEventListener('close', function () { avatarBtn.focus(); });
 
-  window.PlatformWallet.onChange(refreshMenu);
-  P.onChange(refreshMenu);
-  window.addEventListener('pageshow', refreshMenu);
-  window.addEventListener('focus', refreshMenu);
+  C.onChange(refresh);
+  P.onChange(refresh);
+  C.start({ allowDownload: true });
   I.apply();
-  refreshMenu();
+  refresh();
 })();

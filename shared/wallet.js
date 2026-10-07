@@ -193,11 +193,13 @@
     return { peak: s.peak, bestStreak: s.best, wins: JSON.parse(JSON.stringify(s.wins)) };
   }
   function onChange(fn) { listeners.push(fn); }
+  // Забыть копию в памяти (после смены или очистки прогресса из другого модуля)
+  function forget() { memory = null; }
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn,
     markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
-    getLog: getLog, records: records, onChange: onChange
+    getLog: getLog, records: records, onChange: onChange, forget: forget
   };
 })(typeof window !== 'undefined' ? window : globalThis);

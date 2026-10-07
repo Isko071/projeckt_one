@@ -52,10 +52,11 @@
   }
 
   function onChange(fn) { listeners.push(fn); }
+  function forget() { memory = null; }
 
   root.PlatformProfile = {
     KEY: KEY, MAX_NAME: MAX_NAME, AVATAR_COUNT: AVATAR_HUES.length,
     sanitize: sanitize, initial: initial, avatarColor: avatarColor,
-    getProfile: getProfile, saveProfile: saveProfile, onChange: onChange
+    getProfile: getProfile, saveProfile: saveProfile, onChange: onChange, forget: forget
   };
 })(typeof window !== 'undefined' ? window : globalThis);
