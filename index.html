@@ -29,14 +29,32 @@
   </header>
 
   <main class="content">
+    <!-- Главный постер: скрыт, пока игра не выбрана -->
+    <div class="poster-wrap" id="poster-wrap">
+      <div class="poster-clip">
+        <section class="poster" id="poster" data-i18n-aria-label="catalog.posterLabel">
+          <div class="poster-cover"><img id="poster-cover" alt="" width="200" height="250"></div>
+          <div class="poster-body">
+            <h2 class="poster-title" id="poster-title"></h2>
+            <p class="poster-desc" id="poster-desc"></p>
+            <div class="poster-actions" id="poster-actions"></div>
+          </div>
+          <button class="poster-close" id="poster-close" type="button" data-i18n-aria-label="catalog.close">✕</button>
+        </section>
+      </div>
+    </div>
+
     <h1 class="title" data-i18n="catalog.title"></h1>
     <p class="subtitle" data-i18n="catalog.subtitle"></p>
-    <div class="empty" id="catalog-empty" data-i18n="catalog.empty"></div>
+    <div class="grid" id="grid" role="list" data-i18n-aria-label="catalog.gridLabel"></div>
+    <div class="empty" id="catalog-empty" hidden data-i18n="catalog.empty"></div>
   </main>
 </div>
 
 <script src="locales/ru.js"></script>
 <script src="shared/i18n.js"></script>
+<script src="games/games.js"></script>
+<script src="catalog/logic.js"></script>
 <script src="catalog/catalog.js"></script>
 </body>
 </html>

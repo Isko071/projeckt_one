@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="900" text-anchor="middle">
+<defs>
+<radialGradient id="gRed" cx="50%" cy="55%" r="70%"><stop offset="0" stop-color="oklch(0.66 0.2 28)"/><stop offset="1" stop-color="oklch(0.5 0.19 25)"/></radialGradient>
+<radialGradient id="gGreen" cx="50%" cy="40%" r="80%"><stop offset="0" stop-color="oklch(0.62 0.13 140)"/><stop offset="1" stop-color="oklch(0.38 0.09 150)"/></radialGradient>
+<radialGradient id="gBlue" cx="50%" cy="45%" r="80%"><stop offset="0" stop-color="oklch(0.66 0.12 220)"/><stop offset="1" stop-color="oklch(0.42 0.11 245)"/></radialGradient>
+<radialGradient id="gDark" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="oklch(0.38 0.015 260)"/><stop offset="1" stop-color="oklch(0.2 0.012 260)"/></radialGradient>
+<linearGradient id="gDie" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(0.99 0.015 85)"/><stop offset="1" stop-color="oklch(0.86 0.04 80)"/></linearGradient>
+<linearGradient id="gChip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(0.62 0.21 27)"/><stop offset="1" stop-color="oklch(0.46 0.18 25)"/></linearGradient>
+<linearGradient id="gCell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(0.88 0.06 215)"/><stop offset="1" stop-color="oklch(0.7 0.1 225)"/></linearGradient>
+</defs>
+<rect width="200" height="250" fill="url(#gBlue)"/>
+<g stroke="oklch(0.3 0.08 250)" stroke-width="3" stroke-linejoin="round">
+<rect x="22" y="92" width="156" height="140" rx="20" fill="oklch(0.34 0.09 250)" transform="translate(0 5)"/>
+<rect x="22" y="92" width="156" height="140" rx="20" fill="oklch(0.93 0.03 215)"/>
+</g>
+<g stroke="oklch(0.3 0.08 250)" stroke-width="2.5" stroke-linejoin="round">
+<rect x="32" y="102" width="40" height="38" rx="9" fill="url(#gCell)"/><rect x="80" y="102" width="40" height="38" rx="9" fill="oklch(0.99 0.005 90)"/><rect x="128" y="102" width="40" height="38" rx="9" fill="url(#gCell)"/>
+<rect x="32" y="148" width="40" height="38" rx="9" fill="oklch(0.99 0.005 90)"/><rect x="80" y="148" width="40" height="38" rx="9" fill="url(#gCell)"/><rect x="128" y="148" width="40" height="38" rx="9" fill="oklch(0.99 0.005 90)"/>
+<rect x="32" y="194" width="40" height="30" rx="9" fill="url(#gCell)"/><rect x="80" y="194" width="40" height="30" rx="9" fill="oklch(0.99 0.005 90)"/><rect x="128" y="194" width="40" height="30" rx="9" fill="url(#gCell)"/>
+</g>
+<g font-size="26" stroke="none"><text x="100" y="131" fill="oklch(0.5 0.17 25)">2</text><text x="52" y="177" fill="oklch(0.45 0.15 255)">1</text><text x="148" y="177" fill="oklch(0.45 0.13 150)">3</text><text x="100" y="219" fill="oklch(0.45 0.15 255)">1</text></g>
+<path d="M44 132 V108 L66 117 L44 126" fill="oklch(0.62 0.21 27)" stroke="oklch(0.3 0.08 250)" stroke-width="2.5" stroke-linejoin="round"/>
+<g stroke="oklch(0.25 0.03 260)" stroke-width="3.5" stroke-linecap="round"><path d="M148 108 v28 M134 122 h28 M138 112 l20 20 M158 112 l-20 20"/></g><circle cx="148" cy="122" r="10" fill="oklch(0.25 0.03 260)"/><circle cx="145" cy="119" r="3" fill="oklch(0.95 0.01 90)"/>
+<text x="100" y="66" font-size="44" fill="oklch(0.99 0.005 90)" stroke="oklch(0.28 0.08 250)" stroke-width="9" paint-order="stroke" stroke-linejoin="round">САПЁР</text>
+</svg>

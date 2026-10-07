@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="900" text-anchor="middle">
+<defs>
+<radialGradient id="gRed" cx="50%" cy="55%" r="70%"><stop offset="0" stop-color="oklch(0.66 0.2 28)"/><stop offset="1" stop-color="oklch(0.5 0.19 25)"/></radialGradient>
+<radialGradient id="gGreen" cx="50%" cy="40%" r="80%"><stop offset="0" stop-color="oklch(0.62 0.13 140)"/><stop offset="1" stop-color="oklch(0.38 0.09 150)"/></radialGradient>
+<radialGradient id="gBlue" cx="50%" cy="45%" r="80%"><stop offset="0" stop-color="oklch(0.66 0.12 220)"/><stop offset="1" stop-color="oklch(0.42 0.11 245)"/></radialGradient>
+<radialGradient id="gDark" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="oklch(0.38 0.015 260)"/><stop offset="1" stop-color="oklch(0.2 0.012 260)"/></radialGradient>
+<linearGradient id="gDie" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(0.99 0.015 85)"/><stop offset="1" stop-color="oklch(0.86 0.04 80)"/></linearGradient>
+<linearGradient id="gChip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(0.62 0.21 27)"/><stop offset="1" stop-color="oklch(0.46 0.18 25)"/></linearGradient>
+<linearGradient id="gCell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(0.88 0.06 215)"/><stop offset="1" stop-color="oklch(0.7 0.1 225)"/></linearGradient>
+</defs>
+<rect width="200" height="250" fill="url(#gGreen)"/>
+<path d="M0 150 Q100 120 200 150 V250 H0Z" fill="oklch(0.3 0.06 200)"/>
+<ellipse cx="100" cy="132" rx="82" ry="34" fill="oklch(0.2 0.01 260)"/>
+<ellipse cx="100" cy="124" rx="82" ry="34" fill="oklch(0.3 0.01 260)"/>
+<ellipse cx="100" cy="124" rx="76" ry="30" fill="none" stroke="oklch(0.97 0.005 90)" stroke-width="9" stroke-dasharray="18 18"/>
+<ellipse cx="100" cy="122" rx="52" ry="19" fill="oklch(0.75 0.14 90)"/>
+<g stroke="oklch(0.3 0.02 260)" stroke-width="2.5" stroke-linejoin="round">
+<g transform="rotate(-12 70 90)"><rect x="34" y="34" width="70" height="92" rx="10" fill="oklch(0.99 0.004 90)"/><text x="50" y="68" font-size="28" fill="oklch(0.55 0.2 25)" stroke="none">K</text><path d="M69 110 C50 98 52 82 63 82 C67 82 69 85 69 85 C69 85 71 82 75 82 C86 82 88 98 69 110Z" fill="oklch(0.58 0.2 25)"/></g>
+<g transform="rotate(9 130 90)"><rect x="92" y="30" width="70" height="92" rx="10" fill="oklch(0.99 0.004 90)"/><text x="108" y="64" font-size="28" fill="oklch(0.25 0.02 260)" stroke="none">A</text><path d="M127 78 C140 92 146 98 140 104 C136 108 130 104 128 100 L131 112 H123 L126 100 C124 104 118 108 114 104 C108 98 114 92 127 78Z" fill="oklch(0.25 0.02 260)"/></g>
+</g>
+<text x="100" y="206" font-size="27" fill="oklch(0.99 0.01 90)" stroke="oklch(0.2 0.03 200)" stroke-width="7" paint-order="stroke" stroke-linejoin="round" textLength="176" lengthAdjust="spacingAndGlyphs">БЛЭКДЖЕК</text>
+</svg>

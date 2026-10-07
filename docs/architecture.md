@@ -81,7 +81,7 @@ window.GAMES = [
   {
     id: 'yahtzee',               // латиницей, совпадает с именем папки
     status: 'available',         // 'available' | 'soon'
-    path: 'games/yahtzee/',      // куда ведёт «Играть»
+    path: 'games/yahtzee/',      // папка игры; «Играть» ведёт на path + 'index.html'
     cover: 'games/yahtzee/cover.svg',
     titleKey: 'games.yahtzee.title',
     descriptionKey: 'games.yahtzee.description'
