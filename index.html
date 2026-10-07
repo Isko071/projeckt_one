@@ -31,6 +31,8 @@
     </div>
     <div class="menu" id="profile-menu" role="menu" hidden>
       <button class="menu-item" id="open-profile" type="button" role="menuitem" data-i18n="profile.title"></button>
+      <button class="menu-item" id="open-save" type="button" role="menuitem"></button>
+      <button class="menu-item" id="open-login" type="button" role="menuitem" data-i18n="account.login.menu"></button>
     </div>
   </header>
 
@@ -69,6 +71,54 @@
     <div class="empty" id="catalog-empty" hidden data-i18n="catalog.empty"></div>
   </main>
 </div>
+
+<dialog class="dialog account-dialog" id="account-dialog" aria-labelledby="account-title">
+  <div class="wallet-head">
+    <h2 class="dialog-title" id="account-title"></h2>
+    <button class="icon-btn" id="account-close" type="button" data-i18n-aria-label="wallet.close">✕</button>
+  </div>
+
+  <form class="account-form" id="save-form" novalidate hidden autocomplete="off">
+    <p class="dialog-note" id="save-intro"></p>
+    <label class="field"><span class="field-label" data-i18n="account.password"></span>
+      <input class="text-input" id="save-pass" type="password" autocomplete="new-password" maxlength="200"></label>
+    <label class="field" id="save-pass2-wrap"><span class="field-label" data-i18n="account.password2"></span>
+      <input class="text-input" id="save-pass2" type="password" autocomplete="new-password" maxlength="200"></label>
+    <p class="dialog-note warn" data-i18n="account.warn"></p>
+    <p class="form-error" id="save-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button class="btn-primary" id="save-submit" type="submit" data-i18n="account.save"></button></div>
+  </form>
+
+  <div class="account-form" id="saved-view" hidden>
+    <p class="dialog-note" data-i18n="account.saved.text"></p>
+    <button class="btn-primary" id="saved-download" type="button" data-i18n="account.saved.download"></button>
+    <button class="btn-secondary" id="saved-copy" type="button" data-i18n="account.saved.copy"></button>
+    <p class="dialog-note" id="saved-note" role="status"></p>
+    <div class="dialog-actions"><button class="btn-secondary" id="saved-done" type="button" data-i18n="account.done"></button></div>
+  </div>
+
+  <form class="account-form" id="login-form" novalidate hidden autocomplete="off">
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-local" type="button" role="tab" data-i18n="account.login.local"></button>
+      <button class="tab" id="tab-file" type="button" role="tab" data-i18n="account.login.file"></button>
+    </div>
+    <div id="login-local">
+      <p class="dialog-note" id="login-empty" data-i18n="account.login.empty" hidden></p>
+      <div class="profile-list" id="login-list" role="radiogroup" data-i18n-aria-label="account.login.local"></div>
+    </div>
+    <div id="login-file" hidden>
+      <label class="field"><span class="field-label" data-i18n="account.login.pick"></span>
+        <input class="text-input" id="login-file-input" type="file" accept=".json,application/json,text/plain"></label>
+      <label class="field"><span class="field-label" data-i18n="account.login.paste"></span>
+        <textarea class="text-input" id="login-code" rows="3" spellcheck="false"></textarea></label>
+    </div>
+    <label class="field"><span class="field-label" data-i18n="account.password"></span>
+      <input class="text-input" id="login-pass" type="password" autocomplete="current-password" maxlength="200"></label>
+    <p class="dialog-note warn" data-i18n="account.login.warn"></p>
+    <p class="form-error" id="login-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button class="btn-primary" id="login-submit" type="submit" data-i18n="account.login.submit"></button></div>
+  </form>
+</dialog>
 
 <dialog class="dialog" id="profile-dialog" aria-labelledby="profile-title">
   <form class="profile-form" id="profile-form" method="dialog">
@@ -120,10 +170,12 @@
 <script src="shared/i18n.js"></script>
 <script src="shared/profile.js"></script>
 <script src="shared/wallet.js"></script>
+<script src="shared/vault.js"></script>
 <script src="games/games.js"></script>
 <script src="catalog/logic.js"></script>
 <script src="catalog/catalog.js"></script>
 <script src="catalog/profile-ui.js"></script>
 <script src="catalog/wallet-ui.js"></script>
+<script src="catalog/account-ui.js"></script>
 </body>
 </html>
