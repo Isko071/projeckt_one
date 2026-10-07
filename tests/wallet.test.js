@@ -109,16 +109,13 @@ test('награды за одиночные игры: дневной лимит
   assert.equal(W.getBalance(), 5000 + 1500 + 400);
 });
 
-test('журнал: последние 20 операций, новые сверху; сброс возвращает старт', () => {
+test('журнал: последние 20 операций, новые сверху', () => {
   const W = load({ localStorage: fakeBackend() });
   for (let i = 1; i <= 25; i++) W.add(i, 'x' + i);
   const log = plain(W.getLog());
   assert.equal(log.length, 20);
   assert.equal(log[0].source, 'x25');
-  W.markPlayed(D(2026, 7, 1));
-  assert.equal(W.reset(), 5000);
-  assert.equal(W.getLog().length, 0);
-  assert.equal(W.dailyStatus(D(2026, 7, 1)).streak, 1, 'сброс не трогает серию');
+  assert.equal(W.reset, undefined, 'сброса аконов нет: цель — копить');
 });
 
 test('повреждённые данные не ломают кошелёк', () => {
@@ -162,4 +159,29 @@ test('награды: настроены для сапёра и ятзи и ук
   assert.equal(W.earn('yahtzee', r.yahtzee.easy, now).granted, 100);
   const last = W.earn('minesweeper', r.minesweeper.expert, now);
   assert.deepEqual(plain(last), { granted: 200, capped: true });
+});
+
+test('рекорды: максимум аконов за всё время не падает при тратах; победы и лучшая серия', () => {
+  const W = load({ localStorage: fakeBackend() });
+  assert.deepEqual(plain(W.records()), { peak: 5000, bestStreak: 0, wins: {} });
+  W.add(3000, 'win');
+  W.spend(7000, 'bet');
+  W.earn('minesweeper', 100, D(2026, 9, 1));
+  W.earn('minesweeper', 100, D(2026, 9, 1));
+  W.earn('yahtzee', 250, D(2026, 9, 1));
+  W.markPlayed(D(2026, 9, 1)); W.markPlayed(D(2026, 9, 2));
+  assert.deepEqual(plain(W.records()), { peak: 8000, bestStreak: 2, wins: { minesweeper: 2, yahtzee: 1 } });
+});
+
+test('рекорды: победа при исчерпанном лимите всё равно засчитывается; мусор в данных отбрасывается', () => {
+  const backend = fakeBackend();
+  backend.data['platform:wallet'] = JSON.stringify({ balance: 100, peak: 'много', wins: { a: -1, b: 2.5, c: 3, [`${'x'.repeat(60)}`]: 4 } });
+  const W = load({ localStorage: backend });
+  const rec = plain(W.records());
+  assert.equal(rec.peak, 100);
+  assert.deepEqual(Object.keys(rec.wins).map((k) => k.length), [1, 40]);
+  const now = D(2026, 9, 1);
+  W.earn('minesweeper', 1500, now);
+  assert.equal(W.earn('minesweeper', 100, now).granted, 0);
+  assert.equal(W.records().wins.minesweeper, 2);
 });

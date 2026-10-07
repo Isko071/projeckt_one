@@ -72,10 +72,14 @@ root.LOCALES.ru = {
   'wallet.src.bet': 'Ставка',
   'wallet.src.win': 'Выигрыш',
   'wallet.src.other': 'Операция',
-  'wallet.reset': 'Сбросить аконы',
-  'wallet.reset.ask': 'Баланс вернётся к {start} {unit}, журнал очистится. Серия сохранится.',
-  'wallet.reset.ok': 'Да, сбросить',
-  'wallet.reset.cancel': 'Отмена',
+  'wallet.records.title': 'Рекорды',
+  'wallet.records.peak': 'Больше всего аконов',
+  'wallet.records.streak': 'Лучшая серия',
+  'wallet.records.wins': 'Победы',
+  'wallet.records.mines': 'Сапёр, {level}: лучшее время',
+  'wallet.records.level.novice': 'новичок',
+  'wallet.records.level.amateur': 'любитель',
+  'wallet.records.level.expert': 'эксперт',
 
   'theme.toLight': 'Включить светлую тему',
   'theme.toDark': 'Включить тёмную тему'

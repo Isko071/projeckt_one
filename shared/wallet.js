@@ -7,7 +7,7 @@
 //   PlatformWallet.earn(source, n, now)    → награда за одиночную игру с дневным лимитом → { granted, capped }
 //   PlatformWallet.markPlayed(now)         → отметить, что сегодня сыграли (продлевает серию, открывает бонус дня)
 //   PlatformWallet.dailyStatus(now), claimDaily(now)   — серия дней и ежедневный бонус
-//   PlatformWallet.reset()                 → стартовый баланс и пустой журнал (серия остаётся)
+//   PlatformWallet.records()               → { peak, bestStreak, wins } для таблицы рекордов
 // Когда появятся настоящие аккаунты, изменится только внутренность этого файла.
 (function (root) {
   var KEY = 'platform:wallet';
@@ -33,7 +33,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, log: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, log: [] };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -46,9 +46,18 @@
     var streak = Math.min(num(raw.streak, 0), 100000);
     var p = raw.pending;
     var pending = p && typeof p === 'object' && num(p.amount, -1) >= 1 ? { amount: num(p.amount, 0), bonus: num(p.bonus, 0), streak: Math.min(num(p.streak, 1), 100000) } : null;
+    var balance = num(raw.balance, base.balance);
+    var wins = {};
+    if (raw.wins && typeof raw.wins === 'object' && !Array.isArray(raw.wins)) {
+      Object.keys(raw.wins).slice(0, 20).forEach(function (k) {
+        var v = num(raw.wins[k], 0);
+        if (v > 0) wins[k.slice(0, 40)] = Math.min(v, 1000000);
+      });
+    }
     return {
-      balance: num(raw.balance, base.balance), streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
-      playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0), log: log
+      balance: balance, streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
+      playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0),
+      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, log: log
     };
   }
 
@@ -57,6 +66,7 @@
     return sanitize(stored || memory);
   }
   function save(state) {
+    if (state.balance > state.peak) state.peak = state.balance;
     memory = state;
     if (root.PlatformStorage) root.PlatformStorage.set(KEY, state);
     listeners.forEach(function (fn) { try { fn(state.balance); } catch (e) { /* подписчик не должен ломать остальных */ } });
@@ -105,6 +115,8 @@
   function earn(source, n, now) {
     var s = load(), today = dayOf(now);
     if (num(n, -1) < 1) return { granted: 0, capped: false };
+    var key = String(source || 'earn').slice(0, 40);
+    s.wins[key] = (s.wins[key] || 0) + 1; // победа засчитывается, даже если дневной лимит наград исчерпан
     if (s.earnDay !== today) { s.earnDay = today; s.earned = 0; }
     var room = Math.max(0, CONFIG.earnDailyCap - s.earned);
     var granted = Math.min(n, room);
@@ -175,10 +187,10 @@
   }
 
   function getLog() { return load().log; }
-  function reset() {
-    var s = load(), f = fresh();
-    f.streak = s.streak; f.best = s.best; f.playDay = s.playDay; f.pending = s.pending;
-    return save(f).balance;
+  // Рекорды для таблицы: больше всего аконов, лучшая серия, победы по играм
+  function records() {
+    var s = load();
+    return { peak: s.peak, bestStreak: s.best, wins: JSON.parse(JSON.stringify(s.wins)) };
   }
   function onChange(fn) { listeners.push(fn); }
 
@@ -186,6 +198,6 @@
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn,
     markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
-    getLog: getLog, reset: reset, onChange: onChange
+    getLog: getLog, records: records, onChange: onChange
   };
 })(typeof window !== 'undefined' ? window : globalThis);

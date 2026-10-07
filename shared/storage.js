@@ -34,6 +34,18 @@
         if (!b) return false;
         try { b.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
       },
+      // Все ключи, начинающиеся с prefix (для резервной копии профиля); при ошибке — пустой список
+      keys: function (prefix) {
+        var b = backend(), out = [];
+        if (!b || typeof b.key !== 'function') return out;
+        try {
+          for (var i = 0; i < b.length; i++) {
+            var k = b.key(i);
+            if (typeof k === 'string' && k.indexOf(prefix || '') === 0) out.push(k);
+          }
+        } catch (e) { return []; }
+        return out;
+      },
       remove: function (key) {
         var b = backend();
         if (!b) return false;

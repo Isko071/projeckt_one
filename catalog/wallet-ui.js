@@ -10,6 +10,7 @@
 
   function unit(n) { return I.plural(n, 'wallet.unit'); }
   function days(n) { return I.plural(n, 'wallet.days'); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function fmt(n) { return Number(n).toLocaleString('ru-RU'); }
   function reduced() {
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
@@ -89,6 +90,26 @@
       claim.textContent = t('wallet.claim', { amount: fmt(st.pending.amount + st.pending.bonus) });
     } else claim.hidden = true;
 
+    // Рекорды
+    var rec = W.records(), box = $('wd-records');
+    box.textContent = '';
+    function row(label, value) {
+      var dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = label; dd.textContent = value;
+      box.appendChild(dt); box.appendChild(dd);
+    }
+    row(t('wallet.records.peak'), fmt(rec.peak) + ' ' + unit(rec.peak));
+    row(t('wallet.records.streak'), rec.bestStreak + ' ' + days(rec.bestStreak));
+    var wins = Object.keys(rec.wins);
+    if (wins.length) row(t('wallet.records.wins'), wins.map(function (k) { return t('wallet.src.' + k) + ' ' + rec.wins[k]; }).join(', '));
+    var bests = window.PlatformStorage.get('game:minesweeper:best', null) || {};
+    ['novice', 'amateur', 'expert'].forEach(function (lv) {
+      var sec = bests[lv];
+      if (typeof sec === 'number' && isFinite(sec) && sec >= 0) {
+        row(t('wallet.records.mines', { level: t('wallet.records.level.' + lv) }), pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60));
+      }
+    });
+
     // Журнал
     var list = $('wd-log'), log = W.getLog();
     list.textContent = '';
@@ -113,16 +134,7 @@
     });
   }
 
-  function showResetAsk(on) {
-    $('wd-reset-ask').hidden = !on;
-    $('wd-reset').hidden = on;
-    $('wd-reset-text').textContent = t('wallet.reset.ask', { start: fmt(W.CONFIG.start), unit: unit(W.CONFIG.start) });
-    (on ? $('wd-reset-cancel') : $('wd-reset')).focus();
-  }
-
   function openDialog() {
-    $('wd-reset-ask').hidden = true;
-    $('wd-reset').hidden = false;
     renderDialog();
     dialog.showModal();
   }
@@ -142,9 +154,6 @@
   $('wd-claim').addEventListener('click', claim);
   $('wallet-close').addEventListener('click', closeDialog);
   dialog.addEventListener('click', function (e) { if (e.target === dialog) closeDialog(); });
-  $('wd-reset').addEventListener('click', function () { showResetAsk(true); });
-  $('wd-reset-cancel').addEventListener('click', function () { showResetAsk(false); });
-  $('wd-reset-ok').addEventListener('click', function () { W.reset(); showResetAsk(false); renderBar(); renderDialog(); });
 
   // Баланс мог измениться в другой вкладке или после возврата из игры
   function refresh() { renderBar(); if (dialog.open) renderDialog(); }
