@@ -411,7 +411,10 @@ function onView(v) {
       G.settledRound = st.round; app.settledAt = now(); app.hint = null;
       var h = seatHand(seat);
       if (h) {
-        if (seat.net > 0) W.add(seat.net, 'blackjack'); else if (seat.net < 0) W.spend(Math.min(-seat.net, W.getBalance()), 'blackjack');
+        if (seat.net > 0) {
+          var oc = W.onlineWin('blackjack', seat.net, now());
+          if (oc.capped) notify(tr(oc.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(oc.granted) }), 6000);
+        } else if (seat.net < 0) W.spend(Math.min(-seat.net, W.getBalance()), 'blackjack');
         if (h.outcome === 'win' || h.outcome === 'blackjack') W.countWin('blackjack');
       }
       scheduleSeq(st);
@@ -644,7 +647,7 @@ function betHtml(D) {
   var placed = seat.bet > 0, total = placed ? seat.bet : chipsTotal();
   var plates = others.map(function (idx, i) { return plateHtml(D, L, idx, i, others.length, false); }).join('');
   var note = total >= MAX_BET ? tr('bet.maxNote', { max: fmt(MAX_BET) }) : (b.max < MAX_BET && !placed && total >= b.max ? tr('bet.poorNote') : tr(online ? 'bet.noteOnline' : 'bet.note', { max: fmt(MAX_BET) }));
-  if (!online) note += ' ' + tr('cap.left', { n: fmt(W.capStatus(now()).left) });
+  note += ' ' + tr('cap.left', { n: fmt((online ? W.onlineStatus(now()) : W.capStatus(now())).left) });
   if (!placed && !seat.sitOut && total === 0) note = tr(online ? 'bet.emptyOnline' : 'bet.emptyLocal');
   if (placed) note = tr('bet.placed');
   if (seat.sitOut) note = tr('bet.sitting');
