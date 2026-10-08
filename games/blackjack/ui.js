@@ -337,6 +337,10 @@ function openTables() {
   loadRooms();
   roomsTimer = setInterval(function () { if (app.screen === 'tables') loadRooms(); }, 5000);
 }
+function backOnline() {
+  app.banner = 'back'; render();
+  setTimeout(function () { if (app.banner === 'back') { app.banner = null; render(); } }, 3000);
+}
 function onView(v) {
   if (!G || G.mode !== 'online') return;
   G.view = v;
@@ -344,7 +348,7 @@ function onView(v) {
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
   if (v.status === 'playing' && st) {
-    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.chips = clampChips(app.lastBet || 100); app.banner = null; }
+    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.chips = clampChips(app.lastBet || 100); app.banner = null; if (G.role === 'host') notify(tr('notice.creator'), 6000); }
     var me = v.seat;
     if (me === null || me === undefined || !st.seats[me] || !st.seats[me].active) {
       if (!G.left) { G.left = true; handleLeft(); }
@@ -380,9 +384,8 @@ function handleLeft() {
   stopOnline();
   var ctrl = G && G.ctrl;
   if (ctrl && G.role === 'player') ctrl.stop();
-  G = null; app.screen = 'tables'; app.modal = null;
-  notify(tr('notice.kicked'), 6000);
-  openTables();
+  G = null; app.screen = 'out'; app.modal = null;
+  render();
 }
 function onlineProfile() { var p = P.getProfile(); return { name: p.name, avatar: p.avatar, chips: W.getBalance() }; }
 function createTable() {
@@ -397,7 +400,7 @@ function createTable() {
     host.onChange(onView);
     var failing = 0;
     hostTimer = setInterval(function () {
-      host.tick().then(function () { if (failing) { failing = 0; app.banner = null; render(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } });
+      host.tick().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } });
     }, 1000);
     app.busy = false; app.screen = 'lobby'; app.modal = null; app.copied = false; app.banner = null;
     render();
@@ -415,7 +418,7 @@ function joinTable(code) {
     G = { mode: 'online', role: 'player', ctrl: ctrl, view: null, code: code, settledRound: -1 };
     ctrl.onChange(onView);
     var failing = 0;
-    var poll = function () { ctrl.poll().then(function () { if (failing) { failing = 0; app.banner = null; render(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } }); };
+    var poll = function () { ctrl.poll().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } }); };
     pollTimer = setInterval(poll, 1000); poll();
     app.busy = false; app.screen = 'lobby'; app.modal = null; app.banner = null; app.tableError = null;
     render();
@@ -472,8 +475,9 @@ function loginHtml() {
   else if (app.loginError) msg = tr('login.' + app.loginError);
   return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('login.title')) + '</h2></div>' +
     '<div class="card-box"><p style="margin:0 0 12px;font-size:16px">' + esc(tr('login.text')) + '</p>' +
-    '<button class="btn accent big" style="width:100%" data-act="signin" data-key="signin"' + (busy || st.status === 'unsupported' ? ' disabled' : '') + '>' + esc(tr(busy ? 'login.busy' : 'login.btn')) + '</button>' +
-    (msg ? '<p class="field-err">' + esc(msg) + '</p>' : '') + '</div></div>';
+    '<button class="btn accent big" style="width:100%" data-act="signin" data-key="signin"' + (busy || st.status === 'unsupported' ? ' disabled' : '') + '>' + esc(tr(busy ? 'login.busy' : (app.loginError === 'error' ? 'login.retry' : 'login.btn'))) + '</button>' +
+    (msg ? '<p class="field-err" role="alert">' + esc(msg) + '</p>' : '') +
+    '<button class="btn ghost" style="width:100%;margin-top:10px" data-act="toStart" data-key="loginBack">' + esc(tr('back')) + '</button></div></div>';
 }
 
 function tableErrorHtml() {
@@ -485,15 +489,15 @@ function tableErrorHtml() {
 function tablesHtml() {
   var user = Cloud.getState().user, rooms = app.rooms;
   var list;
-  if (rooms === null) list = '<div class="dashed">' + esc(tr('tables.loading')) + '</div>';
+  if (rooms === null) list = '<div class="card-box table-list" role="status" aria-label="' + esc(tr('tables.loading')) + '"><h3>' + esc(tr('tables.open')) + '</h3>' + [1, 2, 3].map(function (k) { return '<div class="row skel" data-key="sk' + k + '"><div class="avatar"></div><div class="who"><i></i><i class="s"></i></div></div>'; }).join('') + '</div>';
   else if (!rooms.length) list = '<div class="dashed">' + esc(tr('tables.empty')) + '</div>';
   else list = '<div class="card-box table-list"><h3>' + esc(tr('tables.open')) + '</h3>' + rooms.map(function (r) {
-    return '<div class="row" data-key="room-' + esc(r.code) + '"><div class="avatar">' + esc(P.initial(r.hostName)) + '</div><div class="who"><b>' + esc(r.hostName || r.code) + '</b><span>' + esc(tr('tables.of', { n: r.players, m: r.size })) + '</span></div>' +
+    return '<div class="row" data-key="room-' + esc(r.code) + '"><div class="avatar">' + esc(P.initial(r.hostName)) + '</div><div class="who"><b>' + esc(r.hostName || r.code) + '</b><span>' + esc(tr('tables.of', { n: r.players, m: r.size })) + '</span></div>' + (r.bots ? '<span class="tag-bots">' + esc(tr('tables.bots')) + '</span>' : '') +
       '<button class="btn outline" data-act="joinRoom" data-v="' + esc(r.code) + '">' + esc(tr('tables.join')) + '</button></div>';
   }).join('') + '</div>';
   var cur = app.code;
-  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('tables.title')) + '</h2></div>' +
-    (user ? '<div class="muted" style="font-size:14px;margin-top:-8px">' + esc(tr('tables.you', { name: P.getProfile().name })) + '</div>' : '') +
+  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2 style="flex:1">' + esc(tr('tables.title')) + '</h2>' +
+      (user ? '<div class="you-chip"><span class="avatar" style="width:32px;height:32px;background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</span>' + esc(tr('tables.you', { name: P.getProfile().name })) + '</div>' : '') + '</div>' +
     tableErrorHtml() +
     '<button class="btn accent big" data-act="toCreate" data-key="create">' + esc(tr('tables.create')) + '</button>' +
     '<div class="card-box"><h3>' + esc(tr('tables.codeTitle')) + '</h3><div class="code-row">' +
@@ -504,13 +508,23 @@ function tablesHtml() {
     list + '</div>';
 }
 
+function createPreviewHtml() {
+  var n = app.size, parts = '';
+  for (var i = 0; i < n; i++) {
+    var a = (90 + i * 360 / n) * Math.PI / 180, me = i === 0, bt = app.fillBots && !me;
+    parts += '<div class="pv-seat' + (me ? ' me' : (bt ? ' bot' : '')) + '" style="left:' + (85 + 62 * Math.cos(a) - 17).toFixed(1) + 'px;top:' + (75 + 52 * Math.sin(a) - 17).toFixed(1) + 'px">' + esc(me ? tr('create.you') : (bt ? tr('st.bot').charAt(0) : '?')) + '</div>';
+  }
+  var k = n - 1, w = window.I18n.plural(k, 'games.blackjack.create.seatWord');
+  return '<div class="preview"><div class="pv-table" aria-hidden="true"><span class="pv-dealer">' + esc(tr('create.dealer')) + '</span>' + parts + '</div><div class="muted" style="font-size:14px">' + esc(tr(app.fillBots ? 'create.previewBots' : 'create.previewFree', { n: k, w: w })) + '</div></div>';
+}
 function createHtml() {
   return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toTables" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('create.title')) + '</h2></div>' +
+    createPreviewHtml() +
     '<div><div style="font-weight:700;margin-bottom:8px">' + esc(tr('create.seats')) + '</div><div class="seg" role="group" aria-label="' + esc(tr('create.seats')) + '">' +
       [2, 3, 4, 5].map(function (n) { return '<button data-act="size" data-v="' + n + '" data-key="size' + n + '" aria-pressed="' + (app.size === n) + '">' + n + '</button>'; }).join('') + '</div></div>' +
     '<button class="switch-row" data-act="bots" data-key="bots" aria-pressed="' + app.fillBots + '"><span class="t"><b>' + esc(tr('create.bots')) + '</b><span class="s">' + esc(tr(app.fillBots ? 'create.botsSub' : 'create.botsOff')) + '</span></span><span class="knob"><i>' + (app.fillBots ? '✓' : '') + '</i></span></button>' +
     tableErrorHtml() +
-    '<button class="btn accent big" data-act="create" data-key="createGo"' + (app.busy ? ' disabled' : '') + '>' + esc(tr(app.busy ? 'create.busy' : 'create.btn')) + '</button></div>';
+    '<button class="btn accent big" data-act="create" data-key="createGo"' + (app.busy ? ' disabled' : '') + '>' + esc(tr(app.busy ? 'create.busy' : 'create.btn')) + '</button><button class="btn ghost" data-act="toTables" data-key="createBack">' + esc(tr('back')) + '</button></div>';
 }
 
 function lobbyHtml() {
@@ -532,14 +546,17 @@ function lobbyHtml() {
       '<button class="btn ghost" data-act="copyCode" data-key="copy">' + esc(tr(app.copied ? 'lobby.copied' : 'lobby.copy')) + '</button>' +
       '<button class="btn ghost" data-act="shareLink" data-key="share">' + esc(tr('lobby.share')) + '</button></div></div>' +
     '<div class="seats">' + seats.join('') + '</div>' +
-    (app.banner === 'offline' ? '<div class="banner bad" role="status">' + esc(tr('banner.offline')) + '</div>' : '') +
+    bannerHtml() +
     (host
       ? '<div class="row-btns"><button class="btn accent big" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('lobby.start')) + '</button><button class="btn big" data-act="closeTable" data-key="closeTable">' + esc(tr('lobby.close')) + '</button></div>' +
         (canStart ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.needMore')) + '</div>') + '<div class="muted" style="font-size:14px">' + esc(tr('lobby.hostHint')) + '</div>'
-      : '<div class="muted" style="font-size:15px">' + esc(tr('lobby.waitHost')) + '</div><button class="btn big" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('lobby.leave')) + '</button>') +
+      : '<div style="font-weight:700;font-size:16px;text-align:center">' + esc(tr(members.length >= size ? 'lobby.full' : 'lobby.waitHost')) + '</div><button class="btn big" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('lobby.leave')) + '</button>') +
     '</div>';
 }
 
+function outHtml() {
+  return '<div class="page"><div class="msg bad" role="alert"><b>' + esc(tr('out.title')) + '</b><span>' + esc(tr('out.text')) + '</span><button class="btn accent big" data-act="toTables" data-key="outBtn">' + esc(tr('out.btn')) + '</button></div></div>';
+}
 function closedHtml() {
   var k = app.closedReason === 'hostGone' ? 'hostGone' : 'hostGone';
   return '<div class="page"><div class="msg bad" role="alert"><b>' + esc(tr('err.' + k)) + '</b><button class="btn accent" data-act="toTables" data-key="toTables">' + esc(tr('err.toTables')) + '</button></div></div>';
@@ -580,6 +597,7 @@ function betHtml(D) {
     return '<button class="chip-btn" data-act="addChip" data-v="' + v + '" data-key="c' + v + '" aria-label="' + esc(tr(on ? 'bet.chip' : 'bet.chipOff', { n: v })) + '"' + (on ? '' : ' disabled') + '>' + chipHtml(v, L.narrow ? 44 : 52) + '</button>';
   }).join('');
   var humans = vs.seats.filter(function (s) { return s.active && s.kind !== 'bot'; }), done = humans.filter(function (s) { return s.bet > 0 || s.sitOut; }).length;
+  var waiting = humans.filter(function (s) { return !(s.bet > 0 || s.sitOut); });
   var main;
   if (!online) {
     main = '<button class="btn big" style="flex:1" data-act="clearBet" data-key="clear">' + esc(tr('bet.clear')) + '</button>' +
@@ -595,7 +613,7 @@ function betHtml(D) {
   return '<div class="game"><div class="felt" style="' + feltStyle(L) + '"><div class="dealer-slot" style="position:absolute;left:50%;top:20px;transform:translateX(-50%)">' + esc(tr('dealer')) + '</div>' + plates +
     '<div class="bet-zone"><div class="bet-circle" data-act="popChip" role="button" aria-label="' + esc(tr('bet.clear')) + '">' + chipStackHtml(shownChips, 38) + '</div><div class="bet-title">' + esc(tr('bet.title', { n: fmt(total) })) + '</div><div class="bet-note">' + esc(note) + '</div></div>' +
     '<div class="you-line"><div class="av">' + esc(P.initial(P.getProfile().name)) + '</div><div>' + esc(tr('youBal', { n: fmt(b.bal) })) + '</div></div></div>' +
-    (online ? '<div class="wait-text" role="status">' + esc(tr('bet.ready', { n: done, m: humans.length })) + '</div>' : '') +
+    (online ? '<div class="wait-text" role="status">' + esc(waiting.length === 1 && done < humans.length ? tr('bet.waitFor', { n: done, m: humans.length, name: waiting[0].name || '' }) : tr('bet.ready', { n: done, m: humans.length })) + '</div>' : '') +
     '<div class="chip-row" style="gap:' + (L.narrow ? 6 : 12) + 'px">' + chipBtns + '</div>' +
     '<div class="act-row" style="gap:10px">' + main + '</div>' +
     (online && !placed && !seat.sitOut ? '<div style="text-align:center"><button class="sit-link" data-act="sit" data-key="sit">' + esc(tr('bet.sit')) + '</button></div>' : '') + '</div>';
@@ -632,6 +650,7 @@ function playHtml(D) {
   if (!showResult && vs.phase !== 'settled') {
     var cur = vs.current >= 0 ? vs.seats[vs.current] : null;
     var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : '';
+    if (D.online && app.pending) waitText = tr('wait.sent'); else if (D.online && app.banner === 'offline') waitText = tr('wait.offline');
     var hintHtml = app.hint && myTurn ? '<div class="hint-box" role="status"><i>?</i><span>' + esc(hintText(D)) + '</span></div>' : '';
     var dis = !myTurn;
     panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') + hintHtml +
@@ -656,12 +675,20 @@ function playHtml(D) {
   return '<div class="game">' + felt + noticeHtml + panel + '</div>';
 }
 
+function bannerHtml() {
+  var online = G && G.mode === 'online';
+  if (online && app.screen === 'game' && Cloud.getState().status !== 'signedIn' && Cloud.getState().status !== 'unsupported' && !Cloud.getState().user) {
+    return '<div class="banner bad flex" role="alert"><span>' + esc(tr('banner.relogin')) + '</span><button class="btn accent" data-act="relogin" data-key="relogin">' + esc(tr('banner.reloginBtn')) + '</button></div>';
+  }
+  if (app.banner === 'offline') return '<div class="banner flex" role="status"><span>' + esc(tr('banner.offline')) + '</span></div>';
+  if (app.banner === 'back') return '<div class="banner flex" role="status"><span>' + esc(tr('banner.back')) + '</span></div>';
+  return '';
+}
 function gameHtml() {
   var D = describe();
   if (!D) return '<div class="page"><div class="dashed">…</div></div>';
   if (D.me === null) return '<div class="page"><div class="dashed">…</div></div>';
-  var banner = app.banner === 'offline' ? '<div class="banner bad" role="status">' + esc(tr('banner.offline')) + '</div>' : '';
-  return topbarHtml() + banner + (D.vs.phase === 'betting' ? betHtml(D) : playHtml(D));
+  return topbarHtml() + bannerHtml() + (D.vs.phase === 'betting' ? betHtml(D) : playHtml(D));
 }
 
 // ===== Окна =====
@@ -723,6 +750,7 @@ function screenHtml() {
     case 'create': return createHtml();
     case 'lobby': return lobbyHtml();
     case 'closed': return closedHtml();
+    case 'out': return outHtml();
     case 'game': return gameHtml();
   }
   return '';
@@ -796,6 +824,7 @@ appEl.addEventListener('click', function (e) {
       if (Cloud.getState().status === 'signedIn') openTables(); else { app.screen = 'login'; app.loginError = null; render(); }
       break;
     case 'signin': onSignIn(); break;
+    case 'relogin': Cloud.signIn().then(function () { render(); }, function () { render(); }); break;
     case 'toTables': stopOnline(); openTables(); break;
     case 'toCreate': app.screen = 'create'; app.tableError = null; render(); break;
     case 'size': app.size = Number(v); render(); break;

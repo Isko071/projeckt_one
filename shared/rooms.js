@@ -9,7 +9,7 @@
 //   var rooms = PlatformRooms.create({ fetch, getToken, uid, projectId, db, game, now, rng, options })
 //   rooms.createRoom({ size, fillBots, name, avatar, chips }) → хост: { code, host }
 //   rooms.joinRoom(code, { name, avatar, chips })              → игрок
-//   rooms.listRooms()                                          → открытые комнаты в ожидании: [{ code, size, players, hostName }]
+//   rooms.listRooms()                                          → открытые комнаты в ожидании: [{ code, size, players, hostName, bots }]
 //   Контроллер (host или игрок): poll(), send(action), leave(), onChange(fn), getView(); у хоста ещё start(), tick(), close()
 //   Игра (game): init(seats, options, rng), reduce(state, action, rng), view(state), readyToDeal, nextBotAction (с генератором случайных чисел), makeBot, waitingSeats.
 (function (root) {
@@ -100,7 +100,7 @@
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
       function fields() {
-        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, rev: rev, heartbeat: now(), meta: meta() };
+        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         return f;
@@ -332,7 +332,7 @@
       return req('POST', base + ':runQuery', body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
-          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', stale: now() - d.heartbeat > cfg.staleMs };
+          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, stale: now() - d.heartbeat > cfg.staleMs };
         }).filter(function (x) { return !x.stale && x.players < x.size; });
       });
     }
