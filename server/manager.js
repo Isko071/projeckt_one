@@ -23,6 +23,30 @@ class RoomManager {
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.timer = null;
+    // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
+    this.startedAt = this.now();
+    this.events = [];
+    this.counters = { created: { blackjack: 0, yahtzee: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
+  }
+
+  event(type, o) {
+    o = o || {};
+    this.events.push({ t: this.now(), type: type, game: o.game || '', code: o.code || '', uid: o.uid ? String(o.uid).slice(0, 8) : '', name: o.name || '', info: o.info || '' });
+    if (this.events.length > (this.cfg.eventLimit || 300)) this.events.shift();
+  }
+  nameOf(room, uid) { const m = this.members(room).filter((x) => x.uid === uid)[0]; return m ? m.name : ''; }
+  // Данные для кабинета: сводка, живые столы и последние события (новые сверху)
+  adminReport() {
+    const tables = [];
+    this.rooms.forEach((room, code) => {
+      const d = room.fields || {};
+      tables.push({ code, game: room.game, status: d.status || '', size: d.size || 0, players: this.members(room).map((m) => m.name || '—'), private: d.private === true, mode: d.mode || '', online: room.subs.size });
+    });
+    const t = this.now();
+    return {
+      now: t, startedAt: this.startedAt, uptimeMs: t - this.startedAt, rooms: this.rooms.size, conns: this.conns.size,
+      counters: JSON.parse(JSON.stringify(this.counters)), tables, events: this.events.slice().reverse()
+    };
   }
 
   start() { if (!this.timer) this.timer = setInterval(() => this.tick(), this.cfg.tickMs); return this; }
@@ -60,6 +84,9 @@ class RoomManager {
     });
     const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0 };
     this.rooms.set(res.code, room);
+    this.counters.created[game]++;
+    this.counters.peakRooms = Math.max(this.counters.peakRooms, this.rooms.size);
+    this.event('create', { game, code: res.code, uid: conn.uid, name: String(o.name || '').slice(0, 20), info: o.private ? 'closed' : '' });
     this.subscribe(room, res.code, conn);
     return res.code;
   }
@@ -77,6 +104,8 @@ class RoomManager {
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
       hello = hello || {};
       this.store.addAction(code, conn.uid, JSON.stringify({ type: 'hello', name: hello.name, avatar: hello.avatar, chips: hello.chips }), this.now());
+      this.counters.joins++;
+      this.event('join', { game, code, uid: conn.uid, name: String(hello.name || '').slice(0, 20) });
       this.kick(code);
     }
     this.cancelGrace(conn.uid, code);
@@ -92,6 +121,7 @@ class RoomManager {
     const text = JSON.stringify(action);
     if (text.length > 2000) throw fail('too-big');
     this.store.addAction(code, conn.uid, text, this.now());
+    if (action.type === 'start') { this.counters.starts++; this.event('start', { game: room.game, code: String(code).toUpperCase(), uid: conn.uid, name: this.nameOf(room, conn.uid) }); }
     this.kick(code);
   }
 
@@ -99,7 +129,7 @@ class RoomManager {
     code = String(code || '').toUpperCase();
     const room = this.rooms.get(code);
     if (!room) return;
-    if (this.isMember(room, conn.uid)) { this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); }
+    if (this.isMember(room, conn.uid)) { this.counters.leaves++; this.event('leave', { game: room.game, code, uid: conn.uid, name: this.nameOf(room, conn.uid) }); this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); }
     room.subs.delete(conn); conn.rooms && conn.rooms.delete(code);
     this.cancelGrace(conn.uid, code);
   }
@@ -116,7 +146,7 @@ class RoomManager {
       this.graces.set(key, setTimeout(() => {
         this.graces.delete(key);
         const back = Array.from(room.subs).some((c) => c.uid === conn.uid);
-        if (!back) { const r = this.rooms.get(code); if (r && this.isMember(r, conn.uid)) { this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); } }
+        if (!back) { const r = this.rooms.get(code); if (r && this.isMember(r, conn.uid)) { this.counters.leaves++; this.event('leave', { game: r.game, code, uid: conn.uid, name: this.nameOf(r, conn.uid), info: 'timeout' }); this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); } }
       }, this.cfg.graceMs));
     });
   }
@@ -124,6 +154,7 @@ class RoomManager {
 
   subscribe(room, code, conn) {
     room.subs.add(conn); conn.rooms = conn.rooms || new Set(); conn.rooms.add(code); this.conns.add(conn);
+    this.counters.peakConns = Math.max(this.counters.peakConns, this.conns.size);
     if (room.fields) conn.send({ t: 'doc', code, doc: room.fields });
   }
 
@@ -155,6 +186,7 @@ class RoomManager {
   remove(code) {
     const room = this.rooms.get(code);
     if (!room) return;
+    this.event('closed', { game: room.game, code });
     room.subs.forEach((c) => { c.send({ t: 'gone', code }); c.rooms && c.rooms.delete(code); });
     this.rooms.delete(code); this.store.drop(code);
   }

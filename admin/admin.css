@@ -28,3 +28,9 @@ td small { display: block; color: var(--muted); font-size: 11px; }
 td.nm { font-weight: 600; }
 td.empty { text-align: center; color: var(--muted); padding: 24px; }
 @media (min-width: 720px) { .cards { grid-template-columns: repeat(6, 1fr); } }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.tab { min-height: var(--tap); padding: 0 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.h2 { margin: 18px 0 8px; font-size: 16px; }
+td.wrap { white-space: normal; min-width: 140px; }

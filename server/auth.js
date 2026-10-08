@@ -8,7 +8,7 @@ function makeVerifier(opts) {
     return async (token) => {
       const m = /^test:([A-Za-z0-9_-]{1,64})$/.exec(String(token || ''));
       if (!m) throw new Error('bad-token');
-      return { uid: m[1] };
+      return { uid: m[1], email: m[1] + '@test', emailVerified: true };
     };
   }
   if (!projectId) throw new Error('FIREBASE_PROJECT_ID is required');
@@ -16,7 +16,7 @@ function makeVerifier(opts) {
   return async (token) => {
     const { payload } = await jwtVerify(String(token || ''), jwks, { issuer: 'https://securetoken.google.com/' + projectId, audience: projectId });
     if (!payload.sub) throw new Error('no-sub');
-    return { uid: String(payload.sub) };
+    return { uid: String(payload.sub), email: String(payload.email || '').toLowerCase(), emailVerified: payload.email_verified === true };
   };
 }
 

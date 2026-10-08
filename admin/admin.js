@@ -3,7 +3,7 @@
 (function () {
   var Cloud = window.PlatformCloud, L = window.AdminLogic, tr = function (k, p) { return window.I18n.t(k, p); };
   var app = document.getElementById('app');
-  var st = { rows: null, error: null, loading: false, query: '', sort: 'lastSeen', dir: 'desc', loadedAt: 0 };
+  var st = { tab: 'players', srv: null, srvError: null, srvLoading: false, rows: null, error: null, loading: false, query: '', sort: 'lastSeen', dir: 'desc', loadedAt: 0 };
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmtDate(ms) {
@@ -35,6 +35,51 @@
       function (e) { st.loading = false; st.error = e && e.message === 'denied' ? 'denied' : 'network'; render(); });
   }
 
+  // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------
+  function serverUrl() { return String(window.GAME_SERVER_URL || '').replace(/^ws/, 'http').replace(/\/+$/, ''); }
+  function loadServer(silent) {
+    if (st.srvLoading) return;
+    var base = serverUrl();
+    if (!base) { st.srvError = 'nourl'; render(); return; }
+    st.srvLoading = true; if (!silent) { st.srvError = null; render(); }
+    Cloud.getToken().then(function (tk) { return window.fetch(base + '/admin/stats', { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
+      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
+      .then(function (d) { st.srv = d; st.srvError = null; st.srvLoading = false; if (st.tab === 'server') render(); },
+        function (e) { st.srvLoading = false; st.srvError = e && e.message === 'denied' ? 'denied' : 'network'; if (st.tab === 'server') render(); });
+  }
+  function dur(ms) {
+    var m = Math.floor(ms / 60000);
+    if (m < 60) return tr('admin.dur.min', { n: m });
+    if (m < 1440) return tr('admin.dur.hour', { h: Math.floor(m / 60), m: m % 60 });
+    return tr('admin.dur.day', { d: Math.floor(m / 1440), h: Math.floor((m % 1440) / 60) });
+  }
+  function gameName(g) { return tr('admin.col.' + g); }
+  function serverHtml() {
+    if (st.srvError === 'nourl') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.nourl')) + '</p>';
+    if (st.srvError === 'denied') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.denied')) + '</p>';
+    if (!st.srv) return st.srvError ? '<p class="msg bad" role="alert">' + esc(tr('admin.srv.error')) + '</p><button type="button" class="btn" data-act="reloadSrv">' + esc(tr('admin.reload')) + '</button>' : '<p class="msg" role="status">' + esc(tr('admin.srv.loading')) + '</p>';
+    var d = st.srv, c = d.counters, created = c.created.yahtzee + c.created.blackjack;
+    var cards = [[d.conns, 'conns'], [d.rooms, 'rooms'], [created, 'created'], [c.joins, 'joins'], [c.starts, 'starts'], [c.errors + c.denied, 'errors']].map(function (x) {
+      return '<div class="card"><b>' + fmt(x[0]) + '</b><span>' + esc(tr('admin.srv.' + x[1])) + '</span></div>';
+    }).join('');
+    var tables = d.tables.map(function (t) {
+      return '<tr><td class="nm">' + esc(t.code) + (t.private ? ' 🔒' : '') + '</td><td>' + esc(gameName(t.game)) + '</td><td>' + esc(tr('admin.status.' + (t.status || 'lobby'))) + '</td><td class="n">' + t.players.length + '/' + t.size + '</td><td class="wrap">' + esc(t.players.join(', ')) + '</td><td class="n">' + t.online + '</td></tr>';
+    }).join('');
+    var events = d.events.slice(0, 100).map(function (e) {
+      return '<tr><td>' + esc(fmtDate(e.t)) + '</td><td>' + esc(tr('admin.ev.' + e.type)) + (e.info ? ' <small>' + esc(tr('admin.info.' + e.info) === 'admin.info.' + e.info ? e.info : tr('admin.info.' + e.info)) + '</small>' : '') + '</td><td>' + esc(e.game ? gameName(e.game) : '') + '</td><td>' + esc(e.code) + '</td><td class="wrap">' + esc(e.name || '') + (e.uid ? ' <small>' + esc(e.uid) + '</small>' : '') + '</td></tr>';
+    }).join('');
+    return '<div class="cards">' + cards + '</div><p class="note">' + esc(tr('admin.srv.note', { up: dur(d.uptimeMs), peak: c.peakConns, rooms: c.peakRooms, time: fmtDate(d.now) })) + '</p>' +
+      '<h2 class="h2">' + esc(tr('admin.srv.tables')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.srv.code')) + '</th><th>' + esc(tr('admin.srv.game')) + '</th><th>' + esc(tr('admin.srv.status')) + '</th><th class="n">' + esc(tr('admin.srv.players')) + '</th><th>' + esc(tr('admin.srv.names')) + '</th><th class="n">' + esc(tr('admin.srv.onlineNow')) + '</th></tr></thead><tbody>' +
+      (tables || '<tr><td colspan="6" class="empty">' + esc(tr('admin.srv.noTables')) + '</td></tr>') + '</tbody></table></div>' +
+      '<h2 class="h2">' + esc(tr('admin.srv.events')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.srv.time')) + '</th><th>' + esc(tr('admin.srv.event')) + '</th><th>' + esc(tr('admin.srv.game')) + '</th><th>' + esc(tr('admin.srv.code')) + '</th><th>' + esc(tr('admin.srv.player')) + '</th></tr></thead><tbody>' +
+      (events || '<tr><td colspan="5" class="empty">' + esc(tr('admin.srv.noEvents')) + '</td></tr>') + '</tbody></table></div>';
+  }
+  function tabsHtml() {
+    return '<div class="tabs" role="tablist">' + ['players', 'server'].map(function (k) {
+      return '<button type="button" role="tab" class="tab" aria-selected="' + (st.tab === k) + '" data-tab="' + k + '">' + esc(tr('admin.tab.' + k)) + '</button>';
+    }).join('') + '</div>';
+  }
+
   function head(key, label, cls) {
     var on = st.sort === key;
     return '<th class="' + (cls || '') + '" aria-sort="' + (on ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"><button type="button" data-sort="' + key + '">' + esc(label) + (on ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</button></th>';
@@ -61,29 +106,34 @@
     var c = Cloud.getState(), inner;
     if (c.status === 'unsupported') inner = '<p class="msg">' + esc(tr('admin.unsupported')) + '</p>';
     else if (c.status !== 'signedIn') inner = '<p class="msg">' + esc(tr('admin.signin.text')) + '</p><button type="button" class="btn primary" data-act="signin">' + esc(tr('admin.signin')) + '</button>';
+    else if (st.tab === 'server') inner = tabsHtml() + serverHtml();
     else if (st.error === 'denied') inner = '<p class="msg bad" role="alert">' + esc(tr('admin.denied')) + '</p><button type="button" class="btn" data-act="signout">' + esc(tr('admin.signout')) + '</button>';
     else if (st.error) inner = '<p class="msg bad" role="alert">' + esc(tr('admin.error')) + '</p><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button>';
-    else if (!st.rows) inner = '<p class="msg" role="status">' + esc(tr('admin.loading')) + '</p>';
-    else inner = tableHtml();
+    else if (!st.rows) inner = tabsHtml() + '<p class="msg" role="status">' + esc(tr('admin.loading')) + '</p>';
+    else inner = tabsHtml() + tableHtml();
     var keep = document.activeElement && document.activeElement.id === 'q' ? document.activeElement.selectionStart : -1;
     app.innerHTML = '<header class="top"><h1>' + esc(tr('admin.title')) + '</h1><a href="../index.html">' + esc(tr('admin.toSite')) + '</a></header>' + inner;
     if (keep >= 0) { var q = document.getElementById('q'); if (q) { q.focus(); q.setSelectionRange(keep, keep); } }
   }
 
   app.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-act], [data-sort]');
+    var b = e.target.closest('[data-act], [data-sort], [data-tab]');
     if (!b) return;
+    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server') loadServer(false); render(); return; }
+    if (b.dataset.act === 'reloadSrv') { loadServer(false); return; }
     if (b.dataset.sort) { var k = b.dataset.sort; st.dir = st.sort === k ? (st.dir === 'asc' ? 'desc' : 'asc') : (k === 'name' ? 'asc' : 'desc'); st.sort = k; render(); return; }
     if (b.dataset.act === 'signin') Cloud.signIn().then(null, function () { render(); });
     else if (b.dataset.act === 'signout') { Cloud.signOut(true).then(function () { st.error = null; st.rows = null; render(); }); }
-    else if (b.dataset.act === 'reload') { st.rows = st.rows; load(); }
+    else if (b.dataset.act === 'reload') { if (st.tab === 'server') loadServer(false); else load(); }
   });
   app.addEventListener('input', function (e) { if (e.target.id === 'q') { st.query = e.target.value; render(); } });
+
+  setInterval(function () { if (st.tab === 'server' && !document.hidden && Cloud.getState().status === 'signedIn') loadServer(true); }, 10000);
 
   var loadedFor = null;
   Cloud.onChange(function (c) {
     if (c.status === 'signedIn' && loadedFor !== c.user.uid) { loadedFor = c.user.uid; load(); }
-    else if (c.status !== 'signedIn') { loadedFor = null; st.rows = null; st.error = null; render(); }
+    else if (c.status !== 'signedIn') { loadedFor = null; st.rows = null; st.error = null; st.srv = null; render(); }
     else render();
   });
   render();
