@@ -22,7 +22,7 @@ function makeCloud() { return { docs: {}, offline: false, deny: false, calls: []
 
 function device(cloud, opts) {
   opts = opts || {};
-  const b = backend();
+  const b = opts.backend || backend();
   const reloads = { n: 0 };
   let authCb = null, current = null;
   const fakeAuth = {
@@ -30,7 +30,7 @@ function device(cloud, opts) {
     onAuthStateChanged: (cb) => { authCb = cb; cb(null); },
     signInWithPopup: async () => {
       if (opts.popupError) { const e = new Error('x'); e.code = opts.popupError; throw e; }
-      current = { uid: 'u1', displayName: 'Аня Иванова', email: 'a@x', photoURL: opts.noPhoto ? null : 'https://lh3.googleusercontent.com/a/photo', getIdToken: async () => 'tok-u1' };
+      current = { uid: 'u1', displayName: 'Аня Иванова', email: 'a@x', photoURL: opts.noPhoto ? null : 'https://lh3.googleusercontent.com/a/photo', metadata: { creationTime: 'Mon, 01 Sep 2025 10:00:00 GMT' }, getIdToken: async () => 'tok-u1' };
       authCb(current);
     },
     signOut: async () => { current = null; authCb(null); }
@@ -43,7 +43,9 @@ function device(cloud, opts) {
     assert.ok(url.includes('/databases/(default)/documents/users/u1'));
     assert.equal(init.headers.Authorization, 'Bearer tok-u1');
     if (init.method === 'GET') return cloud.docs.u1 ? { ok: true, status: 200, json: async () => cloud.docs.u1 } : { ok: false, status: 404 };
-    cloud.docs.u1 = JSON.parse(init.body);
+    const body = JSON.parse(init.body);
+    if (url.includes('updateMask')) cloud.docs.u1 = { fields: Object.assign({}, cloud.docs.u1 && cloud.docs.u1.fields, body.fields) };   // частичная запись, как в Firestore
+    else cloud.docs.u1 = body;
     return { ok: true, status: 200, json: async () => ({}) };
   };
   const ctx = vm.createContext({
@@ -229,4 +231,20 @@ test('имя и фото Google не затирают уже настроенн�
   const e = device(makeCloud(), { noPhoto: true });
   e.C.start(); await e.C.signIn(); await tick();
   assert.deepEqual(plain(e.P.getProfile()), { name: 'Аня Иванова', avatar: 0 });
+});
+
+test('в записи игрока есть время регистрации и последний визит; без изменений прогресса обновляется только визит', async () => {
+  const cloud = makeCloud(), d = device(cloud);
+  d.C.start(); await d.C.signIn(); await tick();
+  const f = cloud.docs.u1.fields;
+  assert.equal(Number(f.createdAt.integerValue), Date.parse('Mon, 01 Sep 2025 10:00:00 GMT'));
+  assert.ok(Date.now() - Number(f.lastSeen.integerValue) < 60000);
+  const data = f.data.stringValue;
+  // новая страница того же игрока, прогресс не менялся: данные не затираются, визит обновляется
+  cloud.docs.u1.fields.lastSeen = { integerValue: '1' };
+  const d2 = device(cloud, { backend: d.b });     // та же память браузера, новая загрузка страницы
+  d2.C.start(); await d2.C.signIn(); await tick();
+  assert.equal(cloud.docs.u1.fields.data.stringValue, data, 'данные не затёрты');
+  assert.ok(Number(cloud.docs.u1.fields.lastSeen.integerValue) > 1000, 'визит обновлён');
+  assert.equal(Number(cloud.docs.u1.fields.createdAt.integerValue), Date.parse('Mon, 01 Sep 2025 10:00:00 GMT'));
 });

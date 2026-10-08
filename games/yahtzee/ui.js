@@ -56,6 +56,7 @@ function startGame() {
   app.reward = null;
   app.screen = 'game';
   window.PlatformWallet.markPlayed(); // партия начата: серия дней и бонус дня
+  window.PlatformWallet.countPlay('yahtzee');
 }
 
 function toMenu() {

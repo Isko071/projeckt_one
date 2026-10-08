@@ -95,7 +95,7 @@
     if (v.closed || v.hostGone) { stopTimers(); chat.reset(); on.closedReason = v.hostGone ? 'hostGone' : 'closed'; G = null; on.screen = 'closed'; app.modal = null; render(); return; }
     if (v.status === 'lobby' && on.screen === 'game') { on.screen = 'lobby'; on.banner = null; app.modal = null; G.counted = false; G.recapSeen = (v.state && v.state.recap && v.state.recap.id) || G.recapSeen; G.lastRolls = 0; on.heldKey = ''; }
     if (v.status === 'playing' && v.state) {
-      if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); on.banner = null; on.held = [false, false, false, false, false]; if (isOwner() && !G.ctrl.server) notify(tr('online.creatorNote'), 6000); }
+      if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); window.PlatformWallet.countPlay('yahtzee'); on.banner = null; on.held = [false, false, false, false, false]; if (isOwner() && !G.ctrl.server) notify(tr('online.creatorNote'), 6000); }
       var me = v.seat, p = v.state.players[me];
       if (me === null || me === undefined || !p || !p.active) {
         if (!v.state.gameOver && !G.left) { G.left = true; stopTimers(); chat.reset(); if (G.role === 'player') G.ctrl.stop(); G = null; on.screen = 'out'; app.modal = null; }

@@ -8,6 +8,7 @@
 //   PlatformWallet.onlineStatus(now) / onlineWin(source, profit, now) → дневной предел выигрыша за онлайн-столом (onlineCap): { granted, capped, left }
 //   PlatformWallet.capStart(now)           → зафиксировать баланс на начало дня (вызывать перед первой ставкой дня)
 //   PlatformWallet.capPayout(source, payout, bet, now) → выплата с ограничением выигрыша → { paid, net, granted, capped, left }
+//   PlatformWallet.countPlay(source)       → записать начатую партию в счётчик по играм (для личного кабинета)
 //   PlatformWallet.countWin(source)        → засчитать победу в рекордах (для игр на ставки)
 //   PlatformWallet.earn(source, n, now)    → награда за одиночную игру с дневным лимитом → { granted, capped }
 //   PlatformWallet.markPlayed(now)         → отметить, что сегодня сыграли (продлевает серию, открывает бонус дня)
@@ -40,7 +41,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, plays: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [] };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -61,10 +62,17 @@
         if (v > 0) wins[k.slice(0, 40)] = Math.min(v, 1000000);
       });
     }
+    var plays = {};
+    if (raw.plays && typeof raw.plays === 'object' && !Array.isArray(raw.plays)) {
+      Object.keys(raw.plays).slice(0, 20).forEach(function (k) {
+        var v = num(raw.plays[k], 0);
+        if (v > 0) plays[k.slice(0, 40)] = Math.min(v, 10000000);
+      });
+    }
     return {
       balance: balance, streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
       playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0),
-      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log
+      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, plays: plays, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log
     };
   }
 
@@ -164,6 +172,13 @@
     save(s);
   }
 
+  // Партия начата: счётчик «сыграно» по играм (виден владельцу платформы в личном кабинете, на экранах игроков не показывается)
+  function countPlay(source) {
+    var s = load(), key = String(source || 'game').slice(0, 40);
+    s.plays[key] = (s.plays[key] || 0) + 1;
+    save(s);
+  }
+
   // Награда за одиночную игру: не больше earnDailyCap в день
   function earn(source, n, now) {
     var s = load(), today = dayOf(now);
@@ -251,7 +266,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin,
+    getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget

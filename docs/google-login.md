@@ -38,6 +38,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      // Личный кабинет владельца (docs/admin.md): читать записи всех игроков может только его аккаунт Google
+      allow read: if request.auth != null && request.auth.token.email == 'АДРЕС_ВЛАДЕЛЬЦА@gmail.com' && request.auth.token.email_verified == true;
     }
 
     // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md

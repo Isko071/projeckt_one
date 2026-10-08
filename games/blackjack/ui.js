@@ -276,7 +276,7 @@ function lDispatch(action) {
   var st = G.state;
   if (before === 'betting' && st.phase !== 'betting') {
     var h = st.seats[0].hands[0];
-    if (h && !G.free) { W.spend(h.bet, 'blackjack'); W.markPlayed(); app.lastBet = h.bet; }
+    if (h && !G.free) { W.spend(h.bet, 'blackjack'); W.markPlayed(); W.countPlay('blackjack'); app.lastBet = h.bet; }
   }
   if (st.phase === 'settled' && G.settledRound !== st.round) {
     G.settledRound = st.round;
@@ -420,7 +420,7 @@ function onView(v) {
       scheduleSeq(st);
     }
     if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.chips = emptyBet(); app.hint = null; }
-    if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); }
+    if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); W.countPlay('blackjack'); }
   }
   render();
 }
