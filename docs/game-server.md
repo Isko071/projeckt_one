@@ -11,7 +11,7 @@
 - Сервер перезапустился: столы пропадают, игроки видят «стол закрыт».
 
 ## Запуск на Render (бесплатно)
-1. На https://render.com войти через GitHub → New → Blueprint → выбрать репозиторий `Isko071/projeckt_one` (файл `render.yaml` в корне подхватится сам). Либо New → Web Service: Build `cd server && npm install --omit=dev`, Start `cd server && node index.js`, Health check `/healthz`.
+1. Регион — Frankfurt (самый близкий к Центральной Азии из доступных на бесплатном тарифе; он уже указан в `render.yaml`, при ручном создании выберите его сами). На https://render.com войти через GitHub → New → Blueprint → выбрать репозиторий `Isko071/projeckt_one` (файл `render.yaml` в корне подхватится сам). Либо New → Web Service: Build `cd server && npm install --omit=dev`, Start `cd server && node index.js`, Health check `/healthz`.
 2. Переменные: `FIREBASE_PROJECT_ID=igroteka-29263`, `ALLOWED_ORIGINS=https://isko071.github.io` (через запятую, если сайтов несколько).
 3. Когда сервис запустится, скопировать его адрес (вида `https://igroteka-server.onrender.com`) и прописать в `shared/firebase-config.js`: `root.GAME_SERVER_URL = 'wss://igroteka-server.onrender.com';` — затем `node tools/set-version.js <N>` и коммит.
 4. Бесплатный тариф засыпает через 15 минут без запросов и просыпается 30–60 секунд: на это время игра показывает «Подключаемся к серверу…». Чтобы не спал, можно раз в 10 минут пинговать `/healthz` внешним сервисом (например, UptimeRobot).

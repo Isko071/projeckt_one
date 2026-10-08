@@ -4,6 +4,7 @@ services:
     name: igroteka-server
     runtime: node
     plan: free
+    region: frankfurt
     buildCommand: cd server && npm install --omit=dev
     startCommand: cd server && node index.js
     healthCheckPath: /healthz
