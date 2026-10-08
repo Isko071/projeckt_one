@@ -86,6 +86,7 @@
       opts = opts || {};
       var size = Math.max(game.CONFIG.minSeats, Math.min(game.CONFIG.maxSeats, Math.floor(opts.size) || game.CONFIG.minSeats));
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
+      var isPrivate = !!opts.private;      // закрытый стол: не показывается в списке, зайти можно только по коду или ссылке
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var members = [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
       var chat = Chat ? Chat.createLog() : null, chatLimit = Chat ? Chat.createLimiter() : null;
@@ -113,7 +114,7 @@
       function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0].name, mode: mode, rev: rev, heartbeat: now(), startIn: startIn(),
+        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0].name, mode: mode, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(),
           meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, members: members.map(publicMember) }) };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
@@ -121,7 +122,7 @@
         return f;
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now(), chat: chat ? chat.list() : [] };
+        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now(), chat: chat ? chat.list() : [], private: isPrivate };
       }
       function publish() {
         rev++; dirty = false; lastBeat = now();
@@ -256,7 +257,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
         return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
-          receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+          private: d.private === true, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);
@@ -290,8 +291,8 @@
       return req('POST', base + ':runQuery', body).then(strict).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
-          return { code: name.split('/').pop(), game: d.game, size: d.size, players: d.players, hostName: d.hostName || '', mode: d.mode || '', stale: now() - d.heartbeat > cfg.staleMs };
-        }).filter(function (x) { return x.game === gameId && !x.stale && x.players < x.size; });
+          return { code: name.split('/').pop(), game: d.game, size: d.size, players: d.players, hostName: d.hostName || '', mode: d.mode || '', private: d.private === true, stale: now() - d.heartbeat > cfg.staleMs };
+        }).filter(function (x) { return x.game === gameId && !x.private && !x.stale && x.players < x.size; });
       });
     }
 

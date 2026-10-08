@@ -10,7 +10,7 @@ var MIN_BET = BJ.CONFIG.minBet, MAX_BET = BJ.CONFIG.maxBet;
 var ROOM_CFG = window.PlatformRooms ? window.PlatformRooms.DEFAULTS : { idleMs: 30000, askMs: 7000, extendMs: 15000, nextDelayMs: 10000 };
 
 var app = {
-  screen: 'start', modal: null, chips: [100], lastBet: 100, hint: null, size: 4, fillBots: true,
+  screen: 'start', modal: null, chips: [100], lastBet: 100, hint: null, size: 4, fillBots: true, private: false,
   code: '', codeError: null, tableError: null, rooms: null, busy: false, loginError: null, copied: false,
   notice: null, noticeUntil: 0, resultAt: 0, pending: false, banner: null, seen: {}, settledAt: 0, closedReason: null, askShown: false
 };
@@ -419,7 +419,7 @@ function createTable() {
   if (!api || app.busy) return;
   app.busy = true; render();
   var prof = onlineProfile();
-  api.createRoom({ size: app.size, fillBots: app.fillBots, name: prof.name, avatar: prof.avatar, chips: prof.chips }).then(function (res) {
+  api.createRoom({ size: app.size, fillBots: app.fillBots, private: app.private, name: prof.name, avatar: prof.avatar, chips: prof.chips }).then(function (res) {
     stopOnline();
     var host = res.host;
     chat.reset();
@@ -553,6 +553,7 @@ function createHtml() {
     '<div><div style="font-weight:700;margin-bottom:8px">' + esc(tr('create.seats')) + '</div><div class="seg" role="group" aria-label="' + esc(tr('create.seats')) + '">' +
       [2, 3, 4, 5].map(function (n) { return '<button data-act="size" data-v="' + n + '" data-key="size' + n + '" aria-pressed="' + (app.size === n) + '">' + n + '</button>'; }).join('') + '</div></div>' +
     '<button class="switch-row" data-act="bots" data-key="bots" aria-pressed="' + app.fillBots + '"><span class="t"><b>' + esc(tr('create.bots')) + '</b><span class="s">' + esc(tr(app.fillBots ? 'create.botsSub' : 'create.botsOff')) + '</span></span><span class="knob"><i>' + (app.fillBots ? '✓' : '') + '</i></span></button>' +
+    '<button class="switch-row" data-act="private" data-key="private" aria-pressed="' + app.private + '"><span class="t"><b>' + esc(tr('create.private')) + '</b><span class="s">' + esc(tr(app.private ? 'create.privateSub' : 'create.privateOff')) + '</span></span><span class="knob"><i>' + (app.private ? '✓' : '') + '</i></span></button>' +
     tableErrorHtml() +
     '<button class="btn accent big" data-act="create" data-key="createGo"' + (app.busy ? ' disabled' : '') + '>' + esc(tr(app.busy ? 'create.busy' : 'create.btn')) + '</button><button class="btn ghost" data-act="toTables" data-key="createBack">' + esc(tr('back')) + '</button></div>';
 }
@@ -574,7 +575,7 @@ function lobbyHtml() {
   var autoHtml = startLeft > 0 ? '<div class="wait-text" role="status">' + esc(tr('lobby.startIn', { n: Math.ceil(startLeft / 1000) })) + '</div>' : '';
   var code = G ? G.code : '';
   return '<div class="page"><div class="page-head"><h2>' + esc(tr('lobby.title')) + '</h2></div>' +
-    '<div class="card-box code-big"><small>' + esc(tr('lobby.code')) + '</small><div class="code" data-key="codeBig">' + esc(code) + '</div><div class="btns">' +
+    '<div class="card-box code-big"><small>' + esc(tr('lobby.code')) + '</small><div class="code" data-key="codeBig">' + esc(code) + '</div>' + (v && v.private ? '<div class="muted" style="font-size:14px;font-weight:700">' + esc(tr('lobby.private')) + '</div>' : '') + '<div class="btns">' +
       '<button class="btn ghost" data-act="copyCode" data-key="copy">' + esc(tr(app.copied ? 'lobby.copied' : 'lobby.copy')) + '</button>' +
       '<button class="btn ghost" data-act="shareLink" data-key="share">' + esc(tr('lobby.share')) + '</button></div></div>' +
     '<div class="seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
@@ -883,6 +884,7 @@ appEl.addEventListener('click', function (e) {
     case 'toCreate': app.screen = 'create'; app.tableError = null; render(); break;
     case 'size': app.size = Number(v); render(); break;
     case 'bots': app.fillBots = !app.fillBots; render(); break;
+    case 'private': app.private = !app.private; render(); break;
     case 'create': createTable(); break;
     case 'joinRoom': app.code = v; joinTable(v); break;
     case 'joinCode': joinTable(app.code); break;

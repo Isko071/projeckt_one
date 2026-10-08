@@ -342,3 +342,17 @@ test('новая игра за тем же столом: после конца �
   assert.equal(p1.getView().state.round, 1);
 });
 async function rematchGuard(host, msg) { await host.rematch(); assert.equal(host.getView().status, 'playing', msg); }
+
+test('закрытый стол: не виден в списке открытых, но заходят по коду; у игроков виден признак закрытого', async () => {
+  const server = makeServer();
+  const open = await client(server, 'h1').createRoom({ size: 3, name: 'Открытый', mode: 'sync' });
+  const closed = await client(server, 'h2').createRoom({ size: 3, name: 'Закрытый', mode: 'turns', private: true });
+  assert.equal(closed.host.getView().private, true);
+  assert.equal(open.host.getView().private, false);
+  const list = await client(server, 'x').listRooms();
+  assert.deepEqual(plain(list.map((r) => r.hostName)), ['Открытый'], 'закрытый в списке не показывается');
+  const p = await client(server, 'p1').joinRoom(closed.code, { name: 'Аня' });
+  await step(server, closed.host, [p], 500);
+  assert.equal(p.getView().private, true);
+  assert.deepEqual(plain(closed.host.getView().members.map((m) => m.name)), ['Закрытый', 'Аня']);
+});

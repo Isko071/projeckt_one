@@ -94,6 +94,7 @@
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false;
       var members = [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
       var fillBots = opts.fillBots !== false;
+      var isPrivate = !!opts.private;      // закрытый стол: не показывается в списке, зайти можно только по коду или ссылке
       var chat = Chat ? Chat.createLog() : null, chatLimit = Chat ? Chat.createLimiter() : null;
       function sys(code, name) { if (chat) { chat.add({ kind: 'sys', code: code, name: String(name || ''), ts: now() }); dirty = true; } }
       function addChat(m, text, cid) {   // сообщение игрока: очистка, ограничение частоты, журнал последних 20
@@ -116,7 +117,7 @@
       function touchReady() { readyAt = members.length >= 2 ? now() : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
+        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
@@ -137,7 +138,7 @@
         return putDoc('rooms/' + code, fields());
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, fillBots: fillBots, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now(), chat: chat ? chat.list() : [] };
+        return { code: code, role: 'host', status: status, size: size, fillBots: fillBots, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now(), chat: chat ? chat.list() : [], private: isPrivate };
       }
 
       function seatsForStart() {
@@ -321,7 +322,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var st = null; if (d.state) { try { st = JSON.parse(d.state); } catch (e) { st = null; } }
         var chatList = []; try { var cl = d.chat ? JSON.parse(d.chat) : []; chatList = Array.isArray(cl) ? cl : []; } catch (e) { chatList = []; }
-        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, chat: chatList, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), startIn: typeof d.startIn === 'number' ? d.startIn : -1, receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, chat: chatList, private: d.private === true, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), startIn: typeof d.startIn === 'number' ? d.startIn : -1, receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);
@@ -354,8 +355,8 @@
       return req('POST', base + ':runQuery', body).then(strict).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
-          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, game: d.game, stale: now() - d.heartbeat > cfg.staleMs };
-        }).filter(function (x) { return x.game === 'blackjack' && !x.stale && x.players < x.size; });
+          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, private: d.private === true, game: d.game, stale: now() - d.heartbeat > cfg.staleMs };
+        }).filter(function (x) { return x.game === 'blackjack' && !x.private && !x.stale && x.players < x.size; });
       });
     }
 

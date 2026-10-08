@@ -333,3 +333,15 @@ test('чат в блэкджеке: сообщения через хоста, с
   assert.ok(chat.filter((m) => m.kind === 'msg').every((m) => m.uid && m.name && m.ts > 0));
   assert.equal(host.getView().chat.length, 4);
 });
+
+test('закрытый стол в блэкджеке: не виден в списке открытых, но заходят по коду', async () => {
+  const server = makeServer();
+  await client(server, 'h1').createRoom({ size: 3, fillBots: true, name: 'Открытый', chips: 5000 });
+  const closed = await client(server, 'h2').createRoom({ size: 3, fillBots: true, name: 'Закрытый', chips: 5000, private: true });
+  const list = await client(server, 'x').listRooms();
+  assert.deepEqual(plain(list.map((r) => r.hostName)), ['Открытый']);
+  const p = await client(server, 'p1').joinRoom(closed.code, { name: 'Аня', chips: 5000 });
+  await step(server, closed.host, [p], 500);
+  assert.equal(p.getView().private, true);
+  assert.equal(closed.host.getView().members.length, 2);
+});
