@@ -534,3 +534,74 @@ for (const players of [2, 3, 4, 5]) {
     st.seats.forEach((x, i) => assert.equal(x.chips, start[i] + nets[i], 'фишки места ' + i));
   });
 }
+
+// ===== Характеры ботов =====
+function seededRng(seed) { let k = seed; return () => { k = (k * 1103515245 + 12345) % 2147483648; return k / 2147483648; }; }
+// Состояние «ход бота» с заданной рукой и открытой картой дилера
+function botTurn(style, cards, up = '9H') {
+  const st = B.init([{ id: 'h', chips: 1000 }, { id: 'b', chips: 1000, kind: 'bot', style }], { simple: true, stack: [] });
+  st.phase = 'playing'; st.current = 1; st.hand = 0;
+  st.seats[1].hands = [{ cards, bet: 100, done: false, doubled: false, fromSplit: false, splitAces: false, outcome: null, payout: 0 }];
+  st.dealer = { cards: [up, '5C'], hidden: true };
+  return st;
+}
+function freq(style, cards, n = 4000, up) {
+  const rng = seededRng(99); let hits = 0;
+  for (let i = 0; i < n; i++) if (B.botAction(botTurn(style, cards, up), 1, rng).type === 'hit') hits++;
+  return hits / n;
+}
+
+test('боты: наборы по порядку и имена, четвёртый снова средний', () => {
+  deepEqual([0, 1, 2, 3].map((n) => B.makeBot(n).style), ['average', 'risky', 'careful', 'average']);
+  deepEqual([0, 1, 2, 3].map((n) => B.makeBot(n).name), ['Бот Макс', 'Бот Рико', 'Бот Оскар', 'Бот Макс 2']);
+  assert.ok([0, 1, 2].every((n) => B.makeBot(n).kind === 'bot'));
+});
+
+test('рискованный бот: до 18 всегда берёт, на 18 примерно в половине случаев, на 19 в четверти, на 21 никогда', () => {
+  assert.equal(freq('risky', ['TS', '7D']), 1, '17');
+  assert.equal(freq('risky', ['TS', '2D', '4C']), 1, '16');
+  assert.ok(Math.abs(freq('risky', ['TS', '8D']) - 0.5) < 0.04, '18');
+  assert.ok(Math.abs(freq('risky', ['TS', '9D']) - 0.25) < 0.04, '19');
+  assert.ok(Math.abs(freq('risky', ['TS', 'QD']) - 0.05) < 0.02, '20');
+  assert.equal(freq('risky', ['TS', 'AD']), 0, '21');
+});
+
+test('осторожный бот: останавливается около 18 (17, 18 или 19 случайно)', () => {
+  assert.equal(freq('careful', ['TS', '6D']), 1, '16 — всегда берёт');
+  assert.ok(Math.abs(freq('careful', ['TS', '7D']) - 2 / 3) < 0.04, '17: берёт при пороге 18 и 19');
+  assert.ok(Math.abs(freq('careful', ['TS', '8D']) - 1 / 3) < 0.04, '18: берёт только при пороге 19');
+  assert.equal(freq('careful', ['TS', '9D']), 0, '19 — всегда стоп');
+});
+
+test('средний бот играет по базовой стратегии, но в каждом пятом ходе ошибается', () => {
+  const hitRate = freq('average', ['TS', '2D'], 6000, '9H');
+  assert.ok(Math.abs(hitRate - (1 - 0.22)) < 0.03, '12 против 9: ' + hitRate);
+  const standRate = 1 - freq('average', ['TS', '6D'], 6000, '5H');    // 16 против 5: по стратегии стоп
+  assert.ok(Math.abs(standRate - 0.78) < 0.03, '16 против 5: ' + standRate);
+  assert.equal(freq('average', ['TS', '9D']), 0, '19 — без ошибок: стоп');
+  assert.equal(freq('average', ['5S', '4D']), 1, '9 — без ошибок: берёт');
+});
+
+test('ставки ботов: средний 100, рискованный 250, осторожный 50; если фишек меньше, ставят сколько есть', () => {
+  const st = B.init([{ chips: 5000 }, { kind: 'bot', style: 'average', chips: 5000 }, { kind: 'bot', style: 'risky', chips: 5000 }, { kind: 'bot', style: 'careful', chips: 5000 }, { kind: 'bot', style: 'risky', chips: 130 }], { stack: [] });
+  deepEqual([1, 2, 3, 4].map((i) => B.botAction(st, i).amount), [100, 250, 50, 125]);
+});
+
+test('стол из трёх ботов разного характера: 300 раздач, зависаний нет, фишки сходятся', () => {
+  const rng = seededRng(5);
+  const seats = [{ id: 'me', chips: 1e6 }, Object.assign({ id: 'b0', chips: 1e6 }, B.makeBot(0)), Object.assign({ id: 'b1', chips: 1e6 }, B.makeBot(1)), Object.assign({ id: 'b2', chips: 1e6 }, B.makeBot(2))];
+  let st = B.init(seats, { simple: true }, rng);
+  const nets = seats.map(() => 0), start = st.seats.map((x) => x.chips);
+  const run = (a) => { const r = B.reduce(st, a, rng); assert.equal(r.ok, true, JSON.stringify(a) + r.error); st = r.state; };
+  for (let round = 0; round < 300; round++) {
+    let guard = 0;
+    while (st.phase === 'betting' && guard++ < 20) { const a = B.nextBotAction(st, rng); if (a) run(a); else if (!st.seats[0].bet) run({ type: 'bet', seat: 0, amount: 100 }); else break; }
+    run({ type: 'deal', seat: 0 });
+    guard = 0;
+    while (st.phase === 'playing' && guard++ < 200) run(B.nextBotAction(st, rng) || { type: B.hint(st, st.current), seat: st.current });
+    assert.equal(st.phase, 'settled');
+    st.seats.forEach((x, i) => { if (x.hands.length) nets[i] += x.net; });
+    run({ type: 'next', seat: 0 });
+  }
+  st.seats.forEach((x, i) => assert.equal(x.chips, start[i] + nets[i]));
+});

@@ -5,7 +5,7 @@ var CATALOG_URL = '../../index.html';
 var tr = function (key, params) { return window.I18n.t('games.blackjack.' + key, params); };
 var BJ = window.Blackjack, W = window.PlatformWallet, P = window.PlatformProfile, Cloud = window.PlatformCloud;
 var appEl = document.getElementById('app');
-var CHIPS = [25, 50, 100, 250, 500];
+var CHIPS = [25, 50, 100, 250, 500, 1000, 2000];
 var MIN_BET = BJ.CONFIG.minBet, MAX_BET = BJ.CONFIG.maxBet;
 var ROOM_CFG = window.PlatformRooms ? window.PlatformRooms.DEFAULTS : { idleMs: 30000, askMs: 7000, extendMs: 15000, nextDelayMs: 6000 };
 
@@ -88,7 +88,7 @@ function cardHtml(code, w, extra) {
   }
   return out + '</div>';
 }
-var CHIP_COLOR = { 25: 'oklch(0.48 0.04 260)', 50: 'oklch(0.5 0.15 250)', 100: 'oklch(0.32 0.03 260)', 250: 'oklch(0.52 0.14 45)', 500: 'oklch(0.46 0.16 315)' };
+var CHIP_COLOR = { 25: 'oklch(0.48 0.04 260)', 50: 'oklch(0.5 0.15 250)', 100: 'oklch(0.32 0.03 260)', 250: 'oklch(0.52 0.14 45)', 500: 'oklch(0.46 0.16 315)', 1000: 'oklch(0.45 0.12 150)', 2000: 'oklch(0.42 0.15 20)' };
 function chipHtml(v, w) {
   return '<div class="chip" style="width:' + w + 'px;height:' + w + 'px;background:' + (CHIP_COLOR[v] || 'oklch(0.4 0.03 260)') + ';border:' + (w * 0.1) + 'px dashed oklch(1 0 0 / .92)" role="img" aria-label="' + esc(tr('bet.chip', { n: v })) + '">' +
     '<div class="in" style="font-size:' + (w * (v >= 100 ? 0.25 : 0.29)) + 'px">' + v + '</div></div>';
@@ -96,7 +96,7 @@ function chipHtml(v, w) {
 // Разложение суммы на фишки (крупные номиналы первыми)
 function chipsOf(amount) {
   var out = [], rest = amount;
-  [500, 250, 100, 50, 25].forEach(function (v) { while (rest >= v) { out.push(v); rest -= v; } });
+  [2000, 1000, 500, 250, 100, 50, 25].forEach(function (v) { while (rest >= v) { out.push(v); rest -= v; } });
   return out;
 }
 function chipStackHtml(values, w) {
@@ -234,7 +234,7 @@ function activeNotice() {
 function startLocal() {
   gameToken++;
   stopOnline();
-  var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }, { id: 'bot', name: tr('botName'), chips: 5000, kind: 'bot' }], { simple: true });
+  var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }], { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1 };
   app.chips = clampChips(app.lastBet || 100);
   app.screen = 'game'; app.modal = null; app.hint = null; app.resultAt = 0; app.seen = {}; app.pending = false;
@@ -253,7 +253,9 @@ function lDispatch(action) {
     G.settledRound = st.round;
     var mine = seatHand(st.seats[0]);
     if (mine) {
-      if (mine.payout > 0) W.add(mine.payout, 'blackjack');
+      var cr = W.capPayout('blackjack', mine.payout, mine.bet, now());
+      G.cap = cr;
+      if (cr.capped) notify(tr(cr.left > 0 || cr.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(cr.granted) }), 6000);
       if (mine.outcome === 'win' || mine.outcome === 'blackjack') W.countWin('blackjack');
     }
     var ms = 0;
@@ -282,6 +284,7 @@ function localDeal() {
   var total = chipsTotal(), st = G.state;
   if (total < MIN_BET || total > betBounds().max) return;
   st.seats[0].chips = W.getBalance();
+  W.capStart(now());
   if (!lDispatch({ type: 'bet', seat: 0, amount: total })) return;
   var a;
   while ((a = BJ.nextBotAction(G.state)) && G.state.phase === 'betting') lDispatch(a);
@@ -293,7 +296,6 @@ function localDeal() {
 function localNext(redeal) {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
   G.state.seats[0].chips = W.getBalance();
-  G.state.seats[1].chips = 5000;
   app.hint = null; app.seen = {}; app.resultAt = 0;
   var b = betBounds();
   app.chips = clampChips(app.lastBet || 100);
@@ -569,6 +571,7 @@ function betHtml(D) {
   var placed = seat.bet > 0, total = placed ? seat.bet : chipsTotal();
   var plates = others.map(function (idx, i) { return plateHtml(D, L, idx, i, others.length, false); }).join('');
   var note = total >= MAX_BET ? tr('bet.maxNote', { max: fmt(MAX_BET) }) : (b.max < MAX_BET && !placed && total >= b.max ? tr('bet.poorNote') : tr(online ? 'bet.noteOnline' : 'bet.note', { max: fmt(MAX_BET) }));
+  if (!online) note += ' ' + tr('cap.left', { n: fmt(W.capStatus(now()).left) });
   if (placed) note = tr('bet.placed');
   if (seat.sitOut) note = tr('bet.sitting');
   var shownChips = placed ? chipsOf(seat.bet) : app.chips;
@@ -637,12 +640,7 @@ function playHtml(D) {
       '<div style="display:flex;justify-content:center"><button class="btn ghost" data-act="hint" data-key="hint"' + (dis ? ' disabled' : '') + '>' + esc(tr('act.hint')) + '</button></div></div>';
   } else if (showResult) {
     var b = betBounds(), broke = b.bal < MIN_BET, bot = D.mode === 'bot', bits = '';
-    if (bot) {
-      var botSeat = vs.seats[1], bn = botSeat.net, mn = seat.net;
-      var line = mn > bn ? tr('res.beatBot') : (mn < bn ? tr('res.botBeat') : tr('res.even'));
-      var sg = function (n) { return n > 0 ? '+' + fmt(n) : (n < 0 ? '−' + fmt(-n) : '±0'); };
-      bits += '<div class="duel"><span>' + esc(line) + '</span><span>' + esc(tr('res.rows', { a: sg(mn), b: sg(bn) })) + '</span></div>';
-    }
+    if (bot && G.cap) bits += '<div class="duel"><span>' + esc(tr('cap.left', { n: fmt(G.cap.left) })) + '</span></div>';
     if (broke) bits += '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>';
     if (D.online) {
       var left = Math.max(0, ROOM_CFG.nextDelayMs - (now() - app.settledAt)), pct = Math.round(100 * left / ROOM_CFG.nextDelayMs);

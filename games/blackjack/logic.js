@@ -9,6 +9,7 @@
 //  • Игрок может взять карту, остановиться, удвоить (на первых двух картах, одна карта и остановка) и разделить пару одинаковых карт (один раз).
 //  • После деления тузов к каждому туз дают по одной карте. 21 после деления не считается блэкджеком (платит 1:1). Удвоение после деления разрешено, кроме тузов.
 //  • Страховки и сдачи нет.
+//  • Боты за столом играют случайно, у каждого свой характер (средний, рискованный, осторожный), см. BOT_STYLES.
 //  • Упрощённый режим (options.simple): только «взять» и «стоп», без удвоения и деления; подсказка тоже советует только эти два действия.
 //
 // Карта — строка из двух символов: достоинство (A 2 3 4 5 6 7 8 9 T J Q K) и масть (S H D C), например 'AS', 'TH'.
@@ -27,6 +28,13 @@
   var RANKS = 'A23456789TJQK'.split('');
   var SUITS = ['S', 'H', 'D', 'C'];
   var CONFIG = { decks: 6, minBet: 25, maxBet: 2500, step: 25, reshuffleBelow: 0.25, startChips: 5000, maxSeats: 5, botBet: 100 };
+  // Боты за столом (не дилер: дилер всегда компьютер). Ходят случайно, у каждого свой характер:
+  //  • average — средний игрок: по базовой стратегии, но в каждом пятом ходе ошибается, ставит 100;
+  //  • risky — рискованный: берёт карты до 18 и часто идёт дальше (на 18 с шансом 50 %, на 19 — 25 %, на 20 — 5 %), ставит 250;
+  //  • careful — осторожный: останавливается около 18 (порог 17, 18 или 19 случайно), ставит 50.
+  var BOT_STYLES = { average: { name: 'Бот Макс', bet: 100 }, risky: { name: 'Бот Рико', bet: 250 }, careful: { name: 'Бот Оскар', bet: 50 } };
+  var BOT_ORDER = ['average', 'risky', 'careful'];
+  var MISTAKE_RATE = 0.22;
 
   // ===== Карты и подсчёт =====
   function rankOf(card) { return card.charAt(0); }
@@ -70,7 +78,7 @@
     var out = [];
     for (var i = 0; i < count; i++) {
       var s = list[i];
-      out.push(s ? occupy({}, i, s) : { id: 'seat' + i, name: '', kind: 'human', active: false, chips: 0, bet: 0, hands: [], wagered: 0, net: 0, sitOut: false, leaving: false });
+      out.push(s ? occupy({}, i, s) : { id: 'seat' + i, name: '', kind: 'human', style: 'human', active: false, chips: 0, bet: 0, hands: [], wagered: 0, net: 0, sitOut: false, leaving: false });
     }
     return out;
   }
@@ -78,6 +86,7 @@
     seat.id = s.id !== undefined ? String(s.id) : 'seat' + i;
     seat.name = s.name ? String(s.name).slice(0, 20) : '';
     seat.kind = s.kind === 'bot' ? 'bot' : 'human';
+    seat.style = seat.kind === 'bot' && BOT_STYLES[s.style] ? s.style : (seat.kind === 'bot' ? 'average' : 'human');
     seat.active = true;
     seat.chips = typeof s.chips === 'number' && s.chips >= 0 ? Math.floor(s.chips) : CONFIG.startChips;
     seat.bet = 0; seat.hands = []; seat.wagered = 0; seat.net = 0; seat.sitOut = false; seat.leaving = false;
@@ -372,26 +381,50 @@
   }
 
   // ===== Боты =====
-  // Что должен сделать бот на этом месте сейчас (или null). Ставка постоянная, ход по базовой стратегии.
-  function botAction(state, seat) {
+  // Бот по порядку: характер и имя (4-й бот снова «средний» и т. д.)
+  function makeBot(n) {
+    var style = BOT_ORDER[n % BOT_ORDER.length], lap = Math.floor(n / BOT_ORDER.length);
+    return { kind: 'bot', style: style, name: BOT_STYLES[style].name + (lap ? ' ' + (lap + 1) : '') };
+  }
+
+  // Ход бота в игре: 'hit' или 'stand'
+  function botMove(state, seat, rng) {
+    var s = state.seats[seat], h = s.hands[state.hand], total = handValue(h.cards).total, style = s.style || 'average';
+    if (!canHit(state, seat) || total >= 21) return 'stand';
+    var r = rng();
+    if (style === 'risky') {
+      if (total < 18) return 'hit';
+      var chance = total === 18 ? 0.5 : (total === 19 ? 0.25 : (total === 20 ? 0.05 : 0));
+      return r < chance ? 'hit' : 'stand';
+    }
+    if (style === 'careful') {
+      var limit = 17 + Math.floor(rng() * 3);               // 17, 18 или 19
+      return total < limit ? 'hit' : 'stand';
+    }
+    var best = hint(state, seat) === 'stand' ? 'stand' : 'hit';
+    if (r < MISTAKE_RATE && total > 11 && total < 19) return best === 'hit' ? 'stand' : 'hit';   // «средний игрок» иногда ошибается
+    return best;
+  }
+
+  // Что должен сделать бот на этом месте сейчас (или null).
+  function botAction(state, seat, rng) {
     var s = state.seats[seat];
+    rng = rng || Math.random;
     if (!s || !s.active || s.kind !== 'bot') return null;
     if (state.phase === 'betting') {
       if (decided(s)) return null;
-      var amount = Math.min(CONFIG.botBet, Math.floor((s.chips) / CONFIG.step) * CONFIG.step);
+      var want = (BOT_STYLES[s.style] || BOT_STYLES.average).bet;
+      var amount = Math.min(want, Math.floor((s.chips) / CONFIG.step) * CONFIG.step);
       return amount >= CONFIG.minBet ? { type: 'bet', seat: seat, amount: amount } : { type: 'sitout', seat: seat };
     }
-    if (state.phase === 'playing' && state.current === seat) {
-      var a = hint(state, seat);
-      return a ? { type: a, seat: seat } : { type: 'stand', seat: seat };
-    }
+    if (state.phase === 'playing' && state.current === seat) return { type: botMove(state, seat, rng), seat: seat };
     return null;
   }
 
   // Первое действие, которое ждёт от какого-нибудь бота (для ведущего: цикл «пока есть действие бота»)
-  function nextBotAction(state) {
+  function nextBotAction(state, rng) {
     for (var i = 0; i < state.seats.length; i++) {
-      var a = botAction(state, i);
+      var a = botAction(state, i, rng);
       if (a) return a;
     }
     return null;
@@ -464,6 +497,6 @@
     rankOf: rankOf, suitOf: suitOf, cardValue: cardValue, handValue: handValue, isNatural: isNatural, isBust: isBust,
     buildShoe: buildShoe, init: init, reduce: reduce, view: view, hint: hint, availableActions: availableActions,
     activeHand: activeHand, canDouble: canDouble, canSplit: canSplit, canHit: canHit,
-    readyToDeal: readyToDeal, botAction: botAction, nextBotAction: nextBotAction, waitingSeats: waitingSeats
+    readyToDeal: readyToDeal, botAction: botAction, nextBotAction: nextBotAction, makeBot: makeBot, BOT_STYLES: BOT_STYLES, waitingSeats: waitingSeats
   };
 })(typeof window !== 'undefined' ? window : globalThis);
