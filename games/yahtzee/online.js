@@ -70,10 +70,6 @@
       } else {
         var key = T.progressKey(v.state, me);
         if (key !== on.heldKey) { on.heldKey = key; on.held = p.held.slice(); }
-        var tm = (v.timers || []).filter(function (t) { return t.seat === me; })[0], stage = tm ? tm.stage : null;
-        if (G.prevStage === 'asking' && stage === 'extended') notify(tr('online.extended'), 5000);
-        else if ((G.prevStage === 'asking' || G.prevStage === 'extended') && !stage && now() - (G.lastAction || 0) > 2000) notify(tr('online.auto'), 5000);
-        G.prevStage = stage;
         if (v.state.gameOver && !G.counted) { G.counted = true; app.modal = null; }
       }
     }
@@ -250,7 +246,7 @@
     if (!t) return null;
     var cfg = window.PlatformTurnRooms.DEFAULTS;
     var left = Math.max(0, t.ms - (G.role === 'player' ? now() - v.receivedAt : 0));
-    return { stage: t.stage, left: left, total: t.stage === 'idle' ? cfg.idleMs : (t.stage === 'asking' ? cfg.askMs : cfg.extendMs), sec: Math.ceil(left / 1000) };
+    return { stage: t.stage, left: left, total: t.stage === 'idle' ? cfg.idleMs : cfg.askMs, sec: Math.ceil(left / 1000) };
   }
   function filledCount(p) { return Yahtzee.CATEGORIES.length - Yahtzee.openCategories(p).length; }
 

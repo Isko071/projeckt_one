@@ -1,8 +1,8 @@
 // Онлайн-столы для игр без колоды и ставок («Ятзи»): та же схема, что в shared/rooms.js, но проще и без привязки к блэкджеку.
 //   Комната лежит в Firestore (rooms/<код>), ведущий игры — браузер создателя (хост). Хост держит состояние, принимает действия игроков
 //   (записи rooms/<код>/actions/*), прогоняет их через reduce игры и публикует состояние. Игроки раз в секунду читают комнату.
-//   Если игрок молчит: через idleMs ему показывается вопрос «Вы ещё играете?» (askMs), «Да» даёт ещё extendMs, потом хост делает
-//   ход за него (действие timeout); после maxStrikes таких ходов подряд игрок выбывает. Правила Firestore те же, что для блэкджека.
+//   Если игрок не отвечает: через idleMs ему показывается вопрос «Вы ещё играете?» (askMs); «Да» начинает отсчёт заново. Вместе это 2 минуты:
+//   без ответа игрок сразу сдаётся (выбывает из-за стола), ход за него никто не делает. Правила Firestore те же, что для блэкджека.
 //
 //   var rooms = PlatformTurnRooms.create({ fetch, getToken, uid, projectId, db, game, gameId, now, rng, options })
 //   rooms.createRoom({ size, name, avatar, mode }) → { code, host };  rooms.joinRoom(code, { name, avatar }) → игрок;  rooms.listRooms()
@@ -11,7 +11,7 @@
 //                waitingSeats(state), progressKey(state, seat). Состояние содержит gameOver.
 (function (root) {
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 60000, askMs: 10000, extendMs: 30000, maxStrikes: 3, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 100000, askMs: 20000, codeLength: 5 };
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
@@ -84,7 +84,7 @@
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var members = [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
-      var processed = {}, strikes = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking' | 'extended', until }
+      var processed = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking', until }
       var em = emitter();
 
       function timersNow() {
@@ -148,17 +148,17 @@
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
           return;
         }
-        if (payload.type === 'here') {                      // «Да, я играю»: после вопроса даём ещё extendMs
+        if (payload.type === 'here') {                      // «Да, я играю»: отсчёт неактивности начинается заново
           var e0 = idle[m.seat];
-          if (e0 && e0.stage === 'asking') { e0.stage = 'extended'; e0.until = lastTick + cfg.extendMs; dirty = true; }
+          if (e0 && e0.stage === 'asking') { e0.stage = 'idle'; e0.since = lastTick; dirty = true; }
           return;
         }
         if (status !== 'playing' || game.PLAYER_ACTIONS.indexOf(payload.type) < 0) return;
         var act = clean(payload); act.seat = m.seat;
-        if (apply(act)) strikes[uid] = 0;
+        apply(act);
       }
 
-      // Таймеры молчащих: ждём idleMs, спрашиваем (askMs), при ответе даём ещё extendMs; потом ход за игрока (timeout)
+      // Таймеры неактивных: ждём idleMs, спрашиваем «Вы ещё играете?» (askMs); нет ответа — игрок сдаётся. Ходов за него хост не делает
       function auto(t) {
         if (status !== 'playing' || !full) return;
         var waiting = full.gameOver ? [] : game.waitingSeats(full), seen = {};
@@ -167,12 +167,7 @@
           var key = game.progressKey(full, seat), e = idle[seat];
           if (!e || e.key !== key) { idle[seat] = { key: key, since: t, stage: 'idle', until: 0 }; dirty = true; return; }
           if (e.stage === 'idle' && t - e.since >= cfg.idleMs) { e.stage = 'asking'; e.until = t + cfg.askMs; dirty = true; return; }
-          if ((e.stage === 'asking' || e.stage === 'extended') && t >= e.until) {
-            var mem = members.filter(function (x) { return x.seat === seat; })[0];
-            delete idle[seat]; dirty = true;
-            apply({ type: 'timeout', seat: seat });
-            if (mem) { strikes[mem.uid] = (strikes[mem.uid] || 0) + 1; if (strikes[mem.uid] >= cfg.maxStrikes && full && !full.gameOver) apply({ type: 'leave', seat: seat }); }
-          }
+          if (e.stage === 'asking' && t >= e.until) { delete idle[seat]; dirty = true; apply({ type: 'leave', seat: seat }); }
         });
         Object.keys(idle).forEach(function (seat) { if (!seen[seat]) { delete idle[seat]; dirty = true; } });
       }
@@ -200,7 +195,7 @@
         if (action.type === 'leave') { close(); return true; }
         if (status !== 'playing' || game.PLAYER_ACTIONS.indexOf(action.type) < 0) return false;
         var ok = apply(Object.assign(clean(action), { seat: 0 }));
-        if (ok) { strikes[env.uid] = 0; em.emit(getView()); }
+        if (ok) em.emit(getView());
         return ok;
       }
 

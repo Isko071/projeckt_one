@@ -112,14 +112,6 @@ test('выход игрока: в режиме по очереди ход пер
   assert.equal(T.reduce(sy, { type: 'leave', seat: 2 }).error, 'not-active');
 });
 
-test('таймаут: игрок, который молчит, получает бросок и запись в клетку с наибольшими очками', () => {
-  let st = T.init(seats(2), { mode: 'turns' });
-  st = run(st, { type: 'timeout', seat: 0 }, dice(6, 6, 6, 5, 5));
-  assert.equal(st.players[0].scores.threeKind, 28, 'при равенстве очков — первая клетка таблицы');
-  assert.equal(st.current, 1);
-  assert.equal(T.reduce(st, { type: 'timeout', seat: 0 }).error, 'not-your-turn');
-});
-
 test('вся партия: 13 раундов в обоих режимах, итоги по убыванию, победитель помечен', () => {
   ['turns', 'sync'].forEach((mode) => {
     let st = T.init(seats(4), { mode });

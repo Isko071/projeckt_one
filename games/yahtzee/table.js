@@ -106,9 +106,6 @@
       p.held[i] = !p.held[i];
     } else if (action.type === 'score') {
       if (!doScore(st, seat, action.cat)) return bad('bad-category');
-    } else if (action.type === 'timeout') {      // молчащий игрок: бросок (если не бросал) и запись в лучшую по очкам клетку
-      if (p.rollsUsed === 0) doRoll(p, rng);
-      doScore(st, seat, Y.cpuChooseCategory(p, p.dice, 'easy'));
     } else return bad('bad-action');
     settle(st);
     return { ok: true, state: st };

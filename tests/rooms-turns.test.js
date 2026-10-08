@@ -12,7 +12,7 @@ const ctx = vm.createContext({ JSON, Promise, Math, Object, Array, Number, Strin
 ['games/yahtzee/logic.js', 'games/yahtzee/table.js', 'shared/rooms-turns.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
 const Y = vm.runInContext('Yahtzee', ctx), T = ctx.YahtzeeTable, R = ctx.PlatformTurnRooms;
 const plain = (x) => JSON.parse(JSON.stringify(x));
-const FAST = { idleMs: 3000, askMs: 1000, extendMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
+const FAST = { idleMs: 3000, askMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
 
 function client(server, uid) {
   let k = 11;
@@ -104,7 +104,7 @@ test('одновременно: все играют сразу, раунд за�
   }
 });
 
-test('молчун: вопрос «играете?», ответ «да» даёт время, потом ход за него, после трёх таких — выбывает', async () => {
+test('неактивный игрок: вопрос «играете?», «да» начинает отсчёт заново, без ответа он сдаётся, ходов за него никто не делает', async () => {
   const server = makeServer();
   const { host, players } = await table(server, 2, 'turns');
   const [p1] = players;
@@ -115,19 +115,34 @@ test('молчун: вопрос «играете?», ответ «да» даё
   assert.equal(p1.getView().timers[0].stage, 'asking');
   await p1.send({ type: 'here' });
   await step(server, host, players, 500);
-  assert.equal(p1.getView().timers[0].stage, 'extended');
-  await step(server, host, players, 2500);                                          // время вышло: ход за игрока
-  assert.notEqual(p1.getView().state.players[1].scores.threeKind === null && p1.getView().state.players[1].scores.chance === null, true, 'запись сделана автоматически');
-  assert.equal(p1.getView().state.current, 0);
-  // ещё два таких хода — выбывает
-  for (let k = 0; k < 2; k++) {
-    host.send({ type: 'roll' }); host.send({ type: 'score', cat: Y.allowedCategories(host.getView().state.players[0], host.getView().state.players[0].dice)[0] });
-    await step(server, host, players, 100);
-    await step(server, host, players, 3000); await step(server, host, players, 1000);
-  }
+  assert.equal(p1.getView().timers[0].stage, 'idle', 'после «да» отсчёт начался заново');
+  assert.ok(p1.getView().timers[0].ms > 2000);
+  await step(server, host, players, 3000);
+  assert.equal(p1.getView().timers[0].stage, 'asking');
+  assert.equal(p1.getView().state.players[1].rollsUsed, 0, 'бросков за игрока не делается');
+  await step(server, host, players, 2000);                                          // ответа нет: сдался
   const st = p1.getView().state;
   assert.equal(st.players[1].active, false);
+  assert.equal(st.players[1].rollsUsed, 0);
+  assert.equal(Y.openCategories(st.players[1]).length, 13, 'очки за него не записаны');
   assert.equal(st.gameOver, true, 'остался один игрок');
+  assert.equal(st.reason, 'alone');
+});
+
+test('неактивный игрок в одновременном режиме сдаётся, остальные продолжают без него', async () => {
+  const server = makeServer();
+  const { host, players } = await table(server, 3, 'sync');
+  const [p1, p2] = players;
+  host.send({ type: 'roll' }); host.send({ type: 'score', cat: 'chance' });
+  await p1.send({ type: 'roll' }); await step(server, host, players);
+  await p1.send({ type: 'score', cat: Y.allowedCategories(p1.getView().state.players[1], p1.getView().state.players[1].dice)[0] });
+  await step(server, host, players, 3000);                                          // третий молчит
+  assert.equal(p2.getView().timers.filter((t) => t.seat === 2)[0].stage, 'asking');
+  await step(server, host, players, 2000);
+  const st = host.getView().state;
+  assert.equal(st.players[2].active, false);
+  assert.equal(st.gameOver, false);
+  assert.equal(st.round, 2, 'раунд закрыт: остальные уже записали очки');
 });
 
 test('выход игрока: ведущий отмечает место свободным, стол продолжается; закрытие хоста видно игрокам', async () => {
