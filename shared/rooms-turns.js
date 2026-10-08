@@ -5,13 +5,14 @@
 //   без ответа игрок сразу сдаётся (выбывает из-за стола), ход за него никто не делает. Правила Firestore те же, что для блэкджека.
 //
 //   var rooms = PlatformTurnRooms.create({ fetch, getToken, uid, projectId, db, game, gameId, now, rng, options })
+//   Автозапуск: когда за столом собралось 2 игрока и больше, через autoStartMs (20 с) после последнего входа или выхода хост сам начинает игру.
 //   rooms.createRoom({ size, name, avatar, mode }) → { code, host };  rooms.joinRoom(code, { name, avatar }) → игрок;  rooms.listRooms()
 //   Контроллер: poll(), send(action), leave(), stop(), onChange(fn), getView(); у хоста ещё start(), tick(), close()
 //   Игра (game): CONFIG { minSeats, maxSeats }, PLAYER_ACTIONS, init(seats, options, rng), reduce(state, action, rng), view(state),
 //                waitingSeats(state), progressKey(state, seat). Состояние содержит gameOver.
 (function (root) {
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 100000, askMs: 20000, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 100000, askMs: 20000, autoStartMs: 20000, codeLength: 5 };
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
@@ -86,6 +87,7 @@
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var members = [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
+      var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 игрока и больше: от него идёт отсчёт автозапуска
       var processed = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking', until }
       var em = emitter();
 
@@ -97,15 +99,17 @@
         });
         return out;
       }
+      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
+      function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.autoStartMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0].name, mode: mode, rev: rev, heartbeat: now(),
+        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0].name, mode: mode, rev: rev, heartbeat: now(), startIn: startIn(),
           meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, members: members.map(publicMember) }) };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         return f;
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed };
+        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now() };
       }
       function publish() {
         rev++; dirty = false; lastBeat = now();
@@ -141,12 +145,12 @@
         if (payload.type === 'hello') {
           if (m || status !== 'lobby' || members.length >= size) return;
           members.push({ uid: uid, name: String(payload.name || '').slice(0, 20), avatar: Number(payload.avatar) || 0, seat: members.length });
-          dirty = true;
+          touchReady(); dirty = true;
           return;
         }
         if (!m) return;
         if (payload.type === 'leave') {
-          if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); dirty = true; }
+          if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
           return;
         }
@@ -183,7 +187,8 @@
           docs.sort(function (a, b) { return (a.data.createdAt - b.data.createdAt) || (a.name < b.name ? -1 : 1); });
           docs.filter(function (d) { return !processed[d.name]; }).forEach(function (d) { processed[d.name] = true; handle(d.data); });
           auto(t);
-          return Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); })).then(function () {
+          var starting = status === 'lobby' && readyAt && members.length >= game.CONFIG.minSeats && t - readyAt >= cfg.autoStartMs ? start() : null;   // автозапуск
+          return Promise.resolve(starting).then(function () { return Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); })); }).then(function () {
             if (dirty || t - lastBeat >= cfg.heartbeatMs) return publish();
           });
         });
@@ -223,7 +228,7 @@
         var m = parseJson(d.meta, { members: [] });
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
-        return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [],
+        return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
           receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {

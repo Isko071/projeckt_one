@@ -16,7 +16,7 @@
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
   // ответ «играю» даёт ещё extendMs (15 с); без ответа и по окончании этого времени ставится «стоп» (или пропуск раздачи).
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, autoStartMs: 20000, codeLength: 5 };
   var PLAYER_ACTIONS = ['bet', 'hit', 'stand', 'double', 'split', 'sitout'];
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
@@ -93,6 +93,7 @@
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false;
       var members = [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
       var fillBots = opts.fillBots !== false;
+      var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 человека и больше (отсчёт автозапуска)
       var processed = {}, strikes = {}, pendingJoins = [];
       var wait = { key: '', since: 0 }, autoAt = 0, nextBotNo = 1, idle = {};   // idle[место] = { key, since, stage: 'idle' | 'asking' | 'extended', until }
       var em = emitter();
@@ -101,8 +102,10 @@
         return JSON.stringify({ v: 1, game: 'blackjack', size: size, fillBots: fillBots, round: full ? full.round : 0,
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
+      function touchReady() { readyAt = members.length >= 2 ? now() : 0; }
+      function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.autoStartMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), meta: meta() };
+        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         return f;
@@ -122,7 +125,7 @@
         return putDoc('rooms/' + code, fields());
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, fillBots: fillBots, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed };
+        return { code: code, role: 'host', status: status, size: size, fillBots: fillBots, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now() };
       }
 
       function seatsForStart() {
@@ -157,7 +160,7 @@
           if (status === 'lobby') {
             if (members.length >= size) return;
             members.push({ uid: uid, name: String(payload.name || '').slice(0, 20), avatar: Number(payload.avatar) || 0, chips: Math.max(0, Math.floor(Number(payload.chips) || 0)), seat: members.length });
-            dirty = true;
+            touchReady(); dirty = true;
           } else if (status === 'playing' && members.length < size + 20) {
             members.push({ uid: uid, name: String(payload.name || '').slice(0, 20), avatar: Number(payload.avatar) || 0, chips: Math.max(0, Math.floor(Number(payload.chips) || 0)), seat: null });
             pendingJoins.push(uid); dirty = true;
@@ -167,7 +170,7 @@
         if (!m) return;
         if (payload.type === 'leave') {
           strikes[uid] = 0;
-          if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); dirty = true; }
+          if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (m.seat !== null) { apply({ type: 'leave', seat: m.seat }); members = members.filter(function (x) { return x.uid !== uid; }); /* место освободится после раздачи */ }
           else { members = members.filter(function (x) { return x.uid !== uid; }); pendingJoins = pendingJoins.filter(function (x) { return x !== uid; }); dirty = true; }
           return;
@@ -254,7 +257,8 @@
           var fresh = docs.filter(function (d) { return !processed[d.name]; });
           fresh.forEach(function (d) { processed[d.name] = true; handle(d.data); });
           auto(t);
-          var cleanup = Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); }));
+          var starting = status === 'lobby' && readyAt && members.length >= 2 && t - readyAt >= cfg.autoStartMs ? start() : null;   // автозапуск
+          var cleanup = Promise.resolve(starting).then(function () { return Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); })); });
           return cleanup.then(function () {
             if (dirty || t - lastBeat >= cfg.heartbeatMs) return publish();
           });
@@ -301,7 +305,7 @@
         var m; try { m = JSON.parse(d.meta); } catch (e) { m = { members: [] }; }
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var st = null; if (d.state) { try { st = JSON.parse(d.state); } catch (e) { st = null; } }
-        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), startIn: typeof d.startIn === 'number' ? d.startIn : -1, receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

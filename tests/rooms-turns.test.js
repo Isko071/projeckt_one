@@ -193,3 +193,41 @@ test('запись в несуществующую базу (404) не счит�
   await assert.rejects(() => client(broken, 'h').createRoom({ size: 2, name: 'Х' }), { code: 'missing' });
   await assert.rejects(() => client(broken, 'h').listRooms(), { code: 'missing' });
 });
+
+test('автозапуск: через 20 секунд после входа второго игрока хост сам начинает игру, новый вход сдвигает отсчёт', async () => {
+  const server = makeServer();
+  const mk = (uid) => R.create({ fetch: server.fetch, getToken: async () => 'tok-' + uid, uid, projectId: 'p', db: 'd', game: T, gameId: 'yahtzee', now: () => server.now, rng: Math.random, options: Object.assign({}, FAST, { autoStartMs: 20000 }) });
+  const { code, host } = await mk('h').createRoom({ size: 4, name: 'Хост', mode: 'sync' });
+  await host.tick(server.now);
+  assert.equal(host.getView().startIn, -1, 'один игрок: отсчёта нет');
+  const p1 = await mk('p1').joinRoom(code, { name: 'Аня' });
+  await step(server, host, [p1], 1000);
+  assert.ok(host.getView().startIn > 18000 && host.getView().startIn <= 20000, 'отсчёт пошёл: ' + host.getView().startIn);
+  await step(server, host, [p1], 1000);
+  assert.ok(p1.getView().startIn >= 0 && p1.getView().startIn <= 20000, 'игрок тоже видит отсчёт');
+  await step(server, host, [p1], 12000);                              // 14 секунд: ещё ждём
+  assert.equal(host.getView().status, 'lobby');
+  const p2 = await mk('p2').joinRoom(code, { name: 'Боря' });          // новый игрок: отсчёт заново
+  await step(server, host, [p1, p2], 1000);
+  assert.ok(host.getView().startIn > 18000);
+  await step(server, host, [p1, p2], 15000);
+  assert.equal(host.getView().status, 'lobby', '16 секунд после последнего входа: ещё не началась');
+  await step(server, host, [p1, p2], 5000);
+  assert.equal(host.getView().status, 'playing', 'через 20 секунд игра началась сама');
+  assert.equal(host.getView().state.players.length, 3);
+  assert.equal(p2.getView().status, 'playing');
+});
+
+test('автозапуск: если игрок вышел и остался один, отсчёт отменяется', async () => {
+  const server = makeServer();
+  const mk = (uid) => R.create({ fetch: server.fetch, getToken: async () => 'tok-' + uid, uid, projectId: 'p', db: 'd', game: T, gameId: 'yahtzee', now: () => server.now, rng: Math.random, options: Object.assign({}, FAST, { autoStartMs: 20000 }) });
+  const { code, host } = await mk('h').createRoom({ size: 3, name: 'Хост' });
+  const p1 = await mk('p1').joinRoom(code, { name: 'Аня' });
+  await step(server, host, [p1], 1000);
+  assert.ok(host.getView().startIn >= 0);
+  await p1.leave();
+  await step(server, host, [], 1000);
+  assert.equal(host.getView().startIn, -1);
+  await step(server, host, [], 30000);
+  assert.equal(host.getView().status, 'lobby');
+});

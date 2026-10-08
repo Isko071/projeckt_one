@@ -296,3 +296,21 @@ test('ошибки доступа: нет прав — понятный код, 
   const denied = client(server, '', { getToken: async () => 'tok-' });
   await assert.rejects(denied.createRoom({ size: 2 }), { code: 'denied' });
 });
+
+test('автозапуск блэкджека: два человека за столом, через 20 секунд игра начинается сама; один человек с ботами сам не начинает', async () => {
+  const server = makeServer();
+  const opts = Object.assign({}, FAST, { autoStartMs: 20000 });
+  const solo = await client(server, 'solo', { options: opts }).createRoom({ size: 3, fillBots: true, name: 'Один', chips: 5000 });
+  await step(server, solo.host, [], 30000);
+  assert.equal(solo.host.getView().status, 'lobby', 'один человек: только кнопкой «Начать»');
+  assert.equal(solo.host.getView().startIn, -1);
+  const { code, host } = await client(server, 'h', { options: opts }).createRoom({ size: 3, fillBots: true, name: 'Хост', chips: 5000 });
+  const p1 = await client(server, 'p1', { options: opts }).joinRoom(code, { name: 'Аня', chips: 5000 });
+  await step(server, host, [p1], 1000);
+  assert.ok(host.getView().startIn > 18000);
+  await step(server, host, [p1], 15000);
+  assert.equal(host.getView().status, 'lobby');
+  await step(server, host, [p1], 5000);
+  assert.equal(host.getView().status, 'playing', 'через 20 секунд игра началась сама');
+  assert.equal(p1.getView().status, 'playing');
+});
