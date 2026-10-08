@@ -16,7 +16,7 @@
       titleKey: 'games.minesweeper.title', descriptionKey: 'games.minesweeper.description'
     },
     {
-      id: 'blackjack', status: 'soon', path: 'games/blackjack/', cover: 'games/blackjack/cover.svg',
+      id: 'blackjack', status: 'available', path: 'games/blackjack/', cover: 'games/blackjack/cover.svg',
       titleKey: 'games.blackjack.title', descriptionKey: 'games.blackjack.description'
     },
     {

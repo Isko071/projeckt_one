@@ -120,7 +120,7 @@
         return putDoc('rooms/' + code, fields());
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed };
+        return { code: code, role: 'host', status: status, size: size, fillBots: fillBots, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed };
       }
 
       function seatsForStart() {
@@ -299,7 +299,7 @@
         var m; try { m = JSON.parse(d.meta); } catch (e) { m = { members: [] }; }
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var st = null; if (d.state) { try { st = JSON.parse(d.state); } catch (e) { st = null; } }
-        return { code: code, role: 'player', status: d.status, size: d.size, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);
