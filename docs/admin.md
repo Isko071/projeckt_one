@@ -23,5 +23,10 @@ allow read: if request.auth != null && request.auth.token.email == 'ВАШ_АД�
 ### Настройка (один раз)
 Render → сервис `igroteka-server` → Environment → Add: `ADMIN_EMAILS` = ваш адрес Google (тот же, что в правилах Firestore) → Save, сервер перезапустится сам.
 
-## Что будет дальше
-- Этап 3: ссылка на статистику посещений (Cloudflare Web Analytics), которая считает и гостей.
+## Посещения сайта (этап 3)
+Статистику, включая гостей, страны, устройства и страницы, считает Cloudflare Web Analytics: бесплатно, без cookie. В кабинете это ссылка «Посещения сайта ↗» (открывается панель Cloudflare). Скрипт подключён на каталоге и страницах игр, но не на `/admin/`, поэтому ваши заходы в кабинет не считаются.
+
+### Включение (один раз)
+1. На https://dash.cloudflare.com войдите (или зарегистрируйтесь) → Web Analytics → Add a site → в поле Hostname впишите `isko071.github.io` → Done. Переносить домен или менять DNS не нужно.
+2. Cloudflare покажет код вида `<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "…"}'></script>`. Нужен только токен из `token`.
+3. Впишите токен в `shared/firebase-config.js` (`CF_ANALYTICS_TOKEN`) и поднимите версию (`node tools/set-version.js <N>`) или пришлите его мне. Пока токен пустой, ничего не загружается. Когда он задан, в подвале каталога появляется строка «Считаем обезличенную статистику посещений».
