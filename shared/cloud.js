@@ -73,12 +73,17 @@
 
   function reload() { try { root.location.reload(); } catch (e) { /* без перезагрузки */ } }
 
-  // Имя из Google подставляется, пока в профиле стоит имя по умолчанию
+  // Имя и фото из Google подставляются, пока профиль не настроен (имя по умолчанию)
   function adoptName() {
     var u = state.user;
-    if (!u || !u.name || !root.PlatformProfile) return;
+    if (!u || !root.PlatformProfile) return;
     var def = root.I18n ? root.I18n.t('profile.defaultName') : 'Игрок';
-    if (root.PlatformProfile.getProfile().name === def) root.PlatformProfile.saveProfile({ name: u.name });
+    var prof = root.PlatformProfile.getProfile();
+    if (prof.name !== def) return;
+    var change = {};
+    if (u.name) change.name = u.name;
+    if (u.photo && !prof.icon) change.google = true; // выбранный эмодзи фото не вытесняет
+    if (change.name || change.google) root.PlatformProfile.saveProfile(change);
   }
 
   // ---------- Синхронизация ----------
@@ -175,7 +180,7 @@
     state.status = 'signedOut';
     auth.onAuthStateChanged(function (u) {
       if (u) {
-        state.user = { uid: u.uid, name: u.displayName || '', email: u.email || '' };
+        state.user = { uid: u.uid, name: u.displayName || '', email: u.email || '', photo: u.photoURL || '' };
         state.status = 'signedIn';
         emit();
         syncNow();

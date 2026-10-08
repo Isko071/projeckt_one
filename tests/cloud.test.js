@@ -30,7 +30,7 @@ function device(cloud, opts) {
     onAuthStateChanged: (cb) => { authCb = cb; cb(null); },
     signInWithPopup: async () => {
       if (opts.popupError) { const e = new Error('x'); e.code = opts.popupError; throw e; }
-      current = { uid: 'u1', displayName: 'Аня Иванова', email: 'a@x', getIdToken: async () => 'tok-u1' };
+      current = { uid: 'u1', displayName: 'Аня Иванова', email: 'a@x', photoURL: opts.noPhoto ? null : 'https://lh3.googleusercontent.com/a/photo', getIdToken: async () => 'tok-u1' };
       authCb(current);
     },
     signOut: async () => { current = null; authCb(null); }
@@ -61,6 +61,8 @@ test('решение: все сочетания отпечатков', () => {
   assert.equal(d({ localFp: 'a', baseFp: null, cloudFp: null, localPristine: false }), 'upload', 'в облаке пусто');
   assert.equal(d({ localFp: 'a', baseFp: null, cloudFp: 'a', localPristine: false }), 'none');
   assert.equal(d({ localFp: 'a', baseFp: null, cloudFp: 'b', localPristine: true }), 'download', 'чистый гость берёт облако');
+  assert.equal(d({ localFp: 'c', baseFp: 'a', cloudFp: 'a', localPristine: true }), 'upload', 'правка одного профиля без игр не теряется');
+  assert.equal(d({ localFp: 'c', baseFp: 'a', cloudFp: 'b', localPristine: true }), 'download', 'изменилось обе стороны, но игр здесь нет');
   assert.equal(d({ localFp: 'a', baseFp: 'a', cloudFp: 'b', localPristine: false }), 'download', 'здесь не менялось');
   assert.equal(d({ localFp: 'c', baseFp: 'a', cloudFp: 'a', localPristine: false }), 'upload', 'облако не менялось');
   assert.equal(d({ localFp: 'c', baseFp: 'a', cloudFp: 'b', localPristine: false }), 'conflict', 'изменились обе стороны');
@@ -86,7 +88,10 @@ test('первый вход чистого гостя: запись создаё
   assert.equal(d.C.getState().sync, 'idle');
   assert.ok(cloud.docs.u1, 'запись создана');
   assert.equal(d.P.getProfile().name, 'Аня Иванова');
+  assert.equal(d.P.getProfile().google, true, 'фото Google включается само');
+  assert.equal(d.C.getState().user.photo, 'https://lh3.googleusercontent.com/a/photo');
   assert.equal(cloudSnapshot(cloud).data['platform:profile'].name, 'Аня Иванова');
+  assert.equal(cloudSnapshot(cloud).data['platform:profile'].google, true);
   assert.equal(d.reloads.n, 0);
 });
 
@@ -210,4 +215,18 @@ test('смена аккаунта на устройстве не использ�
   d.W.add(10, 'win');
   d.C.start(); await d.C.signIn(); await tick();
   assert.equal(cloudSnapshot(cloud).data['platform:wallet'].balance, 5010);
+});
+
+test('имя и фото Google не затирают уже настроенный профиль; без фото флажок не ставится', async () => {
+  const d = device(makeCloud());
+  d.P.saveProfile({ name: 'Боря', avatar: 3, icon: '🦊' });
+  d.C.start(); await d.C.signIn(); await tick();
+  assert.deepEqual(plain(d.P.getProfile()), { name: 'Боря', avatar: 3, icon: '🦊' });
+  const f = device(makeCloud());
+  f.P.saveProfile({ name: 'Игрок', avatar: 0, icon: '🐼' });
+  f.C.start(); await f.C.signIn(); await tick();
+  assert.deepEqual(plain(f.P.getProfile()), { name: 'Аня Иванова', avatar: 0, icon: '🐼' }, 'эмодзи не вытесняется фото');
+  const e = device(makeCloud(), { noPhoto: true });
+  e.C.start(); await e.C.signIn(); await tick();
+  assert.deepEqual(plain(e.P.getProfile()), { name: 'Аня Иванова', avatar: 0 });
 });

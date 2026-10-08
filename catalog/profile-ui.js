@@ -11,14 +11,35 @@
   var avatarsBox = document.getElementById('avatars');
   var cancelBtn = document.getElementById('profile-cancel');
 
-  var draftAvatar = 0;
+  var draftAvatar = 0, draftIcon = null, draftGoogle = false;
+  var emojisBox = document.getElementById('emojis');
+  var photoField = document.getElementById('photo-field');
+  var photoToggle = document.getElementById('photo-toggle');
+  var photoPreview = document.getElementById('photo-preview');
+  var emojiOptions = [];
+
+  // Фото Google-аккаунта, если игрок вошёл
+  function googlePhoto() {
+    var s = window.PlatformCloud && window.PlatformCloud.getState();
+    return s && s.status === 'signedIn' && s.user && s.user.photo ? s.user.photo : '';
+  }
 
   // ---------- Аватар в шапке ----------
   function renderAvatar() {
     var p = P.getProfile();
-    btn.textContent = P.initial(p.name);
     btn.style.background = P.avatarColor(p.avatar);
     btn.title = p.name;
+    btn.textContent = '';
+    var photo = p.google ? googlePhoto() : '';
+    if (photo) {
+      var img = document.createElement('img');
+      img.className = 'avatar-img';
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.src = photo;
+      img.addEventListener('error', function () { btn.textContent = p.icon || P.initial(p.name); }); // фото не загрузилось — запасной вариант
+      btn.appendChild(img);
+    } else btn.textContent = p.icon || P.initial(p.name);
   }
 
   // ---------- Меню ----------
@@ -67,12 +88,38 @@
     }
   }
 
+  function buildEmojiOptions() {
+    emojisBox.textContent = '';
+    emojiOptions = [];
+    P.EMOJIS.forEach(function (e) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'emoji-option';
+      b.textContent = e;
+      b.setAttribute('aria-label', t('profile.emojiN', { e: e }));
+      b.addEventListener('click', function () {
+        draftIcon = draftIcon === e ? null : e; // повторный выбор снимает эмодзи
+        if (draftIcon) draftGoogle = false;
+        refreshOptions();
+      });
+      emojisBox.appendChild(b);
+      emojiOptions.push(b);
+    });
+  }
+
   function refreshOptions() {
-    var letter = P.initial(nameInput.value);
+    var letter = draftIcon || P.initial(nameInput.value);
     options.forEach(function (b, index) {
       b.textContent = letter;
       b.setAttribute('aria-pressed', String(index === draftAvatar));
     });
+    emojiOptions.forEach(function (b) { b.setAttribute('aria-pressed', String(b.textContent === draftIcon)); });
+    var photo = googlePhoto();
+    photoField.hidden = !photo;
+    if (photo) {
+      photoPreview.src = photo;
+      photoToggle.setAttribute('aria-pressed', String(draftGoogle));
+    }
   }
 
   function openDialog() {
@@ -80,6 +127,8 @@
     var p = P.getProfile();
     nameInput.value = p.name;
     draftAvatar = p.avatar;
+    draftIcon = p.icon || null;
+    draftGoogle = !!p.google;
     refreshOptions();
     dialog.showModal();
     nameInput.select();
@@ -97,7 +146,7 @@
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    P.saveProfile({ name: nameInput.value, avatar: draftAvatar });
+    P.saveProfile({ name: nameInput.value, avatar: draftAvatar, icon: draftIcon, google: draftGoogle && !!googlePhoto() });
     closeDialog();
   });
 
@@ -106,8 +155,15 @@
   // Любое закрытие окна (кнопки, Escape, затемнение, сохранение) возвращает фокус на аватар
   dialog.addEventListener('close', function () { btn.focus(); });
 
+  photoToggle.addEventListener('click', function () {
+    draftGoogle = !draftGoogle;
+    refreshOptions();
+  });
+
   buildAvatarOptions();
+  buildEmojiOptions();
   P.onChange(renderAvatar);
+  if (window.PlatformCloud) window.PlatformCloud.onChange(function () { renderAvatar(); if (dialog.open) refreshOptions(); });
   window.I18n.apply(); // тексты окна и меню
   renderAvatar();
 })();

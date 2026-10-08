@@ -263,5 +263,22 @@
 .conflict-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); font-size: 15px; line-height: 1.4; }
 .menu-status { margin: 4px 0 0; padding: 6px 12px 8px; color: var(--muted); font-size: 13px; line-height: 1.4; max-width: 240px; overflow-wrap: anywhere; }
 .menu-status:empty { display: none; }
-.avatar-btn { position: relative; }
+.avatar-btn { position: relative; overflow: visible; font-size: 20px; }
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.emoji-option {
+  height: 44px; padding: 0; border: 2px solid var(--line); border-radius: 12px; background: var(--surface);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.emoji-option:hover { border-color: var(--accent); }
+.emoji-option[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.emoji-option:focus-visible, .photo-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.photo-toggle {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; text-align: left;
+  border: 2px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer;
+}
+.photo-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.photo-toggle img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
 .avatar-btn.offline::after { content: ''; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: oklch(0.65 0.17 45); border: 2px solid var(--bg); }
+#profile-dialog { max-height: 90vh; overflow: auto; }
+.field[hidden] { display: none; }

@@ -6,11 +6,12 @@
   function decide(s) {
     if (s.cloudFp === null || s.cloudFp === undefined) return 'upload';
     if (s.localFp === s.cloudFp) return 'none';
-    if (s.localPristine) return 'download';
-    if (s.baseFp !== null && s.baseFp !== undefined) {
+    var hasBase = s.baseFp !== null && s.baseFp !== undefined;
+    if (hasBase) {
       if (s.localFp === s.baseFp) return 'download';  // здесь ничего не менялось, в облаке новее
-      if (s.cloudFp === s.baseFp) return 'upload';    // в облаке ничего не менялось, новее здесь
+      if (s.cloudFp === s.baseFp) return 'upload';    // в облаке ничего не менялось, новее здесь (даже правка одного профиля)
     }
+    if (s.localPristine) return 'download';            // чистый гость, ничего не наигравший: берём облако
     return 'conflict';                                 // изменились обе стороны
   }
   root.PlatformSyncLogic = { decide: decide };
