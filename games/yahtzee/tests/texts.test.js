@@ -17,7 +17,7 @@ function load(files) {
 
 const dict = load(['locales/ru.js', 'games/yahtzee/ru.js']).LOCALES.ru;
 const Y = load(['games/yahtzee/logic.js']).Yahtzee;
-const ui = fs.readFileSync(path.join(gameDir, 'ui.js'), 'utf8');
+const ui = ['ui.js', 'online.js'].map((f) => fs.readFileSync(path.join(gameDir, f), 'utf8')).join('\n');
 const PREFIX = 'games.yahtzee.';
 
 test('словарь игры: все ключи, которые использует ui.js, существуют', () => {
@@ -48,8 +48,10 @@ test('в коде интерфейса нет вшитых русских стр
 });
 
 test('в логике игры нет обращений к браузеру', () => {
-  const logic = fs.readFileSync(path.join(gameDir, 'logic.js'), 'utf8');
-  assert.doesNotMatch(logic.replace(/\/\/.*$/gm, ''), /\b(window|document|localStorage)\b/);
+  ['logic.js', 'table.js'].forEach((f) => {
+    const code = fs.readFileSync(path.join(gameDir, f), 'utf8');
+    assert.doesNotMatch(code.replace(/\/\/.*$/gm, '').replace(/typeof window !== 'undefined' \? window : globalThis/, ''), /\b(window|document|localStorage)\b/, f);
+  });
 });
 
 test('параметры в текстах словаря заданы корректно ({имя} из латиницы)', () => {

@@ -39,9 +39,25 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md
+    match /rooms/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.hostUid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.hostUid == request.auth.uid
+                       && request.resource.data.hostUid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.hostUid == request.auth.uid;
+
+      match /actions/{id} {
+        allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+        allow read, delete: if request.auth != null
+          && get(/databases/$(database)/documents/rooms/$(code)).data.hostUid == request.auth.uid;
+      }
+    }
   }
 }
 ```
+Блок `rooms` нужен только для онлайн-столов; без него вход и прогресс работают, а онлайн нет.
 4. Сайт публикуется по https (GitHub Pages). С `file://` вход не работает, прогресс остаётся локальным.
 
 ## Аватар профиля

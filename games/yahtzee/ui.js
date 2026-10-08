@@ -261,7 +261,7 @@ function rulesHtml() {
   }
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus data-key="close">' + esc(tr('close')) + '</button></div>' +
-    block('turn') + block('upper') + block('lower') + block('joker') + block('total') +
+    block('turn') + block('upper') + block('lower') + block('joker') + block('total') + (window.YahtzeeOnlineUI && app.screen === 'online' ? block('online') : '') +
     '</div></div>';
 }
 
@@ -281,6 +281,7 @@ function exitHtml() {
 }
 
 function modalHtml() {
+  if (app.screen === 'online' && window.YahtzeeOnlineUI) return window.YahtzeeOnlineUI.modalHtml();
   if (app.modal === 'rules') return rulesHtml();
   if (app.modal === 'confirm') return confirmHtml();
   if (app.modal === 'exit') return exitHtml();
@@ -293,23 +294,24 @@ function startHtml() {
     for (var k = 0; k < 9; k++) pips += '<span><i class="' + (PIPS[v].indexOf(k) >= 0 ? 'on' : '') + '"></i></span>';
     return '<div class="die-mini" style="transform:rotate(' + [-8, 4, -3][i] + 'deg)">' + pips + '</div>';
   }).join('');
-  var cpu = app.mode === 'cpu';
+  var cpu = app.mode === 'cpu', online = app.mode === 'online';
   return '<div class="start">' +
     '<div class="brand-row"><div class="brand"><div class="logo">' + logo + '</div><h1>' + esc(tr('title')) + '</h1></div>' +
       '<div class="top-actions">' + catalogLinkHtml() + themeButtonHtml() + '</div></div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
       '<button class="mode-btn" data-key="mode-cpu" data-mode="cpu" aria-pressed="' + cpu + '">' + esc(tr('start.modeCpu')) + '</button>' +
-      '<button class="mode-btn" data-key="mode-hot" data-mode="hot" aria-pressed="' + !cpu + '">' + esc(tr('start.modeHot')) + '</button>' +
+      '<button class="mode-btn" data-key="mode-hot" data-mode="hot" aria-pressed="' + (app.mode === 'hot') + '">' + esc(tr('start.modeHot')) + '</button>' +
+      (window.YahtzeeOnlineUI ? '<button class="mode-btn" data-key="mode-online" data-mode="online" aria-pressed="' + online + '">' + esc(tr('start.modeOnline')) + '</button>' : '') +
     '</div></div>' +
     (cpu ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div><div class="levels">' +
       '<button class="mode-btn" data-key="level-easy" data-level="easy" aria-pressed="' + (app.level === 'easy') + '">' + esc(tr('start.levelEasy')) + '</button>' +
       '<button class="mode-btn" data-key="level-hard" data-level="hard" aria-pressed="' + (app.level === 'hard') + '">' + esc(tr('start.levelHard')) + '</button>' +
     '</div></div>' : '') +
-    '<div class="field players"><div class="field-title">' + esc(tr('start.players')) + '</div>' +
+    (online ? '<div class="muted-text">' + esc(tr('start.onlineSub')) + '</div>' : '<div class="field players"><div class="field-title">' + esc(tr('start.players')) + '</div>' +
       '<input class="name-input" data-name="n1" value="' + esc(app.n1) + '" maxlength="20" aria-label="' + esc(tr('start.name1')) + '">' +
       (cpu ? '<div class="name-fixed">' + esc(tr('computer')) + '</div>'
            : '<input class="name-input" data-name="n2" value="' + esc(app.n2) + '" maxlength="20" aria-label="' + esc(tr('start.name2')) + '">') +
-    '</div>' +
+    '</div>') +
     '<div class="start-actions"><button class="btn-play" id="play" data-key="play">' + esc(tr('start.play')) + '</button>' +
       '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
@@ -385,7 +387,7 @@ function render() {
   if (game && game.gameOver && !app.reward) settleReward();
   var tpl = document.createElement('template');
   tpl.innerHTML = '<div class="screen" data-morph-key="' + app.screen + '">' +
-    (app.screen === 'start' ? startHtml() : gameHtml()) + '</div>' + modalHtml();
+    (app.screen === 'start' ? startHtml() : (app.screen === 'online' && window.YahtzeeOnlineUI ? window.YahtzeeOnlineUI.html() : gameHtml())) + '</div>' + modalHtml();
   morph(appEl, tpl.content);
   if (app.modal) {
     var auto = appEl.querySelector('[data-autofocus]');
@@ -409,6 +411,7 @@ appEl.addEventListener('input', function (e) {
 appEl.addEventListener('click', function (e) {
   var btn = e.target.closest('button');
   if (!btn || btn.disabled) return;
+  if (app.screen === 'online' && window.YahtzeeOnlineUI && window.YahtzeeOnlineUI.click(btn)) return;
   var act = btn.getAttribute('data-act');
   if (act === 'rules' || act === 'confirm' || act === 'exit') app.modal = act;
   else if (act === 'menu') toMenu();
@@ -417,6 +420,7 @@ appEl.addEventListener('click', function (e) {
   else if (act === 'restart') startGame();
   else if (btn.hasAttribute('data-mode')) app.mode = btn.getAttribute('data-mode');
   else if (btn.hasAttribute('data-level')) app.level = btn.getAttribute('data-level');
+  else if (btn.id === 'play' && app.mode === 'online' && window.YahtzeeOnlineUI) { window.YahtzeeOnlineUI.enter(); return; }
   else if (btn.id === 'play' || btn.id === 'again') startGame();
   else if (btn.id === 'menu') toMenu();
   else if (btn.id === 'roll') { rollAnimated(); return; }
