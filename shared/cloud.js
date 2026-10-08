@@ -56,12 +56,27 @@
       });
     });
   }
+  // Время регистрации берётся из данных аккаунта Firebase; вместе с временем последнего визита оно нужно личному кабинету владельца
+  function createdAtOf() {
+    var u = auth && auth.currentUser, t = u && u.metadata && u.metadata.creationTime ? Date.parse(u.metadata.creationTime) : 0;
+    return t > 0 ? t : Date.now();
+  }
   function upload(uid, token, snap) {
-    var body = { fields: { data: { stringValue: JSON.stringify(snap) }, updatedAt: { integerValue: String(Date.now()) }, v: { integerValue: '1' } } };
+    var body = { fields: { data: { stringValue: JSON.stringify(snap) }, updatedAt: { integerValue: String(Date.now()) }, v: { integerValue: '1' }, createdAt: { integerValue: String(createdAtOf()) }, lastSeen: { integerValue: String(Date.now()) } } };
     return request('PATCH', uid, token, body).then(function (res) {
       if (res.status === 401 || res.status === 403) throw fail('denied');
       if (!res.ok) throw fail('http-' + res.status);
     });
+  }
+
+  // Отметка визита без изменения прогресса: обновляются только createdAt и lastSeen (раз за загрузку страницы)
+  var seenSent = false;
+  function touchSeen(uid, tk) {
+    if (seenSent) return Promise.resolve();
+    seenSent = true;
+    var body = { fields: { createdAt: { integerValue: String(createdAtOf()) }, lastSeen: { integerValue: String(Date.now()) } } };
+    return root.fetch(docUrl(uid) + '?updateMask.fieldPaths=createdAt&updateMask.fieldPaths=lastSeen', { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function () { /* отметка не критична */ }, function () { seenSent = false; });
   }
 
   function token() { return auth.currentUser.getIdToken(); }
@@ -97,8 +112,8 @@
         var local = PP.snapshot(), localFp = PP.fingerprint(local);
         var cloudFp = cloud ? PP.fingerprint(cloud.snap) : null;
         var d = Logic.decide({ localFp: localFp, baseFp: readBase(uid), cloudFp: cloudFp, localPristine: PP.isPristine(local) });
-        if (d === 'none') { writeBase(uid, localFp); adoptName(); return 'idle'; }
-        if (d === 'upload') { adoptName(); var s2 = PP.snapshot(); return upload(uid, tk, s2).then(function () { writeBase(uid, PP.fingerprint(s2)); return 'idle'; }); }
+        if (d === 'none') { writeBase(uid, localFp); adoptName(); return touchSeen(uid, tk).then(function () { return 'idle'; }); }
+        if (d === 'upload') { adoptName(); var s2 = PP.snapshot(); return upload(uid, tk, s2).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s2)); return 'idle'; }); }
         if (d === 'download') {
           if (!allowDownload) return 'paused';       // на странице игры не перезагружаемся: это сделает каталог
           PP.applySnapshot(cloud.snap);
