@@ -9,6 +9,7 @@
 //  • Игрок может взять карту, остановиться, удвоить (на первых двух картах, одна карта и остановка) и разделить пару одинаковых карт (один раз).
 //  • После деления тузов к каждому туз дают по одной карте. 21 после деления не считается блэкджеком (платит 1:1). Удвоение после деления разрешено, кроме тузов.
 //  • Страховки и сдачи нет.
+//  • Упрощённый режим (options.simple): только «взять» и «стоп», без удвоения и деления; подсказка тоже советует только эти два действия.
 //
 // Карта — строка из двух символов: достоинство (A 2 3 4 5 6 7 8 9 T J Q K) и масть (S H D C), например 'AS', 'TH'.
 //
@@ -58,14 +59,14 @@
   // ===== Состояние =====
   function emptyHand() { return { cards: [], bet: 0, done: false, doubled: false, fromSplit: false, splitAces: false, outcome: null, payout: 0 }; }
 
-  // seats: [{ id, name, chips }]; options: { decks, stack } (stack — карты в порядке выдачи, для тестов)
+  // seats: [{ id, name, chips }]; options: { decks, simple, stack } (stack — карты в порядке выдачи, для тестов)
   function init(seats, options, rng) {
     options = options || {};
     rng = rng || Math.random;
     var decks = options.decks || CONFIG.decks;
     var shoe = options.stack ? options.stack.slice().reverse() : buildShoe(decks, rng);
     return {
-      v: 1, decks: decks, shoe: shoe, fixed: !!options.stack, round: 0, phase: 'betting',
+      v: 1, decks: decks, simple: !!options.simple, shoe: shoe, fixed: !!options.stack, round: 0, phase: 'betting',
       seats: (seats && seats.length ? seats : [{}]).map(function (s, i) {
         return { id: s.id !== undefined ? String(s.id) : 'seat' + i, name: s.name || '', chips: typeof s.chips === 'number' ? s.chips : CONFIG.startChips,
           bet: 0, hands: [], wagered: 0, net: 0 };
@@ -97,11 +98,11 @@
 
   function canDouble(state, seat) {
     var h = activeHand(state), s = state.seats[seat];
-    return !!h && state.current === seat && h.cards.length === 2 && !h.splitAces && s.chips >= h.bet;
+    return !state.simple && !!h && state.current === seat && h.cards.length === 2 && !h.splitAces && s.chips >= h.bet;
   }
   function canSplit(state, seat) {
     var h = activeHand(state), s = state.seats[seat];
-    return !!h && state.current === seat && s.hands.length === 1 && h.cards.length === 2 &&
+    return !state.simple && !!h && state.current === seat && s.hands.length === 1 && h.cards.length === 2 &&
       rankOf(h.cards[0]) === rankOf(h.cards[1]) && s.chips >= h.bet;
   }
   function canHit(state, seat) {

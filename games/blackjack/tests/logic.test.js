@@ -364,3 +364,33 @@ test('сессия: партия по журналу воспроизводит�
   assert.deepEqual(replayed.session.getState(), a.getState());
   assert.equal(a.dispatch({ type: 'hit', seat: 0 }).error, 'wrong-phase');
 });
+
+test('упрощённый режим: только «взять» и «стоп», удвоение и деление отклоняются, подсказка советует только их', () => {
+  let state = B.init([{ chips: 1000 }], { stack: ['8S', '6H', '8D', 'TC', '3H', 'QS'], simple: true });
+  const act = (a) => { const r = B.reduce(state, a, () => 0.5); if (r.ok) state = r.state; return r; };
+  act({ type: 'bet', seat: 0, amount: 100 }); act({ type: 'deal', seat: 0 });
+  deepEqual(B.availableActions(state, 0).sort(), ['hit', 'stand']);
+  assert.equal(act({ type: 'split', seat: 0 }).error, 'cannot-split');
+  assert.equal(act({ type: 'double', seat: 0 }).error, 'cannot-double');
+  assert.ok(['hit', 'stand'].includes(B.hint(state, 0)));
+});
+
+test('упрощённый режим: в долгой игре подсказка не предлагает удвоить и разделить, раздачи доходят до конца', () => {
+  let k = 777; const rng = () => { k = (k * 1103515245 + 12345) % 2147483648; return k / 2147483648; };
+  let state = B.init([{ chips: 1e9 }], { decks: 6, simple: true }, rng);
+  let wagered = 0, net = 0;
+  for (let round = 0; round < 20000; round++) {
+    state = B.reduce(state, { type: 'bet', seat: 0, amount: 100 }, rng).state;
+    state = B.reduce(state, { type: 'deal', seat: 0 }, rng).state;
+    while (state.phase === 'playing') {
+      const a = B.hint(state, 0);
+      assert.ok(a === 'hit' || a === 'stand', 'подсказка: ' + a);
+      state = B.reduce(state, { type: a, seat: 0 }, rng).state;
+    }
+    assert.equal(state.seats[0].hands.length, 1);
+    wagered += state.seats[0].wagered; net += state.seats[0].net;
+    state = B.reduce(state, { type: 'next', seat: 0 }, rng).state;
+  }
+  const edge = net / wagered;
+  assert.ok(edge > -0.04 && edge < 0.01, 'доходность игрока без удвоения и деления ' + (edge * 100).toFixed(2) + '%');
+});
