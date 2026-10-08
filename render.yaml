@@ -1,0 +1,14 @@
+# Сервер столов «Игротеки» на бесплатном тарифе Render (инструкция: docs/game-server.md)
+services:
+  - type: web
+    name: igroteka-server
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install --omit=dev
+    startCommand: cd server && node index.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: FIREBASE_PROJECT_ID
+        value: igroteka-29263
+      - key: ALLOWED_ORIGINS
+        value: https://isko071.github.io

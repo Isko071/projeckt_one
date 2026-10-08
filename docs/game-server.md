@@ -1,0 +1,26 @@
+# Сервер столов
+
+Онлайн-столы «Блэкджека» и «Ятзи» ведёт отдельный сервер (Node.js + WebSocket). Создатель стола — обычный игрок: если он закрыл вкладку или ушёл, стол живёт, а роль создателя (кнопка «Начать игру», «Новая игра») переходит следующему игроку. Без адреса сервера сайт работает по-старому: через Firestore, хост — браузер создателя.
+
+## Как устроено
+- `server/index.js` — HTTP `/healthz` и WebSocket. Первым сообщением клиент присылает Firebase ID-токен (тот же вход через Google); сервер проверяет подпись по публичным ключам Google (`server/auth.js`), ключа сервисного аккаунта не нужно.
+- `server/manager.js` — столы в памяти; для каждого стола работает тот же движок, что раньше жил в браузере создателя (`shared/rooms.js`, `shared/rooms-turns.js`, логика игр), только вместо Firestore — память (`server/memstore.js`).
+- `shared/rooms-ws.js` — клиент с тем же интерфейсом, что у Firestore-версии; включается, когда в `shared/firebase-config.js` задан `GAME_SERVER_URL`.
+- Защита: список разрешённых сайтов (`ALLOWED_ORIGINS`), не больше 400 соединений и 20 с одного адреса, 20 сообщений в секунду, сообщение до 4 КБ, до 300 столов, разрешён только список игровых действий, действия создателя (`start`, `rematch`, `close`) принимаются только от него.
+- Оборвалась связь: игрока ждут 45 секунд (клиент переподключается сам и возвращается за стол), потом он выходит из-за стола.
+- Сервер перезапустился: столы пропадают, игроки видят «стол закрыт».
+
+## Запуск на Render (бесплатно)
+1. На https://render.com войти через GitHub → New → Blueprint → выбрать репозиторий `Isko071/projeckt_one` (файл `render.yaml` в корне подхватится сам). Либо New → Web Service: Build `cd server && npm install --omit=dev`, Start `cd server && node index.js`, Health check `/healthz`.
+2. Переменные: `FIREBASE_PROJECT_ID=igroteka-29263`, `ALLOWED_ORIGINS=https://isko071.github.io` (через запятую, если сайтов несколько).
+3. Когда сервис запустится, скопировать его адрес (вида `https://igroteka-server.onrender.com`) и прописать в `shared/firebase-config.js`: `root.GAME_SERVER_URL = 'wss://igroteka-server.onrender.com';` — затем `node tools/set-version.js <N>` и коммит.
+4. Бесплатный тариф засыпает через 15 минут без запросов и просыпается 30–60 секунд: на это время игра показывает «Подключаемся к серверу…». Чтобы не спал, можно раз в 10 минут пинговать `/healthz` внешним сервисом (например, UptimeRobot).
+
+## Локально
+```
+cd server && npm install
+FIREBASE_PROJECT_ID=igroteka-29263 node index.js     # порт 8080
+INSECURE_AUTH=1 node index.js                         # только для проверки: токен вида test:<uid>
+npm test                                              # тесты сервера
+```
+Тесты сайта (без сервера): `node --test tests/*.test.js games/*/tests/*.test.js`.

@@ -11,3 +11,6 @@ root.FIREBASE_CONFIG = {
 };
 // Имя базы Firestore: в проекте есть только база «(default)» (базы с именем igroteka-db нет, запросы к ней дают 404)
 root.FIREBASE_DATABASE = '(default)';
+// Адрес сервера столов (WebSocket), например 'wss://igroteka-server.onrender.com'. Пусто — столы работают по-старому, через Firestore
+// (хост — браузер создателя). Инструкция по запуску сервера: docs/game-server.md
+root.GAME_SERVER_URL = '';

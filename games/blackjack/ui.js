@@ -17,7 +17,7 @@ var app = {
 var G = null;            // текущая игра: { mode: 'bot' | 'online', ... }
 var gameToken = 0;       // растёт при выходе из игры: отменяет отложенные действия бота
 var hostTimer = null, pollTimer = null, roomsTimer = null, clockTimer = null;
-var roomsApi = null;
+var roomsApi = null, wsApi = null;
 
 // Чат стола (shared/chat-ui.js): только в онлайн-режиме
 var chat = window.PlatformChatUI.create({
@@ -332,9 +332,30 @@ function stopOnline() {
   [hostTimer, pollTimer, roomsTimer].forEach(function (t) { if (t) clearInterval(t); });
   hostTimer = pollTimer = roomsTimer = null;
 }
+// Создатель стола: при игре через сервер это игрок, на которого указывает вид стола; без сервера — хост в браузере
+function isOwner() {
+  if (!G || G.mode !== 'online') return false;
+  if (G.role === 'host') return true;
+  var u = Cloud.getState().user;
+  return !!(G.ctrl && G.ctrl.server && G.view && u && G.view.owner === u.uid);
+}
+function serverStatus(s) {
+  if (!(G && G.mode === 'online') && !app.busy) return;
+  if (s === 'open') { if (app.banner === 'server') app.banner = 'back'; } else if (app.banner !== 'relogin') app.banner = 'server';
+  render();
+}
 function getRooms() {
   var st = Cloud.getState();
   if (!st.user) return null;
+  if (window.GAME_SERVER_URL && window.PlatformRoomsWS) {
+    if (!wsApi || wsApi.uid !== st.user.uid) {
+      if (wsApi) wsApi.shutdown();
+      wsApi = window.PlatformRoomsWS.create({ url: window.GAME_SERVER_URL, getToken: function () { return Cloud.getToken(); }, uid: st.user.uid, engine: window.PlatformRooms, engineEnv: { game: BJ, gameOptions: { simple: true } }, game: 'blackjack' });
+      wsApi.uid = st.user.uid; wsApi.onStatus(serverStatus);
+    }
+    roomsApi = wsApi;
+    return roomsApi;
+  }
   roomsApi = window.PlatformRooms.create({
     fetch: function (u, i) { return window.fetch(u, i); }, getToken: function () { return Cloud.getToken(); }, uid: st.user.uid,
     projectId: window.FIREBASE_CONFIG.projectId, db: window.FIREBASE_DATABASE, game: BJ, gameOptions: { simple: true }
@@ -374,7 +395,7 @@ function onView(v) {
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
   if (v.status === 'playing' && st) {
-    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.chips = emptyBet(); app.banner = null; if (G.role === 'host') notify(tr('notice.creator'), 6000); }
+    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.chips = emptyBet(); app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
     var me = v.seat;
     if (me === null || me === undefined || !st.seats[me] || !st.seats[me].active) {
       if (!G.left) { G.left = true; handleLeft(); }
@@ -423,11 +444,13 @@ function createTable() {
     stopOnline();
     var host = res.host;
     chat.reset();
-    G = { mode: 'online', role: 'host', ctrl: host, view: host.getView(), code: res.code, settledRound: -1 };
+    G = { mode: 'online', role: host.server ? 'player' : 'host', ctrl: host, view: host.getView(), code: res.code, settledRound: -1 };
     chat.update(G.view, 'lobby');
     host.onChange(onView);
     var failing = 0;
-    hostTimer = setInterval(function () {
+    if (host.server) {
+      pollTimer = setInterval(function () { host.poll().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } }); }, 1000);
+    } else hostTimer = setInterval(function () {
       host.tick().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { app.banner = 'offline'; render(); } });
     }, 1000);
     app.busy = false; app.screen = 'lobby'; app.modal = null; app.copied = false; app.banner = null;
@@ -559,12 +582,12 @@ function createHtml() {
 }
 
 function lobbyHtml() {
-  var v = G && G.view, host = G && G.role === 'host', myUid = Cloud.getState().user && Cloud.getState().user.uid;
+  var v = G && G.view, host = isOwner(), myUid = Cloud.getState().user && Cloud.getState().user.uid;
   var members = v ? v.members : [], size = v ? v.size : app.size, bots = v ? v.fillBots !== false : app.fillBots;
   var seats = members.map(function (m) {
     var me = m.uid === myUid, tags = [];
     if (me) tags.push(tr('lobby.you'));
-    if (m.seat === 0) tags.push(tr('lobby.creator'));
+    if (v && v.owner ? m.uid === v.owner : m.seat === 0) tags.push(tr('lobby.creator'));
     return '<div class="seat" data-key="m-' + esc(m.uid) + '"><div class="avatar" style="background:' + P.avatarColor(m.avatar) + '">' + esc(P.initial(m.name)) + '</div><div class="nm">' + esc(m.name || tr('you')) + '</div><div class="tg">' + esc(tags.join(' · ')) + '</div></div>';
   });
   for (var i = members.length; i < size; i++) {
@@ -581,8 +604,8 @@ function lobbyHtml() {
     '<div class="seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
     bannerHtml() +
     (host
-      ? '<div class="row-btns"><button class="btn accent big" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('lobby.start')) + '</button><button class="btn big" data-act="closeTable" data-key="closeTable">' + esc(tr('lobby.close')) + '</button></div>' +
-        (members.length >= 2 || bots ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.needMore')) + '</div>') + '<div class="muted" style="font-size:14px">' + esc(tr('lobby.hostHint')) + '</div>'
+      ? '<div class="row-btns"><button class="btn accent big" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('lobby.start')) + '</button><button class="btn big" data-act="closeTable" data-key="closeTable">' + esc(tr(G.ctrl.server ? 'lobby.leave' : 'lobby.close')) + '</button></div>' +
+        (members.length >= 2 || bots ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.needMore')) + '</div>') + (G.ctrl.server ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.hostHint')) + '</div>')
       : '<div style="font-weight:700;font-size:16px;text-align:center">' + esc(tr(members.length >= size ? 'lobby.full' : 'lobby.waitHost')) + '</div><button class="btn big" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('lobby.leave')) + '</button>') +
     '</div>';
 }
@@ -727,6 +750,7 @@ function bannerHtml() {
   if (online && app.screen === 'game' && Cloud.getState().status !== 'signedIn' && Cloud.getState().status !== 'unsupported' && !Cloud.getState().user) {
     return '<div class="banner bad flex" role="alert"><span>' + esc(tr('banner.relogin')) + '</span><button class="btn accent" data-act="relogin" data-key="relogin">' + esc(tr('banner.reloginBtn')) + '</button></div>';
   }
+  if (app.banner === 'server') return '<div class="banner flex" role="status"><span>' + esc(tr('banner.server')) + '</span></div>';
   if (app.banner === 'offline') return '<div class="banner flex" role="status"><span>' + esc(tr('banner.offline')) + '</span></div>';
   if (app.banner === 'back') return '<div class="banner flex" role="status"><span>' + esc(tr('banner.back')) + '</span></div>';
   return '';
@@ -897,7 +921,7 @@ appEl.addEventListener('click', function (e) {
     case 'shareLink':
       try { navigator.clipboard.writeText(location.href.split('#')[0] + '#' + G.code).then(function () { app.copied = true; render(); setTimeout(function () { app.copied = false; render(); }, 2000); }); } catch (err) { /* нет доступа к буферу */ }
       break;
-    case 'start': if (G && G.role === 'host') G.ctrl.start().then(function () { G.ctrl.tick(); }); break;
+    case 'start': if (isOwner()) G.ctrl.start().then(function () { G.ctrl.tick(); }); break;
     case 'closeTable': leaveGame('tables'); break;
     case 'leaveLobby': leaveGame('tables'); break;
     case 'addChip': { var b = betBounds(), n = Number(v); if (chipsTotal() + n <= b.max) { app.chips.push(n); render(); } break; }
