@@ -403,9 +403,9 @@
     }).join('');
     return '<div class="overlay" role="dialog" aria-label="' + esc(tr('over.aria')) + '"><div class="dialog"><div><small>' + esc(st.reason === 'alone' ? tr('online.over.alone') : tr('over.title')) + '</small><h2>' + esc(title) + '</h2></div>' +
       '<div class="results">' + list + '</div>' +
-      (G && G.role === 'host' ? '' : '<p class="muted-text">' + esc(tr('online.over.waitHost')) + '</p>') +
-      '<div class="dialog-actions"><button class="btn-secondary" data-act="exitTable" data-key="overExit">' + esc(tr('online.over.leave')) + '</button>' +
-      (G && G.role === 'host' ? '<button class="btn-primary" data-act="rematch" data-key="rematch">' + esc(tr('online.over.again')) + '</button>' : '') + '</div></div></div>';
+      (G && G.role === 'host' ? '<p class="muted-text">' + esc(tr('online.over.hostNote')) + '</p>' : '') +
+      '<div class="dialog-actions"><button class="btn-secondary" data-act="toMenu" data-key="overMenu">' + esc(tr('online.over.leave')) + '</button>' +
+      '<button class="btn-primary" data-act="newGame" data-key="newGame"' + (on.pending ? ' disabled' : '') + '>' + esc(tr(on.pending ? 'online.sent' : 'online.over.again')) + '</button></div></div></div>';
   }
 
   function askHtml(me) {
@@ -535,10 +535,11 @@
       case 'here': send({ type: 'here' }); return true;
       case 'exitTable': case 'askLeave': {
         var st = G && G.view && G.view.state;
-        if (st && st.gameOver) leaveGame('tables'); else { app.modal = 'leaveOnline'; render(); }
+        if (st && st.gameOver) leaveGame('start'); else { app.modal = 'leaveOnline'; render(); }
         return true;
       }
-      case 'rematch': if (G && G.role === 'host') G.ctrl.rematch(); return true;
+      case 'newGame': if (G && G.role === 'host') G.ctrl.rematch(); else send({ type: 'again' }); return true;
+      case 'toMenu': leaveGame('start'); return true;
       case 'confirmLeave': leaveGame('tables'); return true;
     }
     return false;

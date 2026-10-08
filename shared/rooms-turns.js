@@ -138,8 +138,8 @@
         return publish();
       }
       // Новая игра за тем же столом: после конца партии хост возвращает стол в комнату ожидания с теми же игроками (вышедшие убираются)
-      function rematch() {
-        if (status !== 'playing' || !full || !full.gameOver) return Promise.resolve();
+      function doRematch() {
+        if (status !== 'playing' || !full || !full.gameOver) return false;
         var alive = {};
         full.players.forEach(function (p) { if (p.active) alive[p.id] = true; });
         members = members.filter(function (m) { return m.uid === env.uid || alive[m.uid]; });
@@ -147,8 +147,9 @@
         full = null; status = 'lobby'; idle = {};
         readyAt = members.length >= game.CONFIG.minSeats ? now() - cfg.startDelayMs : 0;   // те же игроки: ждать 20 секунд не нужно
         sys('again', ''); dirty = true;
-        return publish();
+        return true;
       }
+      function rematch() { return doRematch() ? publish() : Promise.resolve(); }
       function apply(action) {
         var r = game.reduce(full, action, rng);
         if (!r.ok) return false;
@@ -182,6 +183,7 @@
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
           return;
         }
+        if (payload.type === 'again') { doRematch(); return; }     // любой игрок может предложить новую игру после конца партии
         if (payload.type === 'here') {                      // «Да, я играю»: отсчёт неактивности начинается заново
           var e0 = idle[m.seat];
           if (e0 && e0.stage === 'asking') { e0.stage = 'idle'; e0.since = lastTick; dirty = true; }
