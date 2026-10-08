@@ -60,6 +60,7 @@ node --test tests/*.test.js games/*/tests/*.test.js
 
 ```
 index.html           — страница каталога: шапка, главный постер, сетка игр
+admin/               — личный кабинет владельца (список игроков), страница /admin/
 catalog/             — logic.js (чистая логика: адрес, проверка реестра), catalog.js (каталог), profile-ui.js (аватар, меню и окно профиля), catalog.css
 games/games.js       — реестр игр (единый список с описаниями)
 games/<id>/          — папка игры: index.html, logic.js (правила), ui.js, style.css, ru.js (тексты), cover.svg (обложка), tests/
@@ -78,6 +79,7 @@ docs/                — документация
 - [Кошелёк](docs/wallet.md): аконы, серия дней, бонус дня, награды.
 - [Вход через Google](docs/google-login.md): облачное сохранение прогресса, правила синхронизации, настройка Firebase.
 - [Заготовка под мультиплеер](docs/multiplayer.md): как игры готовятся к сетевой игре.
+- [Личный кабинет владельца](docs/admin.md): список игроков, доступ, что видно.
 - [Онлайн-столы](docs/online-tables.md) и [сервер столов](docs/game-server.md): как устроены столы, запуск сервера на Render.
 - [Чат](docs/chat-plan.md): решения по чату за столом.
 - [План покера](docs/poker-plan.md) и [идеи новых игр](docs/game-ideas.md).
