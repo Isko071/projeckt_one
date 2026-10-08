@@ -195,6 +195,7 @@
 
   root.PlatformCloud = {
     start: start, signIn: signIn, signOut: signOut, syncNow: syncNow, resolveConflict: resolveConflict,
+    getToken: function () { return auth && auth.currentUser ? auth.currentUser.getIdToken() : Promise.reject(fail('signed-out')); },
     getState: function () { return state; }, onChange: function (fn) { listeners.push(fn); }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -4,6 +4,7 @@
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
 //   PlatformWallet.add(n, source)          → пополнение (выигрыш в игре на аконы)
+//   PlatformWallet.countWin(source)        → засчитать победу в рекордах (для игр на ставки)
 //   PlatformWallet.earn(source, n, now)    → награда за одиночную игру с дневным лимитом → { granted, capped }
 //   PlatformWallet.markPlayed(now)         → отметить, что сегодня сыграли (продлевает серию, открывает бонус дня)
 //   PlatformWallet.dailyStatus(now), claimDaily(now)   — серия дней и ежедневный бонус
@@ -111,6 +112,13 @@
     return true;
   }
 
+  // Засчитать победу в игре, где выигрыш идёт через add (например, блэкджек): попадает в таблицу рекордов
+  function countWin(source) {
+    var s = load(), key = String(source || 'win').slice(0, 40);
+    s.wins[key] = (s.wins[key] || 0) + 1;
+    save(s);
+  }
+
   // Награда за одиночную игру: не больше earnDailyCap в день
   function earn(source, n, now) {
     var s = load(), today = dayOf(now);
@@ -198,7 +206,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn,
+    getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin,
     markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget
   };

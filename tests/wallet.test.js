@@ -185,3 +185,10 @@ test('рекорды: победа при исчерпанном лимите в
   assert.equal(W.earn('minesweeper', 100, now).granted, 0);
   assert.equal(W.records().wins.minesweeper, 2);
 });
+
+test('победы в играх на ставки: countWin попадает в рекорды без начисления', () => {
+  const W = load({ localStorage: fakeBackend() });
+  W.countWin('blackjack'); W.countWin('blackjack');
+  assert.deepEqual(plain(W.records().wins), { blackjack: 2 });
+  assert.equal(W.getBalance(), 5000);
+});
