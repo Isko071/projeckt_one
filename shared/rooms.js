@@ -14,7 +14,9 @@
 //   Игра (game): init(seats, options, rng), reduce(state, action, rng), view(state), readyToDeal, nextBotAction, waitingSeats.
 (function (root) {
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, bettingMs: 20000, turnMs: 20000, dealDelayMs: 1500, nextDelayMs: 6000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
+  // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
+  // ответ «играю» даёт ещё extendMs (15 с); без ответа и по окончании этого времени ставится «стоп» (или пропуск раздачи).
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 6000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
   var PLAYER_ACTIONS = ['bet', 'hit', 'stand', 'double', 'split', 'sitout'];
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
@@ -90,7 +92,7 @@
       var members = [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
       var fillBots = opts.fillBots !== false;
       var processed = {}, strikes = {}, pendingJoins = [];
-      var wait = { key: '', since: 0 }, autoAt = 0, nextBotNo = 1;
+      var wait = { key: '', since: 0 }, autoAt = 0, nextBotNo = 1, idle = {};   // idle[место] = { key, since, stage: 'idle' | 'asking' | 'extended', until }
       var em = emitter();
 
       function meta() {
@@ -100,7 +102,17 @@
       function fields() {
         var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, rev: rev, heartbeat: now(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
+        f.timers = JSON.stringify(timersNow());
         return f;
+      }
+      // Таймеры ожидающих мест: сколько осталось до вопроса (stage idle), до автоматического хода (asking, extended)
+      function timersNow() {
+        var t = now(), out = [];
+        Object.keys(idle).forEach(function (seat) {
+          var e = idle[seat];
+          out.push({ seat: Number(seat), stage: e.stage, ms: Math.max(0, (e.stage === 'idle' ? e.since + cfg.idleMs : e.until) - t) });
+        });
+        return out;
       }
       function publish() {
         rev++; lastBeat = now(); dirty = false;
@@ -108,7 +120,7 @@
         return putDoc('rooms/' + code, fields());
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, seat: 0, hostGone: false, closed: closed };
+        return { code: code, role: 'host', status: status, size: size, rev: rev, members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed };
       }
 
       function seatsForStart() {
@@ -158,6 +170,11 @@
           else { members = members.filter(function (x) { return x.uid !== uid; }); pendingJoins = pendingJoins.filter(function (x) { return x !== uid; }); dirty = true; }
           return;
         }
+        if (payload.type === 'here') {           // «Да, я играю»: после вопроса даём ещё extendMs
+          var e0 = m.seat !== null && idle[m.seat];
+          if (e0 && e0.stage === 'asking') { e0.stage = 'extended'; e0.until = lastTick + cfg.extendMs; dirty = true; }
+          return;
+        }
         if (status !== 'playing' || m.seat === null || PLAYER_ACTIONS.indexOf(payload.type) < 0) return;
         payload.seat = m.seat;                    // место определяет хост, а не игрок
         if (apply(payload)) strikes[uid] = 0;
@@ -167,6 +184,8 @@
       function auto(t) {
         if (status !== 'playing' || t < autoAt) return;
         var st = full;
+        var waitingNow = game.waitingSeats(full);
+        Object.keys(idle).forEach(function (seat) { if (waitingNow.indexOf(Number(seat)) < 0) { delete idle[seat]; dirty = true; } });
         if (st.phase === 'betting') {
           // подсаживаем ждущих на свободные места
           while (pendingJoins.length) {
@@ -202,27 +221,32 @@
           }
           return;
         }
-        // таймеры молчащих людей
-        var waiting = game.waitingSeats(full);
-        var key = full.phase + ':' + full.round + ':' + full.current + ':' + full.hand + ':' + waiting.join(',') + ':' + (full.current >= 0 && full.seats[full.current] ? full.seats[full.current].hands.reduce(function (a, h) { return a + h.cards.length; }, 0) : 0);
-        if (!waiting.length) { wait = { key: '', since: t }; return; }
-        if (wait.key !== key) { wait = { key: key, since: t }; return; }
-        var limit = full.phase === 'betting' ? cfg.bettingMs : cfg.turnMs;
-        if (t - wait.since >= limit) {
-          waiting.forEach(function (seat) {
+        // таймеры молчащих людей: ждём idleMs, спрашиваем «Вы играете?» (askMs), при ответе даём ещё extendMs
+        var waiting = game.waitingSeats(full), seen = {};
+        waiting.forEach(function (seat) {
+          seen[seat] = true;
+          var s = full.seats[seat];
+          var key = full.phase + ':' + full.round + ':' + (full.phase === 'playing' ? full.hand + ':' + s.hands.reduce(function (n, h) { return n + h.cards.length; }, 0) : s.bet);
+          var e = idle[seat];
+          if (!e || e.key !== key) { idle[seat] = { key: key, since: t, stage: 'idle', until: 0 }; dirty = true; return; }
+          if (e.stage === 'idle' && t - e.since >= cfg.idleMs) { e.stage = 'asking'; e.until = t + cfg.askMs; dirty = true; return; }
+          if ((e.stage === 'asking' || e.stage === 'extended') && t >= e.until) {
             var mem = memberBySeat(seat);
+            delete idle[seat]; dirty = true;
             apply({ type: 'timeout', seat: seat });
             if (mem) { strikes[mem.uid] = (strikes[mem.uid] || 0) + 1; if (strikes[mem.uid] >= cfg.maxStrikes) apply({ type: 'leave', seat: seat }); }
-          });
-          wait = { key: '', since: t };
-        }
+          }
+        });
+        Object.keys(idle).forEach(function (seat) { if (!seen[seat]) { delete idle[seat]; dirty = true; } });
       }
       function firstActive(st) { for (var i = 0; i < st.seats.length; i++) if (st.seats[i].active) return i; return 0; }
 
       // Один шаг ведущего: принять действия, прогнать автоматику, опубликовать при изменениях
+      var lastTick = 0;
       function tick(t) {
         if (closed) return Promise.resolve();
         t = t === undefined ? now() : t;
+        lastTick = t;
         return listDocs('rooms/' + code + '/actions').then(function (docs) {
           docs.sort(function (a, b) { return (a.data.createdAt - b.data.createdAt) || (a.name < b.name ? -1 : 1); });
           var fresh = docs.filter(function (d) { return !processed[d.name]; });
@@ -270,11 +294,12 @@
     function joinRoom(code, hello) {
       code = String(code || '').toUpperCase().trim();
       var em = emitter(), lastRev = -1, view = null, stopped = false;
+      function parseTimers(s) { try { var a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
       function parse(d) {
         var m; try { m = JSON.parse(d.meta); } catch (e) { m = { members: [] }; }
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var st = null; if (d.state) { try { st = JSON.parse(d.state); } catch (e) { st = null; } }
-        return { code: code, role: 'player', status: d.status, size: d.size, rev: d.rev, members: m.members || [], state: st, seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+        return { code: code, role: 'player', status: d.status, size: d.size, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

@@ -12,7 +12,8 @@ const ctx = vm.createContext({ JSON, Promise, Math, Object, Array, Number, Strin
 const B = ctx.Blackjack, R = ctx.PlatformRooms;
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-const FAST = { dealDelayMs: 1000, nextDelayMs: 2000, botDelayMs: 500, bettingMs: 5000, turnMs: 5000, staleMs: 30000, heartbeatMs: 5000 };
+// Те же этапы, что в игре (ожидание, вопрос «играете?», дополнительное время), но короче: 3 с, 1 с и 2 с вместо 30, 7 и 15
+const FAST = { dealDelayMs: 1000, nextDelayMs: 2000, botDelayMs: 500, idleMs: 3000, askMs: 1000, extendMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
 
 // Поддельный Firestore: документы в памяти, правила доступа как в рекомендуемых правилах
 function makeServer() {
@@ -204,23 +205,90 @@ test('защита: место выбирает хост, лишние и чуж
   void stranger; void raw;
 });
 
-test('таймеры: молчащий игрок пропускает ставку, на ходе делает «стоп», после трёх раз освобождает место', async () => {
+test('таймеры: 30 с на ход, затем вопрос «играете?» на 7 с; без ответа ставится «стоп» (в тесте время сокращено)', async () => {
   const server = makeServer();
   const { host, code } = await client(server, 'h').createRoom({ size: 2, fillBots: false, name: 'Хост', chips: 5000 });
   const p1 = await client(server, 'p1').joinRoom(code, { name: 'Молчун', chips: 5000 });
   await step(server, host, [p1]);
   await host.start();
-  let strikes = 0, leftAt = -1;
+  host.send({ type: 'bet', amount: 100 });
+  const stages = [];
+  let sat = false;
+  for (let i = 0; i < 40; i++) {
+    await step(server, host, [p1]);
+    const tm = (p1.getView().timers || []).filter((x) => x.seat === 1)[0];
+    if (tm && stages[stages.length - 1] !== tm.stage) stages.push(tm.stage);
+    if (host.getView().state.seats[1].sitOut) { sat = true; break; }
+  }
+  assert.deepEqual(stages, ['idle', 'asking'], 'сначала ожидание, потом вопрос, ответа нет');
+  assert.equal(sat, true, 'без ответа — пропуск раздачи');
+  // на ходу: «стоп»
+  for (let i = 0; i < 30 && host.getView().state.phase !== 'playing'; i++) await step(server, host, [p1]);
+});
+
+test('ответ «играю» после вопроса даёт дополнительное время; если и тогда тишина — автоматический «стоп»', async () => {
+  const server = makeServer();
+  const { host, code } = await client(server, 'h').createRoom({ size: 2, fillBots: false, name: 'Хост', chips: 5000 });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня', chips: 5000 });
+  await step(server, host, [p1]);
+  await host.start();
+  host.send({ type: 'bet', amount: 100 });
+  await p1.send({ type: 'bet', amount: 100 });
+  for (let i = 0; i < 20 && host.getView().state.phase !== 'playing'; i++) await step(server, host, [p1]);
+  host.send({ type: 'stand' });
+  await step(server, host, [p1]);
+  assert.equal(host.getView().state.current, 1, 'ход Ани');
+  let asked = false, answeredAt = 0, extendedMs = 0;
+  for (let i = 0; i < 40; i++) {
+    await step(server, host, [p1]);
+    const tm = (p1.getView().timers || []).filter((x) => x.seat === 1)[0];
+    if (tm && tm.stage === 'asking' && !asked) { asked = true; await p1.send({ type: 'here' }); answeredAt = server.now; }
+    if (tm && tm.stage === 'extended' && !extendedMs) extendedMs = tm.ms;
+    if (host.getView().state.phase === 'settled') break;
+  }
+  assert.equal(asked, true, 'вопрос был задан');
+  assert.ok(extendedMs > 1000 && extendedMs <= 2000, 'после ответа дали ещё время: ' + extendedMs);
+  assert.equal(host.getView().state.phase, 'settled', 'в конце дополнительного времени поставлен «стоп»');
+  assert.ok(server.now - answeredAt >= 2000, 'до этого прошло не меньше дополнительного времени');
+});
+
+test('«играю» без вопроса ничего не продлевает; игрок, который ставит вовремя, вопроса не получает', async () => {
+  const server = makeServer();
+  const { host, code } = await client(server, 'h').createRoom({ size: 3, fillBots: false, name: 'Хост', chips: 5000 });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня', chips: 5000 });
+  const p2 = await client(server, 'p2').joinRoom(code, { name: 'Боря', chips: 5000 });
+  await step(server, host, [p1, p2]);
+  await host.start();
+  host.send({ type: 'bet', amount: 100 });
+  await p1.send({ type: 'bet', amount: 100 });                // Аня решила вовремя
+  await p2.send({ type: 'here' });                            // Боря шлёт «играю», хотя его ещё никто не спрашивал
+  const aniaStages = [], boryaStages = [];
+  for (let i = 0; i < 14; i++) {
+    await step(server, host, [p1, p2]);
+    (p1.getView().timers || []).forEach((x) => {
+      const list = x.seat === 1 ? aniaStages : (x.seat === 2 ? boryaStages : null);
+      if (list && list[list.length - 1] !== x.stage) list.push(x.stage);
+    });
+  }
+  assert.deepEqual(aniaStages, [], 'Аня уже поставила: ни ожидания, ни вопроса');
+  assert.deepEqual(boryaStages.slice(0, 2), ['idle', 'asking'], 'ранний «играю» время не продлил');
+});
+
+test('три автоматических хода подряд — игрок выбывает; ответ «играю» счётчик не сбрасывает, ход игрока сбрасывает', async () => {
+  const server = makeServer();
+  const { host, code } = await client(server, 'h').createRoom({ size: 2, fillBots: false, name: 'Хост', chips: 5000 });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Молчун', chips: 5000 });
+  await step(server, host, [p1]);
+  await host.start();
+  let left = false;
   for (let i = 0; i < 400; i++) {
     const s = host.getView().state;
     if (s.phase === 'betting' && s.seats[0].bet === 0 && !s.seats[0].sitOut) host.send({ type: 'bet', amount: 100 });
     if (s.phase === 'playing' && s.current === 0) host.send({ type: 'stand' });
     await step(server, host, [p1]);
-    const m = host.getView().state.seats[1];
-    if (!m.active) { leftAt = i; break; }
+    if (!host.getView().state.seats[1].active) { left = true; break; }
   }
-  assert.ok(leftAt > 0, 'молчун должен потерять место');
-  void strikes;
+  assert.equal(left, true);
 });
 
 test('уход игрока и подсадка нового между раздачами; бот уступает место человеку', async () => {
