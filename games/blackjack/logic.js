@@ -27,7 +27,7 @@
 (function (root) {
   var RANKS = 'A23456789TJQK'.split('');
   var SUITS = ['S', 'H', 'D', 'C'];
-  var CONFIG = { decks: 6, minBet: 25, maxBet: 2500, step: 25, reshuffleBelow: 0.25, startChips: 5000, maxSeats: 5, botBet: 100 };
+  var CONFIG = { decks: 6, minBet: 25, maxBet: 7000, step: 25, reshuffleBelow: 0.25, startChips: 5000, maxSeats: 5, botBet: 100 };
   // Боты за столом (не дилер: дилер всегда компьютер). Ходят случайно, у каждого свой характер:
   //  • average — средний игрок: по базовой стратегии, но в каждом пятом ходе ошибается, ставит 100;
   //  • risky — рискованный: берёт карты до 18 и часто идёт дальше (на 18 с шансом 50 %, на 19 — 25 %, на 20 — 5 %), ставит 250;

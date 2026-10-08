@@ -54,7 +54,7 @@ test('колода: 6 колод по 52 карты, каждой карты п�
 
 test('ставки: кратность 25, пределы, хватает ли фишек, замена и снятие ставки', () => {
   const t = table(['2S'], 300);
-  for (const bad of [10, 30, 24, -25, 2525, 25.5, '50', null]) assert.equal(t.act({ type: 'bet', seat: 0, amount: bad }).error, 'bad-amount', String(bad));
+  for (const bad of [10, 30, 24, -25, 7025, 25.5, '50', null]) assert.equal(t.act({ type: 'bet', seat: 0, amount: bad }).error, 'bad-amount', String(bad));
   assert.equal(t.act({ type: 'bet', seat: 0, amount: 500 }).error, 'not-enough-chips');
   assert.equal(t.act({ type: 'bet', seat: 0, amount: 100 }).ok, true);
   assert.equal(t.state.seats[0].chips, 200);
