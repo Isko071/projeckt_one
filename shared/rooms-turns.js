@@ -21,6 +21,7 @@
     var now = env.now || function () { return Date.now(); };
     var rng = env.rng || Math.random;
     var game = env.game, gameId = env.gameId;
+    var Chat = root.PlatformChat;   // чат стола (shared/chat-logic.js); без него чат просто выключен
     var base = 'https://firestore.googleapis.com/v1/projects/' + env.projectId + '/databases/' + env.db + '/documents';
 
     // ---------- Firestore (REST) ----------
@@ -87,6 +88,16 @@
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var members = [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
+      var chat = Chat ? Chat.createLog() : null, chatLimit = Chat ? Chat.createLimiter() : null;
+      function sys(code, name) { if (chat) { chat.add({ kind: 'sys', code: code, name: String(name || ''), ts: now() }); dirty = true; } }
+      function addChat(m, text, cid) {   // сообщение игрока: очистка, ограничение частоты, журнал последних 20
+        if (!chat) return false;
+        var t = Chat.clean(text);
+        if (!t || !chatLimit.allow(m.uid, now())) return false;
+        chat.add({ kind: 'msg', uid: m.uid, seat: m.seat, name: m.name, text: t, ts: now(), cid: String(cid || '').slice(0, 24) });
+        dirty = true;
+        return true;
+      }
       var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 игрока и больше: от него идёт отсчёт до возможности начать
       var processed = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking', until }
       var em = emitter();
@@ -106,10 +117,11 @@
           meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, members: members.map(publicMember) }) };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
+        if (chat) f.chat = JSON.stringify(chat.list());
         return f;
       }
       function getView() {
-        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now() };
+        return { code: code, role: 'host', status: status, size: size, mode: mode, rev: rev, members: members.map(publicMember), state: full ? game.view(full) : null, timers: timersNow(), seat: 0, hostGone: false, closed: closed, startIn: startIn(), receivedAt: now(), chat: chat ? chat.list() : [] };
       }
       function publish() {
         rev++; dirty = false; lastBeat = now();
@@ -121,7 +133,7 @@
       function start() {
         if (!canStart()) return Promise.resolve();
         full = game.init(members.map(function (m, i) { m.seat = i; return { id: m.uid, name: m.name }; }), { mode: mode, tableSize: size }, rng);
-        status = 'playing'; dirty = true;
+        status = 'playing'; dirty = true; sys('start', '');
         return publish();
       }
       function apply(action) {
@@ -146,11 +158,13 @@
         if (payload.type === 'hello') {
           if (m || status !== 'lobby' || members.length >= size) return;
           members.push({ uid: uid, name: String(payload.name || '').slice(0, 20), avatar: Number(payload.avatar) || 0, seat: members.length });
-          touchReady(); dirty = true;
+          touchReady(); sys('join', String(payload.name || '').slice(0, 20)); dirty = true;
           return;
         }
         if (!m) return;
+        if (payload.type === 'chat') { addChat(m, payload.text, payload.cid); return; }
         if (payload.type === 'leave') {
+          sys('leave', m.name);
           if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
           return;
@@ -174,7 +188,7 @@
           var key = game.progressKey(full, seat), e = idle[seat];
           if (!e || e.key !== key) { idle[seat] = { key: key, since: t, stage: 'idle', until: 0 }; dirty = true; return; }
           if (e.stage === 'idle' && t - e.since >= cfg.idleMs) { e.stage = 'asking'; e.until = t + cfg.askMs; dirty = true; return; }
-          if (e.stage === 'asking' && t >= e.until) { delete idle[seat]; dirty = true; apply({ type: 'leave', seat: seat }); }
+          if (e.stage === 'asking' && t >= e.until) { delete idle[seat]; dirty = true; var gone = members.filter(function (x) { return x.seat === seat; })[0]; sys('out', gone && gone.name); apply({ type: 'leave', seat: seat }); }
         });
         Object.keys(idle).forEach(function (seat) { if (!seen[seat]) { delete idle[seat]; dirty = true; } });
       }
@@ -199,6 +213,7 @@
         return putDoc('rooms/' + code, fields());
       }
       function dispatch(action) {            // действия самого хоста (место 0)
+        if (action.type === 'chat') { var sent = addChat(members[0], action.text, action.cid); if (sent) em.emit(getView()); return sent; }
         if (action.type === 'leave') { close(); return true; }
         if (status !== 'playing' || game.PLAYER_ACTIONS.indexOf(action.type) < 0) return false;
         var ok = apply(Object.assign(clean(action), { seat: 0 }));
@@ -229,7 +244,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
         return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
-          receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+          receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);
