@@ -5,6 +5,10 @@ root.LOCALES.ru = {
   'platform.name': 'Игротека',
   'platform.logoLabel': 'Игротека: к списку игр',
   'platform.noscript': 'Для работы сайта нужен включённый JavaScript.',
+  'footer.feedback': 'Обратная связь',
+  'footer.bug': 'Сообщить об ошибке',
+  'footer.idea': 'Предложить идею или игру',
+  'footer.copy': '© 2026 Игротека. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
 
   'catalog.title': 'Выберите игру',
   'catalog.subtitle': 'Быстрая партия на телефоне или компьютере.',
