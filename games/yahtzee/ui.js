@@ -272,12 +272,12 @@ function confirmHtml() {
     '<button class="btn-primary" data-act="restart" data-key="restart">' + esc(tr('confirm.ok')) + '</button></div></div></div>';
 }
 
-// Выход в каталог из незаконченной партии: подтверждение, «Выйти» — обычная ссылка на каталог
+// Выход в меню игры из незаконченной партии: подтверждение, «Выйти» возвращает на стартовый экран
 function exitHtml() {
   return '<div class="overlay" role="alertdialog" aria-modal="true" aria-label="' + esc(tr('exit.aria')) + '"><div class="dialog">' +
     '<h2>' + esc(tr('exit.title')) + '</h2><span class="muted-text">' + esc(tr('confirm.text')) + '</span>' +
     '<div class="dialog-actions"><button class="btn-secondary" data-act="close" data-autofocus data-key="cancel">' + esc(tr('exit.stay')) + '</button>' +
-    '<a class="btn-primary" href="' + CATALOG_URL + '" data-key="exit-ok">' + esc(tr('exit.ok')) + '</a></div></div></div>';
+    '<button class="btn-primary" data-act="menu" data-key="exit-ok">' + esc(tr('exit.ok')) + '</button></div></div></div>';
 }
 
 function modalHtml() {
@@ -326,9 +326,7 @@ function gameHtml() {
       (game.gameOver ? esc(tr('over.title')) : esc(game.players[game.current].name)) + '</strong></div>' + themeButtonHtml() + '</div>' +
       '<div class="topbar-actions"><button class="btn-secondary small" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button>' +
       '<button class="btn-secondary small" data-act="confirm" data-key="new">' + esc(tr('newGame')) + '</button>' +
-      (game.gameOver
-        ? '<a class="btn-secondary small" href="' + CATALOG_URL + '" data-key="exit">' + esc(tr('toCatalog')) + '</a>'
-        : '<button class="btn-secondary small" data-act="exit" data-key="exit">' + esc(tr('toCatalog')) + '</button>') + '</div></div>' +
+      '<button class="btn-secondary small" data-act="' + (game.gameOver ? 'menu' : 'exit') + '" data-key="exit">' + esc(tr('over.toMenu')) + '</button></div></div>' +
     '<div class="layout">' +
       '<section class="card play">' +
         '<div class="status-row"><span class="status" aria-live="polite">' + statusText() + '</span>' +
