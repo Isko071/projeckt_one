@@ -46,8 +46,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes pop-in { from { transform: scale(.9); opacity: .4; } to { transform: scale(1); opacity: 1; } }
-@keyframes deal-in { from { opacity: 0; transform: translate(0, -34px) scale(.9); } to { opacity: 1; transform: none; } }
-@keyframes flip-in { from { transform: rotateY(90deg); } to { transform: rotateY(0); } }
+@keyframes deal-in { from { opacity: 0; transform: translate(0, -34px) scale(.92); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes flip-in { from { transform: rotateY(90deg); opacity: .5; } to { transform: rotateY(0); opacity: 1; } }
 @keyframes chip-in { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
 @keyframes pulse-ring { 0%, 100% { box-shadow: 0 0 0 3px var(--accent); } 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
 @keyframes slide-down { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
@@ -175,7 +175,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .bet-col { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 6px; }
 .chip-stack { display: flex; flex-direction: column-reverse; align-items: center; }
 .bet-n { font-size: 13px; font-weight: 700; }
-.center-res { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; background: var(--surface); border: 2px solid var(--line); border-radius: 20px; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 2px 8px oklch(0.2 0.02 260 / .2); animation: pop-in .3s ease both; }
+.center-res { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; background: var(--surface); border: 2px solid var(--line); border-radius: 20px; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 2px 8px oklch(0.2 0.02 260 / .2); animation: pop-in .5s ease both; }
 .center-res.good { border-color: var(--accent); }
 .center-res.bad { border-color: var(--danger); }
 .center-res .t { font-size: 18px; font-weight: 700; line-height: 1.15; }
@@ -192,9 +192,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .chip-row { display: flex; justify-content: center; flex-wrap: wrap; }
 .chip-btn { width: 56px; height: 56px; border-radius: 50%; border: 2px solid transparent; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .chip-btn:disabled { border: 2px dashed var(--line); opacity: .4; filter: grayscale(1); cursor: default; }
-.actions { display: flex; flex-direction: column; gap: 8px; }
+.actions { display: flex; flex-direction: column; gap: 10px; }
 .act-row { display: flex; gap: 10px; }
-.act { flex: 1; height: 64px; border-radius: 14px; font-size: 20px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--accent); background: var(--surface); color: var(--ink); }
+.actions .act-row { gap: 20px; }
+.act { flex: 1; height: 54px; border-radius: 14px; font-size: 20px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--accent); background: var(--surface); color: var(--ink); }
 .act.take { background: var(--accent); color: var(--accent-ink); border: 0; }
 .act:disabled { border: 2px dashed var(--line); background: var(--surface); color: var(--muted); cursor: default; }
 .act.hl { outline: 4px solid var(--ink); outline-offset: 3px; }
@@ -215,13 +216,13 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 
 /* Карты и фишки */
 .pcard { position: relative; flex: none; box-sizing: border-box; background: var(--card-bg); border: 1px solid var(--card-line); box-shadow: 0 1px 3px oklch(0.2 0.02 260 / .28); overflow: hidden; user-select: none; }
-.pcard.fresh { animation: deal-in .25s ease both; }
-.pcard.flip { animation: flip-in .3s ease both; }
+.pcard.fresh { animation: deal-in .5s cubic-bezier(.22, .8, .3, 1) both; }
+.pcard.flip { animation: flip-in .55s cubic-bezier(.3, .7, .3, 1) both; }
 .pcard .back { position: absolute; background-color: var(--back); border: 1.5px solid oklch(1 0 0 / .85); background-image: linear-gradient(45deg, oklch(1 0 0 / .22) 25%, transparent 25%, transparent 75%, oklch(1 0 0 / .22) 75%), linear-gradient(-45deg, oklch(1 0 0 / .22) 25%, transparent 25%, transparent 75%, oklch(1 0 0 / .22) 75%); }
 .pcard .idx { position: absolute; display: flex; flex-direction: column; align-items: center; line-height: 1; font-weight: 700; }
 .pcard .pip { position: absolute; line-height: 1; }
 .pcard .face { position: absolute; display: flex; align-items: center; justify-content: center; font-weight: 700; background: oklch(0.5 0.02 90 / .07); }
-.chip { flex: none; border-radius: 50%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 0 oklch(0.2 0.02 260 / .35); animation: chip-in .15s ease both; }
+.chip { flex: none; border-radius: 50%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 0 oklch(0.2 0.02 260 / .35); animation: chip-in .3s ease both; }
 .chip .in { width: 72%; height: 72%; border-radius: 50%; border: 1.5px solid oklch(1 0 0 / .9); display: flex; align-items: center; justify-content: center; color: oklch(0.99 0 0); font-weight: 700; letter-spacing: -.5px; }
 
 /* Окна */
@@ -263,3 +264,17 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .pv-seat.bot { background: var(--line); border: 0; }
 .banner.flex { display: flex; align-items: center; gap: 10px; }
 .banner.flex span { flex: 1; min-width: 0; }
+
+/* Итог игры с ботом: окошко над своими картами */
+.result-pop { position: absolute; left: 50%; transform: translateX(-50%); width: min(92%, 320px); box-sizing: border-box; text-align: center; background: var(--surface); border: 2px solid var(--line); border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 6px 18px oklch(0.2 0.02 260 / .28); animation: pop-up .55s cubic-bezier(.22, .8, .3, 1) both; z-index: 2; }
+.result-pop.good { border-color: var(--accent); }
+.result-pop.bad { border-color: var(--danger); }
+.result-pop .t { font-size: 20px; font-weight: 700; line-height: 1.15; }
+.result-pop.good .t { color: var(--accent); }
+.result-pop.bad .t { color: var(--danger); }
+.result-pop .s { font-size: 13px; color: var(--muted); }
+.result-pop .cap { font-size: 13px; font-weight: 700; background: var(--accent-soft); border-radius: 10px; padding: 4px 8px; margin-top: 4px; }
+.result-pop .broke { background: var(--danger-soft); border: 1.5px solid var(--danger); border-radius: 12px; padding: 8px 10px; font-size: 13px; line-height: 1.3; margin-top: 4px; text-align: left; }
+.pop-btns { display: flex; gap: 10px; margin-top: 8px; }
+.pop-btns .btn { flex: 1; min-height: 46px; }
+@keyframes pop-up { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }

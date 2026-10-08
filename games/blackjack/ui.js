@@ -230,6 +230,20 @@ function activeNotice() {
   return app.notice;
 }
 
+// ===== Плавное вскрытие =====
+// Раздача заканчивается мгновенно (перебор, 21), но на экране всё идёт по шагам: пауза, чтобы осмыслить свою руку,
+// переворот закрытой карты дилера, карты дилера по одной и только потом итог.
+var SEQ = { pause: 1100, flip: 550, gap: 850, after: 900 };
+function scheduleSeq(st) {
+  var r = reduced(), t0 = now();
+  var seq = { round: st.round, revealAt: t0 + (r ? 0 : SEQ.pause), times: {}, end: 0 };
+  var t = seq.revealAt + (r ? 0 : SEQ.flip);
+  for (var i = 2; i < st.dealer.cards.length; i++) { t += r ? 0 : SEQ.gap; seq.times[i] = t; }
+  seq.end = t + (r ? 0 : SEQ.after);
+  app.seq = seq; app.resultAt = seq.end;
+  if (!r) [seq.revealAt].concat(Object.keys(seq.times).map(function (k) { return seq.times[k]; }), [seq.end]).forEach(function (ts) { setTimeout(render, Math.max(0, ts - now()) + 20); });
+}
+
 // ===== Сессия «С ботом» =====
 function startLocal() {
   gameToken++;
@@ -237,7 +251,7 @@ function startLocal() {
   var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }], { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1 };
   app.chips = clampChips(app.lastBet || 100);
-  app.screen = 'game'; app.modal = null; app.hint = null; app.resultAt = 0; app.seen = {}; app.pending = false;
+  app.screen = 'game'; app.modal = null; app.hint = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
   render();
 }
 function lDispatch(action) {
@@ -258,14 +272,8 @@ function lDispatch(action) {
       if (cr.capped) notify(tr(cr.left > 0 || cr.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(cr.granted) }), 6000);
       if (mine.outcome === 'win' || mine.outcome === 'blackjack') W.countWin('blackjack');
     }
-    var ms = 0;
-    r.events.forEach(function (e) {
-      if (e.type === 'reveal') ms += 300;
-      else if (e.type === 'deal') ms += e.seat === 'dealer' && e.hidden !== undefined ? 150 : (e.seat === 'dealer' ? 400 : 150);
-    });
-    app.resultAt = now() + (reduced() ? 0 : ms + 500);
+    scheduleSeq(st);
     app.hint = null;
-    if (!reduced() && app.resultAt > now()) setTimeout(render, app.resultAt - now() + 30);
   }
   return true;
 }
@@ -293,13 +301,11 @@ function localDeal() {
   render();
   runBots();
 }
-function localNext(redeal) {
+function localNext() {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
   G.state.seats[0].chips = W.getBalance();
-  app.hint = null; app.seen = {}; app.resultAt = 0;
-  var b = betBounds();
+  app.hint = null; app.seen = {}; app.resultAt = 0; app.seq = null;
   app.chips = clampChips(app.lastBet || 100);
-  if (redeal && b.max >= MIN_BET && chipsTotal() >= MIN_BET) { localDeal(); return; }
   render();
 }
 
@@ -367,7 +373,7 @@ function onView(v) {
         if (seat.net > 0) W.add(seat.net, 'blackjack'); else if (seat.net < 0) W.spend(Math.min(-seat.net, W.getBalance()), 'blackjack');
         if (h.outcome === 'win' || h.outcome === 'blackjack') W.countWin('blackjack');
       }
-      app.resultAt = now() + (reduced() ? 0 : 300 + 400 * Math.max(0, st.dealer.cards.length - 2) + 400);
+      scheduleSeq(st);
     }
     if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.chips = clampChips(app.lastBet || 100); app.hint = null; }
     if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); }
@@ -628,6 +634,12 @@ function playHtml(D) {
   var plates = others.map(function (idx, i) { return plateHtml(D, L, idx, i, others.length, true); }).join('');
   // дилер
   var dl = vs.dealer.cards, hidden = vs.dealer.hidden && dl.length > 1;
+  var seq = app.seq && app.seq.round === vs.round && vs.phase === 'settled' && now() < app.seq.end ? app.seq : null;
+  if (seq) {
+    dl = dl.filter(function (c, i) { return i < 2 || now() >= seq.times[i]; });
+    hidden = now() < seq.revealAt;
+    if (hidden) dl = [dl[0], '??'];
+  }
   var dw = L.desk ? 76 : (L.narrow ? 50 : 58);
   var dsum = hidden ? String(BJ.cardValue(dl[0]) === 11 ? 11 : BJ.cardValue(dl[0])) : (dl.length === 2 && BJ.handValue(dl).total === 21 ? tr('sum.bj') : (BJ.handValue(dl).total > 21 ? tr('st.bust') + ' ' + BJ.handValue(dl).total : String(BJ.handValue(dl).total)));
   var dealerBox = '<div class="dealer-box"><div class="lbl">' + esc(tr('dealer')) + ' <span class="pill">' + esc(dsum) + '</span></div><div class="row-cards">' + cardsRow('dealer', dl, dw, 400, dw * 1.1) + '</div></div>';
@@ -641,36 +653,42 @@ function playHtml(D) {
   var meBox = '<div class="me-box"><div class="me-col"><div class="me-top">' + (label ? '<span class="me-label' + (myTurn ? ' turn' : '') + '">' + esc(label) + '</span>' : '') +
     '<span class="pill" style="padding:2px 10px">' + esc(sumText) + '</span></div><div class="me-ring' + (myTurn ? ' turn' : '') + '">' + mine + '</div></div>' + betCol + '</div>';
   var res = showResult ? myOutcome(D) : null;
-  var center = res ? '<div class="center-res ' + res.tone + '" style="width:' + (L.desk ? 200 : (L.narrow ? 124 : 150)) + 'px"><div class="t">' + esc(res.title) + '</div><div class="t">' + esc(res.delta) + '</div><div class="s">' + esc(res.sub) + '</div></div>' : '';
-  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + dealerBox + plates + center + meBox + '</div>';
+  var botMode = D.mode === 'bot';
+  var center = res && !botMode ? '<div class="center-res ' + res.tone + '" style="width:' + (L.desk ? 200 : (L.narrow ? 124 : 150)) + 'px"><div class="t">' + esc(res.title) + '</div><div class="t">' + esc(res.delta) + '</div><div class="s">' + esc(res.sub) + '</div></div>' : '';
+  // Итог игры с ботом: отдельное окошко над своими картами
+  var pop = '';
+  if (res && botMode) {
+    var bb = betBounds(), brokeNow = bb.bal < MIN_BET;
+    pop = '<div class="result-pop ' + res.tone + '" style="bottom:' + Math.round(pw * 1.4 + 64) + 'px" role="status"><div class="t">' + esc(res.title) + '</div><div class="t">' + esc(res.delta) + '</div><div class="s">' + esc(res.sub) + '</div>' +
+      (G.cap ? '<div class="cap">' + esc(tr('cap.left', { n: fmt(G.cap.left) })) + '</div>' : '') +
+      (brokeNow ? '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>' : '') +
+      '<div class="pop-btns">' + (brokeNow ? '' : '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>') +
+      '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
+  }
+  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + dealerBox + plates + center + meBox + pop + '</div>';
 
   var notice = activeNotice();
   var noticeHtml = notice ? '<div class="notice" role="status">' + esc(notice) + '</div>' : '';
   var panel = '';
-  if (!showResult && vs.phase !== 'settled') {
+  if (!showResult) {
     var cur = vs.current >= 0 ? vs.seats[vs.current] : null;
     var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : '';
     if (D.online && app.pending) waitText = tr('wait.sent'); else if (D.online && app.banner === 'offline') waitText = tr('wait.offline');
     var hintHtml = app.hint && myTurn ? '<div class="hint-box" role="status"><i>?</i><span>' + esc(hintText(D)) + '</span></div>' : '';
     var dis = !myTurn;
     panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') + hintHtml +
-      '<div class="act-row"><button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button>' +
-      '<button class="act' + (app.hint === 'stand' && myTurn ? ' hl' : '') + '" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button></div>' +
+      '<div class="act-row"><button class="act' + (app.hint === 'stand' && myTurn ? ' hl' : '') + '" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button>' +
+      '<button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button></div>' +
       '<div style="display:flex;justify-content:center"><button class="btn ghost" data-act="hint" data-key="hint"' + (dis ? ' disabled' : '') + '>' + esc(tr('act.hint')) + '</button></div></div>';
   } else if (showResult) {
-    var b = betBounds(), broke = b.bal < MIN_BET, bot = D.mode === 'bot', bits = '';
-    if (bot && G.cap) bits += '<div class="duel"><span>' + esc(tr('cap.left', { n: fmt(G.cap.left) })) + '</span></div>';
-    if (broke) bits += '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>';
+    var b = betBounds(), broke = b.bal < MIN_BET, bits = '';
+    if (broke && D.online) bits += '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>';
     if (D.online) {
       var left = Math.max(0, ROOM_CFG.nextDelayMs - (now() - app.settledAt)), pct = Math.round(100 * left / ROOM_CFG.nextDelayMs);
       bits += '<div><div style="font-size:14px;font-weight:700;margin-bottom:4px" role="status">' + esc(tr('res.nextIn', { n: Math.ceil(left / 1000) })) + '</div><div class="next-bar"><i style="width:' + pct + '%"></i></div></div>' +
         '<button class="btn" data-act="exit" data-key="leaveTable">' + esc(tr('res.leave')) + '</button>';
-    } else if (broke) {
-      bits += '<a class="btn accent big" href="' + CATALOG_URL + '" data-key="tocat">' + esc(tr('res.toCatalog')) + '</a>';
-    } else {
-      bits += '<button class="btn accent big" data-act="again" data-key="again">' + esc(tr('res.again', { n: fmt(Math.min(app.lastBet, b.max)) })) + '</button><button class="btn ghost" data-act="changeBet" data-key="changeBet">' + esc(tr('res.change')) + '</button>';
     }
-    panel = '<div class="result-panel">' + bits + '</div>';
+    panel = bits ? '<div class="result-panel">' + bits + '</div>' : '';
   }
   return '<div class="game">' + felt + noticeHtml + panel + '</div>';
 }
@@ -860,8 +878,8 @@ appEl.addEventListener('click', function (e) {
     }
     case 'hint': { var D = describe(); if (D) { app.hint = BJ.hint(D.vs, D.me); render(); } break; }
     case 'here': onlineSend({ type: 'here' }); break;
-    case 'again': localNext(true); break;
-    case 'changeBet': localNext(false); break;
+    case 'newBet': localNext(); break;
+    case 'backMenu': gameToken++; G = null; app.modal = null; app.hint = null; app.seq = null; app.screen = 'start'; render(); break;
     case 'exit':
       if (G && G.mode === 'bot') { if (playing()) { app.modal = 'exitCatalog'; render(); } else window.location.href = CATALOG_URL; }
       else if (G && G.mode === 'online') { app.modal = G.role === 'host' ? 'closeTable' : 'leaveTable'; render(); }
