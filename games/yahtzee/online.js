@@ -3,7 +3,6 @@
 // Все надписи берутся из словаря (games/yahtzee/ru.js). Правила и логика стола: table.js, комнаты: shared/rooms-turns.js, docs/online-tables.md.
 (function () {
   var Cloud = window.PlatformCloud, T = window.YahtzeeTable, P = window.PlatformProfile;
-  var DIE_FACE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
   var on = {
     screen: 'login', rooms: null, size: 4, mode: 'sync', code: '', busy: false, loginError: null, tableError: null, codeError: null,
     copied: false, banner: null, pending: false, held: [false, false, false, false, false], heldKey: '', notice: null, noticeUntil: 0, openSheets: {}
@@ -69,7 +68,13 @@
         if (!v.state.gameOver && !G.left) { G.left = true; stopTimers(); if (G.role === 'player') G.ctrl.stop(); G = null; on.screen = 'out'; app.modal = null; }
       } else {
         var key = T.progressKey(v.state, me);
-        if (key !== on.heldKey) { on.heldKey = key; on.held = p.held.slice(); }
+        if (key !== on.heldKey) {
+          var rolled = p.rollsUsed > (G.lastRolls || 0) && p.rollsUsed > 0;
+          on.heldKey = key; on.held = p.held.slice();
+          if (rolled) spinFinish(p.dice, p.held);           // новый бросок: кубики крутятся и замедляются, как в одиночной игре
+          else if (spin.waiting) { spin.waiting = false; spin.active = false; spin.token++; spin.display = null; }
+          G.lastRolls = p.rollsUsed;
+        }
         if (v.state.gameOver && !G.counted) { G.counted = true; app.modal = null; }
       }
     }
@@ -263,22 +268,9 @@
     if (p.done) return tr('online.st.scored');
     return p.rollsUsed ? tr('online.st.rolls', { n: p.rollsUsed }) : tr('online.st.thinks');
   }
-  function miniDice(p) {
-    if (!p.rollsUsed) return '';
-    return '<span class="o-mini" aria-hidden="true">' + p.dice.map(function (d) { return DIE_FACE[d]; }).join('') + '</span>';
-  }
-
-  function playersHtml(st, me) {
-    return '<div class="o-players" role="list">' + st.players.map(function (p, i) {
-      var cur = st.mode === 'turns' ? st.current === i : (p.active && !p.done && !st.gameOver);
-      return '<div class="o-pl' + (i === me ? ' me' : '') + (cur ? ' cur' : '') + (p.active ? '' : ' gone') + '" role="listitem" data-key="pl' + i + '">' +
-        '<span class="n">' + esc(p.name || tr('online.lobby.you')) + (i === me ? ' <small>' + esc(tr('online.lobby.you')) + '</small>' : '') + '</span><b>' + Yahtzee.totalScore(p) + '</b>' +
-        '<span class="s">' + esc(seatStatus(st, i)) + '</span>' + (p.active && !st.gameOver && (st.mode === 'sync' || cur) ? miniDice(p) : '') + '</div>';
-    }).join('') + '</div>';
-  }
-
   function statusLine(st, me, p) {
     if (st.gameOver) return tr('online.over.title');
+    if (spin.active) return tr('status.rolling');
     if (on.pending) return tr('online.sent');
     if (on.banner === 'offline') return tr('online.waitConn');
     if (st.mode === 'turns') {
@@ -292,50 +284,84 @@
     return tr('status.holdOrRoll');
   }
 
+  // Анимация броска как в одиночной игре: кубики «крутятся» и замедляются, зафиксированные стоят на месте
+  var spin = { active: false, display: null, token: 0, waiting: false };
+  function randomFaces(final, held) { return final.map(function (v, i) { return held[i] ? v : 1 + Math.floor(Math.random() * 6); }); }
+  function spinWait() {            // бросок отправлен, ответа ещё нет: кубики крутятся
+    if (spin.active || reducedMotion()) return;
+    var token = ++spin.token, p = mine();
+    if (!p) return;
+    spin.active = true; spin.waiting = true;
+    (function loop() {
+      if (token !== spin.token) return;
+      var q = mine();
+      spin.display = q ? randomFaces(q.dice, on.held) : null; render();
+      if (spin.waiting) setTimeout(loop, 90);
+    })();
+  }
+  function spinFinish(final, held) { // пришёл результат: кубики замедляются и останавливаются
+    var token = ++spin.token;
+    if (reducedMotion()) { spin.active = false; spin.waiting = false; spin.display = null; render(); return; }
+    spin.active = true; spin.waiting = false;
+    var pauses = [60, 70, 80, 95, 115, 140, 170], k = 0;
+    (function step() {
+      if (token !== spin.token) return;
+      if (k >= pauses.length) { spin.active = false; spin.display = null; render(); return; }
+      spin.display = randomFaces(final, held); render();
+      setTimeout(step, pauses[k++]);
+    })();
+  }
+  function reducedMotion() { return typeof prefersReducedMotion === 'function' && prefersReducedMotion(); }
+
   function diceHtml(p, canAct) {
-    var fresh = p.rollsUsed === 0, canToggle = canAct && p.rollsUsed > 0 && p.rollsUsed < Yahtzee.MAX_ROLLS && !on.pending;
-    return p.dice.map(function (v, i) {
-      var held = canToggle || (canAct && p.rollsUsed > 0) ? on.held[i] : p.held[i];
+    var fresh = p.rollsUsed === 0 && !spin.active, canToggle = canAct && p.rollsUsed > 0 && p.rollsUsed < Yahtzee.MAX_ROLLS && !on.pending && !spin.active;
+    var shown = spin.active && spin.display ? spin.display : p.dice;
+    return shown.map(function (v, i) {
+      var held = canAct && p.rollsUsed > 0 ? on.held[i] : p.held[i];
+      var spinning = spin.active && !held;
       var dieLabel = fresh ? tr('die.fresh', { n: i + 1 }) : tr(held ? 'die.held' : 'die.value', { n: i + 1, v: v });
       var pips = '';
       for (var k = 0; k < 9; k++) pips += '<span><i class="' + (!fresh && PIPS[v].indexOf(k) >= 0 ? 'on' : (fresh && k === 4 ? 'ph' : '')) + '"></i></span>';
       return '<button class="die-btn" data-key="die-' + i + '" data-odie="' + i + '" aria-pressed="' + !!held + '" aria-label="' + esc(dieLabel) + '"' + (canToggle ? '' : ' disabled') + '>' +
-        '<span class="die' + (fresh ? ' fresh' : '') + (held ? ' held' : '') + '">' + pips + '</span><span class="die-tag">' + (held ? esc(tr('die.tag')) : '') + '</span></button>';
+        '<span class="die' + (fresh ? ' fresh' : '') + (held ? ' held' : '') + (spinning ? ' rolling' : '') + '">' + pips + '</span><span class="die-tag">' + (held ? esc(tr('die.tag')) : '') + '</span></button>';
     }).join('');
   }
 
-  // Таблица очков: колонка игрока (с подсказками) и колонки остальных
-  function sheetHtml(st, me, canAct) {
+  // Таблица очков, как в одиночной игре: верхняя и нижняя секции отдельными карточками; колонка игрока (с подсказками) первая
+  function colW(n) { return n <= 2 ? 84 : (n === 3 ? 72 : (n === 4 ? 60 : (n === 5 ? 52 : 46))); }
+  function sheetsHtml(st, me, canAct) {
     var order = [me].concat(st.players.map(function (_, i) { return i; }).filter(function (i) { return i !== me; }));
-    var p = st.players[me], cols = 'minmax(104px,1fr) 80px' + (order.length > 1 ? ' repeat(' + (order.length - 1) + ', 60px)' : '');
-    var allowed = canAct && p.rollsUsed > 0 && !on.pending ? Yahtzee.allowedCategories(p, p.dice) : null, best = null, bestPts = 0;
+    var p = st.players[me], cols = 'minmax(92px,1fr) repeat(' + order.length + ', ' + colW(order.length) + 'px)';
+    var allowed = canAct && p.rollsUsed > 0 && !on.pending && !spin.active ? Yahtzee.allowedCategories(p, p.dice) : null, best = null, bestPts = 0;
     if (allowed) allowed.forEach(function (c) { var pts = Yahtzee.possibleScore(p, c, p.dice); if (pts > bestPts) { bestPts = pts; best = c; } });
     function cell(pi, cat) {
       var q = st.players[pi], v = q.scores[cat], name = label(cat);
-      if (v !== null) return '<span class="cell filled' + (v === 0 ? ' zero' : '') + '" aria-label="' + esc(tr('cell.filled', { name: name, v: v })) + '">' + v + '</span>';
+      if (v !== null) return '<button class="cell filled' + (v === 0 ? ' zero' : '') + '" disabled aria-label="' + esc(tr('cell.filled', { name: name, v: v })) + '">' + v + '</button>';
       if (pi === me && allowed) {
         if (allowed.indexOf(cat) >= 0) {
           var pts = Yahtzee.possibleScore(p, cat, p.dice);
           return '<button class="cell hint' + (cat === best ? ' best' : '') + '" data-key="cat-' + cat + '" data-ocat="' + cat + '" aria-label="' + esc(tr('cell.write', { name: name, v: pts })) + '">' + pts + '</button>';
         }
-        return '<span class="cell blocked" aria-label="' + esc(tr('cell.blocked', { name: name })) + '">—</span>';
+        return '<button class="cell blocked" disabled aria-label="' + esc(tr('cell.blocked', { name: name })) + '">\u2014</button>';
       }
-      return '<span class="cell" aria-label="' + esc(tr('cell.empty', { name: name })) + '"></span>';
+      return '<button class="cell" disabled aria-label="' + esc(tr('cell.empty', { name: name })) + '"></button>';
     }
     function row(cls, lab, sub, cells) { return '<div class="grid row ' + cls + '" style="grid-template-columns:' + cols + '"><span class="label">' + lab + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + cells + '</div>'; }
     function info(fn) { return order.map(function (i) { return fn(st.players[i]); }).join(''); }
+    function plain(text, cls) { return '<span class="cell ' + (cls || '') + '">' + text + '</span>'; }
     var head = '<div class="grid sheet-head" style="grid-template-columns:' + cols + '"><span></span>' + order.map(function (i) {
-      return '<span class="head-name' + (i === me ? ' current' : '') + '">' + esc(st.players[i].name || '') + '</span>';
+      var q = st.players[i], acting = !st.gameOver && q.active && (st.mode === 'turns' ? st.current === i : !q.done);
+      return '<span class="head-name' + (acting ? ' current' : '') + '">' + esc(q.name || '') + '<small>' + esc(seatStatus(st, i)) + '</small></span>';
     }).join('') + '</div>';
-    var html = head + row('section', esc(tr('sheet.upper')), '', '');
-    Yahtzee.UPPER.forEach(function (cat) { html += row('', esc(label(cat)), SUBS[cat], order.map(function (i) { return cell(i, cat); }).join('')); });
-    html += row('info', esc(tr('sheet.sum')), '', info(function (q) { return plainCell(Yahtzee.upperSum(q), 'muted'); }));
-    html += row('info', esc(tr('sheet.bonus')), '', info(function (q) { var u = Yahtzee.upperSum(q); return u >= 63 ? plainCell('+35', 'accent') : plainCell(u + '/63', 'muted'); }));
-    html += row('section', esc(tr('sheet.lower')), '', '');
-    Yahtzee.LOWER.forEach(function (cat) { html += row('', esc(label(cat)), SUBS[cat], order.map(function (i) { return cell(i, cat); }).join('')); });
-    html += row('info top-line', esc(tr('sheet.yahtzeeBonus')), '', info(function (q) { return q.yahtzeeBonuses ? plainCell('+' + q.yahtzeeBonuses * 100, 'accent') : plainCell('—', 'muted'); }));
-    html += row('total', esc(tr('sheet.total')), '', info(function (q) { return plainCell(Yahtzee.totalScore(q)); }));
-    return html;
+    var upper = head + row('section', esc(tr('sheet.upper')), '', '<span></span>'.repeat(order.length));
+    Yahtzee.UPPER.forEach(function (cat) { upper += row('', esc(label(cat)), SUBS[cat], order.map(function (i) { return cell(i, cat); }).join('')); });
+    upper += row('info', esc(tr('sheet.sum')), '', info(function (q) { return plain(Yahtzee.upperSum(q), 'muted'); }));
+    upper += row('info', esc(tr('sheet.bonus')), '', info(function (q) { var u = Yahtzee.upperSum(q); return u >= 63 ? plain('+35', 'accent') : plain(u + '/63', 'muted'); }));
+    var lower = head + row('section', esc(tr('sheet.lower')), '', '<span></span>'.repeat(order.length));
+    Yahtzee.LOWER.forEach(function (cat) { lower += row('', esc(label(cat)), SUBS[cat], order.map(function (i) { return cell(i, cat); }).join('')); });
+    lower += row('info top-line', esc(tr('sheet.yahtzeeBonus')), '', info(function (q) { return q.yahtzeeBonuses ? plain('+' + q.yahtzeeBonuses * 100, 'accent') : plain('\u2014', 'muted'); }));
+    lower += row('total', esc(tr('sheet.total')), '', info(function (q) { return plain(Yahtzee.totalScore(q)); }));
+    return '<section class="card sheet o-sheet">' + upper + '</section><section class="card sheet o-sheet">' + lower + '</section>';
   }
 
   function overHtml(st, me) {
@@ -366,7 +392,7 @@
     var canAct = T.canAct(st, me) && !on.pending, left = Yahtzee.MAX_ROLLS - p.rollsUsed;
     var dots = '';
     for (var i = 0; i < Yahtzee.MAX_ROLLS; i++) dots += '<i class="' + (i < left ? 'on' : '') + '"></i>';
-    var rollLabel = on.pending ? tr('online.sent') : (p.rollsUsed === 0 ? tr('roll.first') : (left > 0 ? tr('roll.more', { n: left }) : tr('roll.none')));
+    var rollLabel = spin.active ? tr('status.rolling') : on.pending ? tr('online.sent') : (p.rollsUsed === 0 ? tr('roll.first') : (left > 0 ? tr('roll.more', { n: left }) : tr('roll.none')));
     var notice = activeNotice();
     var mineActive = T.canAct(st, me);
     return '<div class="topbar"><div class="topbar-head"><div class="turn"><small>' + esc(modeName(st.mode)) + ' · ' + esc(tr('online.round', { n: st.round, m: Yahtzee.CATEGORIES.length })) + '</small><strong>' +
@@ -374,12 +400,11 @@
       '<div class="topbar-actions"><button class="btn-secondary small" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button>' +
       '<button class="btn-secondary small" data-act="exitTable" data-key="exit">' + esc(tr('online.leave')) + '</button></div></div>' +
       bannerHtml() + (notice ? '<div class="o-notice" role="status">' + esc(notice) + '</div>' : '') +
-      playersHtml(st, me) +
       '<div class="layout"><section class="card play"><div class="status-row"><span class="status" aria-live="polite">' + esc(statusLine(st, me, p)) + '</span>' +
         '<span class="roll-dots" role="img" aria-label="' + esc(tr('rollsLeft', { n: left })) + '">' + dots + '</span></div>' +
         '<div class="dice">' + diceHtml(p, mineActive) + '</div>' +
-        '<button class="roll-btn" data-key="roll" data-act="oroll"' + (canAct && left > 0 && !st.gameOver ? '' : ' disabled') + '>' + esc(rollLabel) + '</button></section>' +
-      '<section class="card sheet o-sheet">' + sheetHtml(st, me, mineActive) + '</section></div>' +
+        '<button class="roll-btn" data-key="roll" data-act="oroll"' + (canAct && left > 0 && !st.gameOver && !spin.active ? '' : ' disabled') + '>' + esc(rollLabel) + '</button></section>' +
+      sheetsHtml(st, me, mineActive) + '</div>' +
       (st.gameOver ? overHtml(st, me) : '');
   }
 
@@ -428,6 +453,7 @@
       case 'oroll': {
         var p = mine();
         send(p && p.rollsUsed > 0 ? { type: 'roll', held: on.held.slice() } : { type: 'roll' });
+        if (G && G.role === 'player') spinWait();
         return true;
       }
       case 'signin': signIn(); return true;
