@@ -7,6 +7,8 @@
 //   игру нужно перенести на сервер (см. docs/multiplayer.md).
 //
 //   var rooms = PlatformRooms.create({ fetch, getToken, uid, projectId, db, game, now, rng, options })
+//   Режим сервера: createRoom({ ..., owner: { uid, name, avatar, chips } }) — стол ведёт программа на сервере (server/), создатель — обычный игрок со своим uid;
+//   «создатель» (owner) один: он начинает игру (действие start) и закрывает стол (close); если он уходит, роль переходит дальше.
 //   rooms.createRoom({ size, fillBots, name, avatar, chips }) → хост: { code, host }
 //   rooms.joinRoom(code, { name, avatar, chips })              → игрок
 //   rooms.listRooms()                                          → открытые комнаты в ожидании: [{ code, size, players, hostName, bots }]
@@ -92,7 +94,11 @@
       opts = opts || {};
       var size = Math.max(2, Math.min(game.CONFIG.maxSeats, Math.floor(opts.size) || 2));
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false;
-      var members = [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
+      var serverMode = !!opts.owner;       // стол ведёт сервер: создатель — обычный игрок, а не хост
+      var ownerUid = serverMode ? String(opts.owner.uid) : env.uid;
+      var members = serverMode
+        ? [{ uid: ownerUid, name: String(opts.owner.name || '').slice(0, 20), avatar: Number(opts.owner.avatar) || 0, chips: Math.max(0, Math.floor(Number(opts.owner.chips) || 0)), seat: 0 }]
+        : [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
       var fillBots = opts.fillBots !== false;
       var isPrivate = !!opts.private;      // закрытый стол: не показывается в списке, зайти можно только по коду или ссылке
       var chat = Chat ? Chat.createLog() : null, chatLimit = Chat ? Chat.createLimiter() : null;
@@ -111,19 +117,29 @@
       var em = emitter();
 
       function meta() {
-        return JSON.stringify({ v: 1, game: 'blackjack', size: size, fillBots: fillBots, round: full ? full.round : 0,
+        return JSON.stringify({ v: 1, game: 'blackjack', size: size, owner: ownerUid, fillBots: fillBots, round: full ? full.round : 0,
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
       function touchReady() { readyAt = members.length >= 2 ? now() : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
+        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', fillBots: fillBots, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
         return f;
       }
       // Таймеры ожидающих мест: сколько осталось до вопроса (stage idle), до автоматического хода (asking, extended)
+      // Создатель ушёл: роль переходит следующему игроку, который ещё за столом
+      function passOwner(leavingUid) {
+        if (!serverMode || ownerUid !== leavingUid) return;
+        var next = members.filter(function (x) {
+          if (x.uid === leavingUid) return false;
+          return status === 'lobby' || !full || x.seat === null || (full.seats[x.seat] && full.seats[x.seat].active);
+        })[0];
+        ownerUid = next ? next.uid : null;
+        if (next) sys('owner', next.name);
+      }
       function timersNow() {
         var t = now(), out = [];
         Object.keys(idle).forEach(function (seat) {
@@ -184,11 +200,16 @@
         }
         if (!m) return;
         if (payload.type === 'chat') { addChat(m, payload.text, payload.cid); return; }
+        if (serverMode && uid === ownerUid) {            // действия создателя стола (сервер проверяет, что пишет именно он)
+          if (payload.type === 'start') { start(); return; }
+          if (payload.type === 'close') { close(); return; }
+        }
         if (payload.type === 'leave') {
           strikes[uid] = 0; sys('leave', m.name);
           if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (m.seat !== null) { apply({ type: 'leave', seat: m.seat }); members = members.filter(function (x) { return x.uid !== uid; }); /* место освободится после раздачи */ }
           else { members = members.filter(function (x) { return x.uid !== uid; }); pendingJoins = pendingJoins.filter(function (x) { return x !== uid; }); dirty = true; }
+          passOwner(uid);
           return;
         }
         if (payload.type === 'here') {           // «Да, я играю»: после вопроса даём ещё extendMs
@@ -238,7 +259,7 @@
           if (t - wait.since >= cfg.nextDelayMs) {
             // освободившиеся места закрываем, у игроков, которые ушли, убираем запись
             var seated = {};
-            if (apply({ type: 'next', seat: firstActive(full) })) { wait = { key: '', since: t }; full.seats.forEach(function (s) { if (s.active) seated[s.id] = true; }); members.forEach(function (x) { if (x.seat !== null && !seated[x.uid]) { x.seat = null; } }); members = members.filter(function (x) { return x.seat !== null || pendingJoins.indexOf(x.uid) >= 0 || x.uid === env.uid; }); }
+            if (apply({ type: 'next', seat: firstActive(full) })) { wait = { key: '', since: t }; full.seats.forEach(function (s) { if (s.active) seated[s.id] = true; }); members.forEach(function (x) { if (x.seat !== null && !seated[x.uid]) { x.seat = null; } }); members = members.filter(function (x) { return x.seat !== null || pendingJoins.indexOf(x.uid) >= 0 || (!serverMode && x.uid === env.uid); }); }
           }
           return;
         }
@@ -255,7 +276,7 @@
             var mem = memberBySeat(seat);
             delete idle[seat]; dirty = true;
             apply({ type: 'timeout', seat: seat });
-            if (mem) { strikes[mem.uid] = (strikes[mem.uid] || 0) + 1; if (strikes[mem.uid] >= cfg.maxStrikes) { sys('out', mem.name); apply({ type: 'leave', seat: seat }); } }
+            if (mem) { strikes[mem.uid] = (strikes[mem.uid] || 0) + 1; if (strikes[mem.uid] >= cfg.maxStrikes) { sys('out', mem.name); apply({ type: 'leave', seat: seat }); passOwner(mem.uid); } }
           }
         });
         Object.keys(idle).forEach(function (seat) { if (!seen[seat]) { delete idle[seat]; dirty = true; } });
@@ -306,7 +327,7 @@
           });
         }
         return tryCreate().then(function () {
-          return { code: code, host: { code: code, role: 'host', start: start, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish,
+          return { code: code, host: { code: code, role: 'host', isEmpty: function () { return !members.length; }, owner: function () { return ownerUid; }, start: start, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish,
             setBots: function (on) { fillBots = !!on; dirty = true; } } };
         });
       })();
@@ -322,7 +343,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var st = null; if (d.state) { try { st = JSON.parse(d.state); } catch (e) { st = null; } }
         var chatList = []; try { var cl = d.chat ? JSON.parse(d.chat) : []; chatList = Array.isArray(cl) ? cl : []; } catch (e) { chatList = []; }
-        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, chat: chatList, private: d.private === true, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), startIn: typeof d.startIn === 'number' ? d.startIn : -1, receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+        return { code: code, role: 'player', status: d.status, size: d.size, fillBots: m.fillBots !== false, chat: chatList, private: d.private === true, owner: m.owner || null, rev: d.rev, members: m.members || [], state: st, timers: parseTimers(d.timers), startIn: typeof d.startIn === 'number' ? d.startIn : -1, receivedAt: now(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

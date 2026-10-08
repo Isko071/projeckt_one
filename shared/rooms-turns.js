@@ -6,6 +6,8 @@
 //
 //   var rooms = PlatformTurnRooms.create({ fetch, getToken, uid, projectId, db, game, gameId, now, rng, options })
 //   Начало игры: хост может начать, когда за столом 2 игрока и больше и прошло startDelayMs (20 с) после последнего входа или выхода (чтобы успели зайти остальные). Само игра не начинается.
+//   Режим сервера: createRoom({ ..., owner: { uid, name, avatar } }) — стол ведёт программа на сервере (server/), создатель — обычный игрок со своим uid;
+//   «создатель» (owner) один: он начинает игру (действие start), предлагает новую (rematch), закрывает стол (close); если он уходит, роль переходит дальше.
 //   rooms.createRoom({ size, name, avatar, mode }) → { code, host };  rooms.joinRoom(code, { name, avatar }) → игрок;  rooms.listRooms()
 //   Контроллер: poll(), send(action), leave(), stop(), onChange(fn), getView(); у хоста ещё start(), tick(), close()
 //   Игра (game): CONFIG { minSeats, maxSeats }, PLAYER_ACTIONS, init(seats, options, rng), reduce(state, action, rng), view(state),
@@ -88,7 +90,11 @@
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
       var isPrivate = !!opts.private;      // закрытый стол: не показывается в списке, зайти можно только по коду или ссылке
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
-      var members = [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
+      var serverMode = !!opts.owner;       // стол ведёт сервер: создатель — обычный игрок, а не хост
+      var ownerUid = serverMode ? String(opts.owner.uid) : env.uid;
+      var members = serverMode
+        ? [{ uid: ownerUid, name: String(opts.owner.name || '').slice(0, 20), avatar: Number(opts.owner.avatar) || 0, seat: 0 }]
+        : [{ uid: env.uid, name: String(opts.name || '').slice(0, 20), avatar: Number(opts.avatar) || 0, seat: 0 }];
       var chat = Chat ? Chat.createLog() : null, chatLimit = Chat ? Chat.createLimiter() : null;
       function sys(code, name) { if (chat) { chat.add({ kind: 'sys', code: code, name: String(name || ''), ts: now() }); dirty = true; } }
       function addChat(m, text, cid) {   // сообщение игрока: очистка, ограничение частоты, журнал последних 20
@@ -103,6 +109,16 @@
       var processed = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking', until }
       var em = emitter();
 
+      // Создатель ушёл: роль переходит следующему игроку (в игре — тому, кто ещё за столом)
+      function passOwner(leavingUid) {
+        if (!serverMode || ownerUid !== leavingUid) return;
+        var next = members.filter(function (x) {
+          if (x.uid === leavingUid) return false;
+          return status === 'lobby' || !full || (full.players[x.seat] && full.players[x.seat].active);
+        })[0];
+        ownerUid = next ? next.uid : null;
+        if (next) sys('owner', next.name);
+      }
       function timersNow() {
         var t = now(), out = [];
         Object.keys(idle).forEach(function (seat) {
@@ -114,8 +130,8 @@
       function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0].name, mode: mode, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(),
-          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, members: members.map(publicMember) }) };
+        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(),
+          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, owner: ownerUid, members: members.map(publicMember) }) };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
@@ -142,7 +158,7 @@
         if (status !== 'playing' || !full || !full.gameOver) return false;
         var alive = {};
         full.players.forEach(function (p) { if (p.active) alive[p.id] = true; });
-        members = members.filter(function (m) { return m.uid === env.uid || alive[m.uid]; });
+        members = members.filter(function (m) { return (!serverMode && m.uid === env.uid) || alive[m.uid]; });
         members.forEach(function (m, i) { m.seat = i; });
         full = null; status = 'lobby'; idle = {};
         readyAt = members.length >= game.CONFIG.minSeats ? now() - cfg.startDelayMs : 0;   // те же игроки: ждать 20 секунд не нужно
@@ -177,10 +193,16 @@
         }
         if (!m) return;
         if (payload.type === 'chat') { addChat(m, payload.text, payload.cid); return; }
+        if (serverMode && uid === ownerUid) {            // действия создателя стола (сервер проверяет, что пишет именно он)
+          if (payload.type === 'start') { start(); return; }
+          if (payload.type === 'rematch') { doRematch(); return; }
+          if (payload.type === 'close') { close(); return; }
+        }
         if (payload.type === 'leave') {
           sys('leave', m.name);
           if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
+          passOwner(uid);
           return;
         }
         if (payload.type === 'again') { doRematch(); return; }     // любой игрок может предложить новую игру после конца партии
@@ -203,7 +225,7 @@
           var key = game.progressKey(full, seat), e = idle[seat];
           if (!e || e.key !== key) { idle[seat] = { key: key, since: t, stage: 'idle', until: 0 }; dirty = true; return; }
           if (e.stage === 'idle' && t - e.since >= cfg.idleMs) { e.stage = 'asking'; e.until = t + cfg.askMs; dirty = true; return; }
-          if (e.stage === 'asking' && t >= e.until) { delete idle[seat]; dirty = true; var gone = members.filter(function (x) { return x.seat === seat; })[0]; sys('out', gone && gone.name); apply({ type: 'leave', seat: seat }); }
+          if (e.stage === 'asking' && t >= e.until) { delete idle[seat]; dirty = true; var gone = members.filter(function (x) { return x.seat === seat; })[0]; sys('out', gone && gone.name); apply({ type: 'leave', seat: seat }); if (gone) passOwner(gone.uid); }
         });
         Object.keys(idle).forEach(function (seat) { if (!seen[seat]) { delete idle[seat]; dirty = true; } });
       }
@@ -245,7 +267,7 @@
         });
       }
       return tryCreate().then(function () {
-        return { code: code, host: { code: code, role: 'host', start: start, rematch: rematch, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish } };
+        return { code: code, host: { code: code, role: 'host', start: start, rematch: rematch, isEmpty: function () { return !members.length; }, owner: function () { return ownerUid; }, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish } };
       });
     }
 
@@ -259,7 +281,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
         return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
-          private: d.private === true, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+          private: d.private === true, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

@@ -77,6 +77,7 @@ root.LOCALES.ru = {
   'chat.sys.join': '{name} зашёл(а)',
   'chat.sys.leave': '{name} вышел(а)',
   'chat.sys.start': 'Игра началась',
+  'chat.sys.owner': '{name} теперь создатель стола',
   'chat.sys.again': 'Новая игра: ждём начала',
   'chat.sys.out': '{name} выбыл(а) из-за стола',
   'wallet.name': 'Аконы',
