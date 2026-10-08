@@ -51,7 +51,11 @@
       var cur = st.players[st.current];
       if (!cur || !cur.active || cur.done) st.current = nextActive(st, Math.max(0, st.current));
     } else if (act.every(function (i) { return st.players[i].done || Y.isPlayerDone(st.players[i]); })) {
-      act.forEach(function (i) { st.players[i].done = false; });          // все записали очки — следующий раунд
+      // все записали очки: запоминаем, кто куда записал (окно «Раунд завершён»), и начинаем следующий раунд
+      var rows = act.filter(function (i) { return st.players[i].done && st.players[i].last; }).map(function (i) { return { seat: i, cat: st.players[i].last.cat, pts: st.players[i].last.pts }; });
+      st.recapId = (st.recapId || 0) + 1;
+      st.recap = { id: st.recapId, round: Math.max.apply(null, act.map(function (i) { return filled(st.players[i]); })), rows: rows };
+      act.forEach(function (i) { st.players[i].done = false; });
     }
     var least = Math.min.apply(null, act.map(function (i) { return filled(st.players[i]); }));
     st.round = Math.min(Y.CATEGORIES.length, (st.mode === 'turns' && st.current >= 0 ? filled(st.players[st.current]) : least) + 1);
@@ -78,6 +82,7 @@
     var pts = Y.possibleScore(p, cat, p.dice);
     if (Y.earnsYahtzeeBonus(p, p.dice)) p.yahtzeeBonuses++;
     p.scores[cat] = pts;
+    p.last = { cat: cat, pts: pts };           // куда игрок записал очки в этом раунде (для окна итогов раунда)
     endTurn(st, seat);
     return true;
   }

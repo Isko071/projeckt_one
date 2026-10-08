@@ -341,3 +341,7 @@ a.theme-btn { color: var(--ink); }
 .o-ask span { color: var(--muted); }
 .o-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .o-bar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+
+/* Итоги раунда в одновременном режиме */
+.recap-to { text-align: right; font-size: 15px; }
+.recap-to b { font-size: 22px; margin-left: 6px; }

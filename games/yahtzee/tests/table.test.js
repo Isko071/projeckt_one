@@ -82,6 +82,35 @@ test('бросок с маской фиксации: кубики из маск�
   assert.equal(st.players[0].rollsUsed, 3);
 });
 
+test('итоги раунда: в одновременном режиме, когда записали все, остаётся список «кто куда записал»', () => {
+  let st = T.init(seats(3), { mode: 'sync' });
+  assert.equal(st.recap, undefined);
+  st = play(st, 0, 'chance', dice(6));
+  st = play(st, 1, 'ones', dice(1));
+  assert.equal(st.recap, undefined, 'пока записали не все, итогов нет');
+  st = play(st, 2, 'twos', dice(2));
+  assert.equal(st.recap.id, 1);
+  assert.equal(st.recap.round, 1);
+  assert.deepEqual(plain(st.recap.rows), [{ seat: 0, cat: 'chance', pts: 30 }, { seat: 1, cat: 'ones', pts: 5 }, { seat: 2, cat: 'twos', pts: 10 }]);
+  st = play(st, 2, 'threes', dice(3));
+  st = play(st, 0, 'fours', dice(4));
+  st = play(st, 1, 'fives', dice(5));
+  assert.equal(st.recap.id, 2);
+  assert.equal(st.recap.round, 2);
+  assert.deepEqual(plain(st.recap.rows.map((r) => r.cat)), ['fours', 'fives', 'threes']);
+});
+
+test('итоги раунда: вышедший игрок в итоги не попадает; в режиме по очереди итогов нет', () => {
+  let st = T.init(seats(3), { mode: 'sync' });
+  st = play(st, 0, 'ones', dice(1));
+  st = play(st, 1, 'ones', dice(1));
+  st = run(st, { type: 'leave', seat: 2 });
+  assert.deepEqual(plain(st.recap.rows.map((r) => r.seat)), [0, 1]);
+  let tr = T.init(seats(2), { mode: 'turns' });
+  tr = play(tr, 0, 'ones', dice(1)); tr = play(tr, 1, 'ones', dice(1));
+  assert.equal(tr.recap, undefined);
+});
+
 test('ятзи и жокер работают у каждого игрока по своей таблице', () => {
   let st = T.init(seats(2), { mode: 'sync' });
   st = play(st, 0, 'yahtzee', dice(4));

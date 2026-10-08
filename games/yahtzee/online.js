@@ -77,6 +77,12 @@
           G.lastRolls = p.rollsUsed;
         }
         if (v.state.gameOver && !G.counted) { G.counted = true; app.modal = null; }
+        // одновременный режим: все сделали ходы, показываем, кто куда записал
+        var rc = v.state.recap;
+        if (rc && rc.id > (G.recapSeen || 0)) {
+          G.recapSeen = rc.id; G.recap = rc;
+          if (!v.state.gameOver && !app.modal) app.modal = 'recap';
+        }
       }
     }
     render();
@@ -425,7 +431,25 @@
     }
     return '';
   }
+  function recapHtml() {
+    var st = G && G.view && G.view.state, rc = G && G.recap;
+    if (!st || !rc) return '';
+    var me = G.view.seat;
+    var rows = rc.rows.map(function (r) {
+      var q = st.players[r.seat];
+      return '<div class="result' + (r.seat === me ? ' win' : '') + '"><span>' + esc(q ? q.name : '') + (r.seat === me ? ' (' + esc(tr('online.lobby.you')) + ')' : '') + '</span>' +
+        '<span class="recap-to">' + esc(label(r.cat)) + ' <b>' + r.pts + '</b></span></div>';
+    }).join('');
+    return '<div class="overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('online.recap.aria')) + '"><div class="dialog">' +
+      '<div><small>' + esc(tr('online.recap.sub')) + '</small><h2>' + esc(tr('online.recap.title', { n: rc.round })) + '</h2></div>' +
+      '<div class="results">' + rows + '</div>' +
+      '<div class="dialog-actions"><button class="btn-primary" data-act="close" data-autofocus data-key="recapOk">' + esc(tr('online.recap.ok')) + '</button></div></div></div>';
+  }
   function modalHtml() {
+    // вопрос «Вы ещё играете?» важнее окна итогов раунда
+    var asking = G && on.screen === 'game' && G.view && G.view.state && G.view.seat !== null && !G.view.state.gameOver && timerFor(G.view.seat) && timerFor(G.view.seat).stage === 'asking';
+    if (asking && app.modal === 'recap') return askHtml(G.view.seat);
+    if (app.modal === 'recap') return recapHtml();
     if (app.modal === 'rules') return rulesBlock();
     if (app.modal === 'leaveOnline') {
       var host = G && G.role === 'host';
