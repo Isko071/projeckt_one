@@ -271,3 +271,118 @@ test('фишки сохраняются: случайные партии с сл
     }
   }
 });
+
+// ===== Простой вариант: анте, ставки по желанию, обязательные круги =====
+const SIMPLE = { variant: 'simple', ante: 50, minBet: 100 };
+const dealS = (n, o) => deal(P.init(seats(...Array(n).fill(1000)), Object.assign({}, SIMPLE, o || {}), null));
+
+test('простой: анте вместо блайндов, банк, первым ходит игрок слева от кнопки', () => {
+  const st = dealS(3);
+  assert.equal(st.variant, 'simple');
+  assert.deepEqual(plain(chips(st)), [950, 950, 950]);
+  assert.equal(st.pot, 150);
+  assert.deepEqual(plain(st.seats.map((s) => s.bet)), [0, 0, 0], 'анте не считается ставкой круга');
+  assert.equal(st.currentBet, 0);
+  assert.equal(st.button, 0);
+  assert.equal(st.current, 1);
+});
+
+test('простой: до флопа обязательный круг: чек нельзя, первый обязан поставить минимум', () => {
+  let st = dealS(3);
+  assert.equal(bad(st, 'check', 1), 'must-bet');
+  assert.equal(bad(st, 'raise', 1, { amount: 60 }), 'raise-too-small');
+  assert.equal(act(st, 'timeout', 1).seats[1].folded, true, 'тайм-аут сбрасывает вместо чека');
+  const la = P.legalActions(st, 1);
+  assert.equal(la.check, false);
+  assert.equal(la.mustBet, true);
+  assert.deepEqual(plain(la.raise), { min: 100, max: 950 });
+  st = act(st, 'raise', 1, { amount: 100 });
+  st = act(st, 'call', 2);
+  st = act(st, 'call', 0);
+  assert.equal(st.phase, 'flop');
+  assert.equal(st.pot, 150 + 300);
+});
+
+test('простой: на флопе ставки по желанию — все могут просто чекать, карта открывается, когда все походили', () => {
+  let st = dealS(3);
+  st = act(st, 'raise', 1, { amount: 100 }); st = act(st, 'call', 2); st = act(st, 'call', 0);
+  assert.equal(st.board.length, 3);
+  assert.equal(P.legalActions(st, st.current).check, true);
+  st = act(st, 'check', st.current); st = act(st, 'check', st.current);
+  assert.equal(st.phase, 'flop', 'пока не все походили, тёрн не открыт');
+  st = act(st, 'check', st.current);
+  assert.equal(st.phase, 'turn');
+  assert.equal(st.board.length, 4);
+  assert.equal(P.legalActions(st, st.current).mustBet, true, 'круг перед ривером снова обязательный');
+  assert.equal(bad(st, 'check', st.current), 'must-bet');
+});
+
+test('простой: на ривере чек разрешён; полная партия до вскрытия', () => {
+  let st = dealS(2);
+  st = rig(st, { 0: 'AS AH', 1: 'KD KC' }, '2C 7D 9H JS 3C');
+  st = act(st, 'raise', st.current, { amount: 100 }); st = act(st, 'call', st.current);     // префлоп (обязательный)
+  st = act(st, 'check', st.current); st = act(st, 'check', st.current);                      // флоп
+  st = act(st, 'raise', st.current, { amount: 100 }); st = act(st, 'call', st.current);     // тёрн (обязательный)
+  assert.equal(st.phase, 'river');
+  st = act(st, 'check', st.current); st = act(st, 'check', st.current);                      // ривер
+  assert.equal(st.phase, 'settled');
+  assert.equal(st.pot, 100 + 200 + 200);
+  assert.deepEqual(plain(chips(st)), [1000 + 250, 1000 - 250]);
+});
+
+test('простой: сброс в обязательном круге, остался один игрок — банк без вскрытия', () => {
+  let st = dealS(3);
+  st = act(st, 'raise', 1, { amount: 200 });
+  st = act(st, 'fold', 2); st = act(st, 'fold', 0);
+  assert.equal(st.phase, 'settled');
+  assert.deepEqual(plain(chips(st)), [950, 1100, 950]);              // победитель забирает анте двоих (100) и свою ставку не теряет
+  assert.equal(chips(st).reduce((a, b) => a + b), 3000);
+});
+
+test('простой: нехватка фишек на ставку — олл-ин; анте больше стека — олл-ин от анте', () => {
+  let st = P.init(seats(30, 1000, 1000), SIMPLE, null);
+  st = deal(st);
+  assert.equal(st.seats[0].allIn, true);
+  assert.equal(st.seats[0].total, 30);
+  assert.equal(st.pot, 130);
+  let s2 = P.init(seats(1000, 80, 1000), SIMPLE, null);
+  s2 = deal(s2);
+  s2 = act(s2, 'allin', s2.current);                                   // 30 фишек после анте: меньше минимальной ставки — допустимо
+  assert.equal(s2.seats[1].chips, 0);
+});
+
+test('простой: настройки стола: анте и минимальная ставка задаются при создании, обязательные улицы можно изменить', () => {
+  const a = P.init(seats(1000, 1000), { variant: 'simple', ante: 25, minBet: 50 }, null);
+  assert.deepEqual(plain([a.ante, a.minBet, a.mandatory]), [25, 50, ['preflop', 'turn']]);
+  const b = P.init(seats(1000, 1000), { variant: 'simple', ante: 25, mandatory: ['preflop'] }, null);
+  assert.equal(b.minBet, 50, 'по умолчанию минимальная ставка вдвое больше анте');
+  assert.deepEqual(plain(b.mandatory), ['preflop']);
+  const c = P.init(seats(1000, 1000), {}, null);
+  assert.equal(c.variant, 'classic');
+  assert.deepEqual(plain(c.mandatory), []);
+});
+
+test('простой: фишки сохраняются в случайных партиях', () => {
+  const rng = seededRng(11);
+  for (let game = 0; game < 120; game++) {
+    const n = 2 + Math.floor(rng() * 5);
+    const stacks = Array.from({ length: n }, () => 50 + Math.floor(rng() * 20) * 100);
+    const sum = stacks.reduce((a, b) => a + b);
+    let st = P.init(seats(...stacks), Object.assign({ tableSize: n }, SIMPLE), null);
+    for (let hand = 0; hand < 12 && P.canDeal(st); hand++) {
+      st = act(st, st.phase === 'waiting' ? 'deal' : 'next', 0);
+      for (let step = 0; step < 200 && st.phase !== 'settled'; step++) {
+        const seat = st.current, la = P.legalActions(st, seat);
+        assert.ok(la, 'есть допустимые действия');
+        const choices = ['fold', 'call', 'check', 'allin', 'raise'].filter((k) => (k === 'call' ? la.call > 0 : k === 'check' ? la.check : k === 'allin' ? la.allin > 0 : k === 'raise' ? la.raise : true));
+        const pick = choices[Math.floor(rng() * choices.length)];
+        const extra = pick === 'raise' ? { amount: la.raise.min + Math.floor(rng() * (la.raise.max - la.raise.min + 1)) } : {};
+        if (la.mustBet) assert.ok(pick !== 'check', 'в обязательном круге чека нет');
+        st = act(st, pick, seat, extra);
+      }
+      assert.equal(st.phase, 'settled');
+      assert.equal(st.seats.reduce((a, s) => a + s.chips, 0), sum);
+      assert.equal(st.seats.reduce((a, s) => a + s.net, 0), 0);
+    }
+  }
+});

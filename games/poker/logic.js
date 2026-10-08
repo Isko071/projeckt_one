@@ -14,6 +14,13 @@
 //    лишняя фишка достаётся ближайшему слева от кнопки; ставка, которую никто не уравнял, возвращается.
 //  • Если все сбросили, кроме одного, он забирает банк без вскрытия.
 //
+// Два варианта (options.variant):
+//  • 'classic' — холдем с блайндами, как описано выше;
+//  • 'simple'  — «простой»: вместо блайндов у каждого начальная ставка (анте, options.ante), ставки по желанию (можно чекать),
+//    минимальная ставка options.minBet. Улицы из options.mandatory (по умолчанию префлоп и тёрн, круг перед ривером) обязательные:
+//    в них чекать нельзя, первый игрок обязан поставить не меньше минимальной ставки, остальные уравнивают, повышают или сбрасывают.
+//    Карта открывается, когда все походили. Кнопка двигается по кругу, первым ходит игрок слева от неё.
+//
 // Действия (поле seat — номер места):
 //   { type: 'deal', seat }            начать раздачу (нужно минимум двое с фишками); то же — { type: 'next', seat } после конца раздачи
 //   { type: 'fold' | 'check' | 'call' | 'allin', seat }
@@ -110,7 +117,12 @@
     options = options || {};
     var size = Math.max(CONFIG.minSeats, Math.min(CONFIG.maxSeats, Math.floor(options.tableSize) || seats.length || CONFIG.minSeats));
     var bb = Math.max(2, Math.floor(options.bigBlind) || CONFIG.bigBlind), sb = Math.max(1, Math.floor(options.smallBlind) || Math.floor(bb / 2));
-    var st = { round: 0, phase: 'waiting', smallBlind: sb, bigBlind: bb, button: -1, current: -1, currentBet: 0, minRaise: bb, board: [], deck: [], pot: 0, pots: [], result: null, seats: [] };
+    var simple = options.variant === 'simple';
+    var ante = simple ? Math.max(1, Math.floor(options.ante) || 50) : 0;
+    var minBet = simple ? Math.max(1, Math.floor(options.minBet) || ante * 2) : bb;
+    var mandatory = simple ? (Array.isArray(options.mandatory) ? options.mandatory.filter(function (x) { return STREETS.indexOf(x) >= 0; }) : ['preflop', 'turn']) : [];
+    var st = { round: 0, variant: simple ? 'simple' : 'classic', phase: 'waiting', smallBlind: sb, bigBlind: bb, ante: ante, minBet: minBet, mandatory: mandatory,
+      button: -1, current: -1, currentBet: 0, minRaise: minBet, board: [], deck: [], pot: 0, pots: [], result: null, seats: [] };
     for (var i = 0; i < size; i++) st.seats.push(blankSeat(i));
     seats.slice(0, size).forEach(function (s, i) { occupy(st.seats[i], s); });
     return st;
@@ -144,15 +156,27 @@
       s.net = 0; s.shown = false; s.hand = null; s.last = null;
     });
     st.button = nextSeat(st, st.button, function (s) { return s.inHand; });
-    var headsUp = st.seats.filter(function (s) { return s.inHand; }).length === 2;
-    var sbSeat = headsUp ? st.button : nextSeat(st, st.button, function (s) { return s.inHand; });
-    var bbSeat = nextSeat(st, sbSeat, function (s) { return s.inHand; });
-    post(st.seats[sbSeat], st.smallBlind); post(st.seats[bbSeat], st.bigBlind);
-    st.currentBet = Math.max(st.seats[sbSeat].bet, st.seats[bbSeat].bet);
-    st.minRaise = st.bigBlind;
+    var lastPosted;
+    if (st.variant === 'simple') {
+      st.seats.forEach(function (s) {                    // анте: общий вклад в банк, на ставку круга не влияет
+        if (!s.inHand) return;
+        var pay = Math.min(s.chips, st.ante);
+        s.chips -= pay; s.total += pay;
+        if (s.chips === 0) s.allIn = true;
+      });
+      st.currentBet = 0; lastPosted = st.button;
+    } else {
+      var headsUp = st.seats.filter(function (s) { return s.inHand; }).length === 2;
+      var sbSeat = headsUp ? st.button : nextSeat(st, st.button, function (s) { return s.inHand; });
+      var bbSeat = nextSeat(st, sbSeat, function (s) { return s.inHand; });
+      post(st.seats[sbSeat], st.smallBlind); post(st.seats[bbSeat], st.bigBlind);
+      st.currentBet = Math.max(st.seats[sbSeat].bet, st.seats[bbSeat].bet);
+      lastPosted = bbSeat;
+    }
+    st.minRaise = st.minBet;
     st.seats.forEach(function (s) { if (s.inHand) s.cards = [st.deck.pop(), st.deck.pop()]; });
     st.phase = 'preflop';
-    st.current = nextSeat(st, bbSeat, function (s) { return s.inHand && !s.folded && !s.allIn; });
+    st.current = nextSeat(st, lastPosted, function (s) { return s.inHand && !s.folded && !s.allIn; });
     st.pot = potOf(st);
     progress(st);
   }
@@ -183,7 +207,7 @@
 
   function nextStreet(st) {
     st.seats.forEach(function (s) { s.bet = 0; s.acted = false; s.locked = false; });
-    st.currentBet = 0; st.minRaise = st.bigBlind;
+    st.currentBet = 0; st.minRaise = st.minBet;
     var idx = STREETS.indexOf(st.phase) + 1;
     st.phase = STREETS[idx];
     var n = idx === 1 ? 3 : 1;
@@ -242,11 +266,14 @@
   function legalActions(st, seat) {
     var s = st.seats[seat];
     if (!s || st.current !== seat || !canActNow(s) || (st.phase === 'waiting' || st.phase === 'settled')) return null;
-    var toCall = Math.max(0, st.currentBet - s.bet), maxTo = s.bet + s.chips;
-    var minTo = st.currentBet + st.minRaise, a = { fold: true, check: toCall === 0, call: toCall > 0 ? Math.min(toCall, s.chips) : 0, raise: null, allin: s.chips > 0 && (!s.locked || maxTo <= st.currentBet) ? maxTo : 0 };
+    var toCall = Math.max(0, st.currentBet - s.bet), maxTo = s.bet + s.chips, must = mustBet(st);
+    var minTo = st.currentBet + st.minRaise, a = { fold: true, check: toCall === 0 && !must, mustBet: must && toCall === 0, call: toCall > 0 ? Math.min(toCall, s.chips) : 0, raise: null, allin: s.chips > 0 && (!s.locked || maxTo <= st.currentBet) ? maxTo : 0 };
     if (!s.locked && maxTo > st.currentBet) a.raise = { min: Math.min(minTo, maxTo), max: maxTo };
     return a;
   }
+
+  // Обязательный круг (простой вариант): чекать нельзя
+  function mustBet(st) { return st.mandatory.indexOf(st.phase) >= 0; }
 
   function applyRaise(st, s, to) {
     var inc = to - st.currentBet, full = inc >= st.minRaise;
@@ -299,11 +326,12 @@
 
     if (between) return bad('no-hand');
     if (st.current !== seat) return bad('not-your-turn');
-    if (t === 'timeout') t = st.currentBet - s.bet === 0 ? 'check' : 'fold';
+    if (t === 'timeout') t = st.currentBet - s.bet === 0 && !mustBet(st) ? 'check' : 'fold';
     var toCall = st.currentBet - s.bet;
     if (t === 'fold') fold(st, s);
     else if (t === 'check') {
       if (toCall !== 0) return bad('cannot-check');
+      if (mustBet(st)) return bad('must-bet');
       s.acted = true; s.last = 'check';
     } else if (t === 'call') {
       if (toCall <= 0) return bad('nothing-to-call');
