@@ -417,7 +417,7 @@ appEl.addEventListener('click', function (e) {
   else if (act === 'theme') toggleTheme();
   else if (act === 'close') { closeModal(); return; }
   else if (act === 'restart') startGame();
-  else if (btn.hasAttribute('data-mode')) app.mode = btn.getAttribute('data-mode');
+  else if (btn.hasAttribute('data-mode')) { app.mode = btn.getAttribute('data-mode'); if (app.mode === 'online' && window.GAME_SERVER_URL && window.PlatformRoomsWS) window.PlatformRoomsWS.warm(window.GAME_SERVER_URL); }
   else if (btn.hasAttribute('data-level')) app.level = btn.getAttribute('data-level');
   else if (btn.id === 'play' && app.mode === 'online' && window.YahtzeeOnlineUI) { window.YahtzeeOnlineUI.enter(); return; }
   else if (btn.id === 'play' || btn.id === 'again') startGame();

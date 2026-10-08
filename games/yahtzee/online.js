@@ -7,7 +7,7 @@
     screen: 'login', rooms: null, size: 4, mode: 'sync', private: false, code: '', busy: false, loginError: null, tableError: null, codeError: null,
     copied: false, banner: null, pending: false, held: [false, false, false, false, false], heldKey: '', notice: null, noticeUntil: 0, openSheets: {}
   };
-  var G = null, roomsApi = null, hostTimer = null, pollTimer = null, roomsTimer = null;
+  var G = null, roomsApi = null, wsApi = null, hostTimer = null, pollTimer = null, roomsTimer = null;
 
   function now() { return Date.now(); }
   // Чат стола (shared/chat-ui.js)
@@ -28,9 +28,30 @@
     [hostTimer, pollTimer, roomsTimer].forEach(function (t) { if (t) clearInterval(t); });
     hostTimer = pollTimer = roomsTimer = null;
   }
+  // Создатель стола: при игре через сервер это игрок, на которого указывает вид стола; без сервера — хост в браузере
+  function isOwner() {
+    if (!G) return false;
+    if (G.role === 'host') return true;
+    var u = Cloud.getState().user;
+    return !!(G.ctrl && G.ctrl.server && G.view && u && G.view.owner === u.uid);
+  }
+  function serverStatus(s) {
+    if (!G && !on.busy) return;
+    if (s === 'open') { if (on.banner === 'server') on.banner = 'back'; } else on.banner = 'server';
+    if (isOn()) render();
+  }
   function getRooms() {
     var st = Cloud.getState();
     if (!st.user) return null;
+    if (window.GAME_SERVER_URL && window.PlatformRoomsWS) {
+      if (!wsApi || wsApi.uid !== st.user.uid) {
+        if (wsApi) wsApi.shutdown();
+        wsApi = window.PlatformRoomsWS.create({ url: window.GAME_SERVER_URL, getToken: function () { return Cloud.getToken(); }, uid: st.user.uid, engine: window.PlatformTurnRooms, engineEnv: { game: T, gameId: 'yahtzee' }, game: 'yahtzee' });
+        wsApi.uid = st.user.uid; wsApi.onStatus(serverStatus);
+      }
+      roomsApi = wsApi;
+      return roomsApi;
+    }
     roomsApi = window.PlatformTurnRooms.create({
       fetch: function (u, i) { return window.fetch(u, i); }, getToken: function () { return Cloud.getToken(); }, uid: st.user.uid,
       projectId: window.FIREBASE_CONFIG.projectId, db: window.FIREBASE_DATABASE, game: T, gameId: 'yahtzee'
@@ -74,7 +95,7 @@
     if (v.closed || v.hostGone) { stopTimers(); chat.reset(); on.closedReason = v.hostGone ? 'hostGone' : 'closed'; G = null; on.screen = 'closed'; app.modal = null; render(); return; }
     if (v.status === 'lobby' && on.screen === 'game') { on.screen = 'lobby'; on.banner = null; app.modal = null; G.counted = false; G.recapSeen = (v.state && v.state.recap && v.state.recap.id) || G.recapSeen; G.lastRolls = 0; on.heldKey = ''; }
     if (v.status === 'playing' && v.state) {
-      if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); on.banner = null; on.held = [false, false, false, false, false]; if (G.role === 'host') notify(tr('online.creatorNote'), 6000); }
+      if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); on.banner = null; on.held = [false, false, false, false, false]; if (isOwner() && !G.ctrl.server) notify(tr('online.creatorNote'), 6000); }
       var me = v.seat, p = v.state.players[me];
       if (me === null || me === undefined || !p || !p.active) {
         if (!v.state.gameOver && !G.left) { G.left = true; stopTimers(); chat.reset(); if (G.role === 'player') G.ctrl.stop(); G = null; on.screen = 'out'; app.modal = null; }
@@ -108,10 +129,12 @@
       stopTimers();
       var host = res.host, failing = 0;
       chat.reset();
-      G = { role: 'host', ctrl: host, view: host.getView(), code: res.code };
+      G = { role: host.server ? 'player' : 'host', ctrl: host, view: host.getView(), code: res.code };
       chat.update(G.view, 'lobby');
       host.onChange(onView);
-      hostTimer = setInterval(function () {
+      if (host.server) {
+        pollTimer = setInterval(function () { host.poll().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { on.banner = 'offline'; render(); } }); }, 1000);
+      } else hostTimer = setInterval(function () {
         host.tick().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { on.banner = 'offline'; render(); } });
       }, 1000);
       on.busy = false; on.screen = 'lobby'; on.copied = false; on.banner = null; app.modal = null;
@@ -236,7 +259,7 @@
   }
 
   function lobbyHtml() {
-    var v = G && G.view, host = G && G.role === 'host', myUid = Cloud.getState().user && Cloud.getState().user.uid;
+    var v = G && G.view, host = isOwner(), myUid = Cloud.getState().user && Cloud.getState().user.uid;
     var members = v ? v.members : [], size = v ? v.size : on.size, mode = v ? v.mode : on.mode;
     var seats = members.map(function (m) {
       var tags = [];
@@ -257,8 +280,8 @@
       '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
       bannerHtml() +
       (host
-        ? '<div class="o-btns"><button class="btn-play" style="flex:2" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('online.lobby.start')) + '</button><button class="btn-secondary wide" style="flex:1" data-act="closeTable" data-key="closeTable">' + esc(tr('online.lobby.close')) + '</button></div>' +
-          '<div class="o-hint">' + esc(tr(members.length >= T.CONFIG.minSeats ? 'online.lobby.hostHint' : 'online.lobby.needMore')) + '</div>'
+        ? '<div class="o-btns"><button class="btn-play" style="flex:2" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('online.lobby.start')) + '</button><button class="btn-secondary wide" style="flex:1" data-act="closeTable" data-key="closeTable">' + esc(tr(G.ctrl.server ? 'online.lobby.leave' : 'online.lobby.close')) + '</button></div>' +
+          '<div class="o-hint">' + esc(tr(members.length >= T.CONFIG.minSeats ? (G.ctrl.server ? 'online.lobby.serverHint' : 'online.lobby.hostHint') : 'online.lobby.needMore')) + '</div>'
         : '<div class="o-p o-center"><b>' + esc(tr(members.length >= size ? 'online.lobby.full' : 'online.lobby.waitHost')) + '</b></div><button class="btn-secondary wide" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('online.lobby.leave')) + '</button>') +
       '</div>';
   }
@@ -271,6 +294,7 @@
   function bannerHtml() {
     var user = Cloud.getState().user;
     if (G && !user && Cloud.getState().status !== 'unsupported') return '<div class="o-banner bad" role="alert"><span>' + esc(tr('online.banner.relogin')) + '</span><button class="btn-secondary small" data-act="relogin" data-key="relogin">' + esc(tr('online.banner.reloginBtn')) + '</button></div>';
+    if (on.banner === 'server') return '<div class="o-banner" role="status"><span>' + esc(tr('online.banner.server')) + '</span></div>';
     if (on.banner === 'offline') return '<div class="o-banner" role="status"><span>' + esc(tr('online.banner.offline')) + '</span></div>';
     if (on.banner === 'back') return '<div class="o-banner" role="status"><span>' + esc(tr('online.banner.back')) + '</span></div>';
     return '';
@@ -530,7 +554,7 @@
         else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { on.copied = true; render(); }, function () { /* без буфера */ });
         return true;
       }
-      case 'start': if (G && G.role === 'host') G.ctrl.start().then(function () { G.ctrl.tick(); }); return true;
+      case 'start': if (isOwner()) G.ctrl.start().then(function () { G.ctrl.tick(); }); return true;
       case 'closeTable': case 'leaveLobby': leaveGame('tables'); return true;
       case 'here': send({ type: 'here' }); return true;
       case 'exitTable': case 'askLeave': {
@@ -538,7 +562,7 @@
         if (st && st.gameOver) leaveGame('start'); else { app.modal = 'leaveOnline'; render(); }
         return true;
       }
-      case 'newGame': if (G && G.role === 'host') G.ctrl.rematch(); else send({ type: 'again' }); return true;
+      case 'newGame': if (isOwner()) { G.ctrl.rematch(); } else send({ type: 'again' }); return true;
       case 'toMenu': leaveGame('start'); return true;
       case 'confirmLeave': leaveGame('tables'); return true;
     }
