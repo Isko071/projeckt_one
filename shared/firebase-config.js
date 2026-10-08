@@ -9,5 +9,5 @@ root.FIREBASE_CONFIG = {
   messagingSenderId: '830740979850',
   appId: '1:830740979850:web:f0921df69204ef1cc68d73'
 };
-// Имя базы Firestore (создана с собственным именем, не «(default)»)
-root.FIREBASE_DATABASE = 'igroteka-db';
+// Имя базы Firestore: в проекте есть только база «(default)» (базы с именем igroteka-db нет, запросы к ней дают 404)
+root.FIREBASE_DATABASE = '(default)';

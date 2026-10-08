@@ -34,7 +34,7 @@
 
 ## Правила Firestore для комнат
 
-Добавьте к правилам базы `igroteka-db` (рядом с `users/{uid}`):
+Добавьте к правилам базы `(default)` (рядом с `users/{uid}`):
 
 ```
 match /rooms/{code} {
