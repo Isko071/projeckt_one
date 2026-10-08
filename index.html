@@ -6,11 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <title>Игротека</title>
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-<link rel="stylesheet" href="shared/theme.css?v=9">
-<link rel="stylesheet" href="catalog/catalog.css?v=9">
+<link rel="stylesheet" href="shared/theme.css?v=10">
+<link rel="stylesheet" href="catalog/catalog.css?v=10">
 <!-- Хранилище и тема в <head>, чтобы тема применялась до первой отрисовки -->
-<script src="shared/storage.js?v=9"></script>
-<script src="shared/theme.js?v=9"></script>
+<script src="shared/storage.js?v=10"></script>
+<script src="shared/theme.js?v=10"></script>
 </head>
 <body>
 <noscript><p class="noscript" id="noscript">Для работы сайта нужен включённый JavaScript.</p></noscript>
@@ -87,6 +87,17 @@
       <span class="field-label" data-i18n="profile.name"></span>
       <input class="text-input" id="profile-name" name="name" type="text" maxlength="20" autocomplete="nickname">
     </label>
+    <div class="field" id="photo-field" hidden>
+      <span class="field-label" data-i18n="profile.photo"></span>
+      <button class="photo-toggle" id="photo-toggle" type="button" aria-pressed="false">
+        <img id="photo-preview" alt="" width="40" height="40" referrerpolicy="no-referrer">
+        <span data-i18n="profile.photo.use"></span>
+      </button>
+    </div>
+    <div class="field">
+      <span class="field-label" id="emoji-label" data-i18n="profile.emoji"></span>
+      <div class="emojis" id="emojis" role="group" aria-labelledby="emoji-label"></div>
+    </div>
     <div class="field">
       <span class="field-label" id="avatar-label" data-i18n="profile.avatar"></span>
       <div class="avatars" id="avatars" role="group" aria-labelledby="avatar-label"></div>
@@ -126,21 +137,21 @@
   <p class="dialog-note" data-i18n="wallet.note"></p>
 </dialog>
 
-<script src="locales/ru.js?v=9"></script>
-<script src="shared/i18n.js?v=9"></script>
-<script src="shared/profile.js?v=9"></script>
-<script src="shared/wallet.js?v=9"></script>
-<script src="shared/progress.js?v=9"></script>
-<script src="shared/sync-logic.js?v=9"></script>
+<script src="locales/ru.js?v=10"></script>
+<script src="shared/i18n.js?v=10"></script>
+<script src="shared/profile.js?v=10"></script>
+<script src="shared/wallet.js?v=10"></script>
+<script src="shared/progress.js?v=10"></script>
+<script src="shared/sync-logic.js?v=10"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="shared/firebase-config.js?v=9"></script>
-<script src="shared/cloud.js?v=9"></script>
-<script src="games/games.js?v=9"></script>
-<script src="catalog/logic.js?v=9"></script>
-<script src="catalog/catalog.js?v=9"></script>
-<script src="catalog/profile-ui.js?v=9"></script>
-<script src="catalog/wallet-ui.js?v=9"></script>
-<script src="catalog/account-ui.js?v=9"></script>
+<script src="shared/firebase-config.js?v=10"></script>
+<script src="shared/cloud.js?v=10"></script>
+<script src="games/games.js?v=10"></script>
+<script src="catalog/logic.js?v=10"></script>
+<script src="catalog/catalog.js?v=10"></script>
+<script src="catalog/profile-ui.js?v=10"></script>
+<script src="catalog/wallet-ui.js?v=10"></script>
+<script src="catalog/account-ui.js?v=10"></script>
 </body>
 </html>

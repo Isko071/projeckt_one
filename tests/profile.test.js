@@ -101,3 +101,15 @@ test('профиль работает и без словаря (запасное
   const P = load(['shared/storage.js', 'shared/profile.js'], { localStorage: fakeBackend() }).PlatformProfile;
   assert.equal(P.getProfile().name, 'Игрок');
 });
+
+test('профиль: эмодзи только из списка, фото Google только true; пустые значения не сохраняются', () => {
+  const backend = fakeBackend();
+  const P = load(FILES, { localStorage: backend }).PlatformProfile;
+  assert.equal(P.EMOJIS.length, 24);
+  assert.deepEqual(plain(P.saveProfile({ name: 'Аня', avatar: 1, icon: '🦊' })), { name: 'Аня', avatar: 1, icon: '🦊' });
+  assert.deepEqual(plain(P.saveProfile({ name: 'Аня', avatar: 1, google: true })), { name: 'Аня', avatar: 1, icon: '🦊', google: true }, 'частичное сохранение не стирает выбранное');
+  assert.deepEqual(plain(P.saveProfile({ name: 'Аня', avatar: 1, icon: null, google: false })), { name: 'Аня', avatar: 1 }, 'null и false снимают выбор');
+  assert.deepEqual(JSON.parse(backend.data['platform:profile']), { name: 'Аня', avatar: 1 });
+  ['<script>', 'x', 5, {}, '🦊🦊'].forEach((bad) => assert.equal(P.saveProfile({ name: 'Аня', avatar: 1, icon: bad }).icon, undefined, String(bad)));
+  ['yes', 1, 'true'].forEach((bad) => assert.equal(P.saveProfile({ name: 'Аня', avatar: 1, google: bad }).google, undefined, String(bad)));
+});
