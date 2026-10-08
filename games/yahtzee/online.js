@@ -4,7 +4,7 @@
 (function () {
   var Cloud = window.PlatformCloud, T = window.YahtzeeTable, P = window.PlatformProfile;
   var on = {
-    screen: 'login', rooms: null, size: 4, mode: 'sync', code: '', busy: false, loginError: null, tableError: null, codeError: null,
+    screen: 'login', rooms: null, size: 4, mode: 'sync', private: false, code: '', busy: false, loginError: null, tableError: null, codeError: null,
     copied: false, banner: null, pending: false, held: [false, false, false, false, false], heldKey: '', notice: null, noticeUntil: 0, openSheets: {}
   };
   var G = null, roomsApi = null, hostTimer = null, pollTimer = null, roomsTimer = null;
@@ -104,7 +104,7 @@
     if (!api || on.busy) return;
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: on.size, mode: on.mode, name: prof.name, avatar: prof.avatar }).then(function (res) {
+    api.createRoom({ size: on.size, mode: on.mode, private: on.private, name: prof.name, avatar: prof.avatar }).then(function (res) {
       stopTimers();
       var host = res.host, failing = 0;
       chat.reset();
@@ -229,6 +229,7 @@
         ['sync', 'turns'].map(function (m) {
           return '<button class="mode-btn o-mode" data-act="setMode" data-v="' + m + '" data-key="mode-' + m + '" aria-pressed="' + (on.mode === m) + '"><b>' + esc(modeName(m)) + '</b><small>' + esc(tr('online.create.' + m + 'Sub')) + '</small></button>';
         }).join('') + '</div>' +
+      '<button class="mode-btn o-mode" data-act="private" data-key="private" aria-pressed="' + on.private + '"><b>' + esc(tr('online.create.private')) + '</b><small>' + esc(tr(on.private ? 'online.create.privateSub' : 'online.create.privateOff')) + '</small></button>' +
       tableErrorHtml() +
       '<button class="btn-play" data-act="create" data-key="createGo"' + (on.busy ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'online.create.busy' : 'online.create.btn')) + '</button>' +
       '<button class="btn-secondary wide" data-act="toTables" data-key="createBack">' + esc(tr('online.back')) + '</button></div>';
@@ -250,6 +251,7 @@
     return '<div class="o-page"><div class="o-head"><h2>' + esc(tr('online.lobby.title')) + '</h2>' + themeButtonHtml() + '</div>' +
       '<div class="card o-box o-center"><small>' + esc(tr('online.lobby.code')) + '</small><div class="o-bigcode" data-key="codeBig">' + esc(G ? G.code : '') + '</div>' +
         '<div class="o-mode-tag">' + esc(modeName(mode)) + ' · ' + esc(tr('online.lobby.seats', { n: size })) + '</div>' +
+        (v && v.private ? '<div class="o-mode-tag"><b>' + esc(tr('online.lobby.private')) + '</b></div>' : '') +
         '<div class="o-btns"><button class="btn-secondary small" data-act="copyCode" data-key="copy">' + esc(tr(on.copied ? 'online.lobby.copied' : 'online.lobby.copy')) + '</button>' +
         '<button class="btn-secondary small" data-act="shareLink" data-key="share">' + esc(tr('online.lobby.share')) + '</button></div></div>' +
       '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
@@ -511,6 +513,7 @@
       case 'toTables': stopTimers(); G = null; openTables(); return true;
       case 'toCreate': on.screen = 'create'; on.tableError = null; render(); return true;
       case 'size': on.size = Number(v); render(); return true;
+      case 'private': on.private = !on.private; render(); return true;
       case 'setMode': on.mode = v === 'turns' ? 'turns' : 'sync'; render(); return true;
       case 'create': createTable(); return true;
       case 'joinRoom': on.code = v; joinTable(v); return true;
