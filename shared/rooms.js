@@ -16,7 +16,7 @@
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
   // ответ «играю» даёт ещё extendMs (15 с); без ответа и по окончании этого времени ставится «стоп» (или пропуск раздачи).
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 6000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
   var PLAYER_ACTIONS = ['bet', 'hit', 'stand', 'double', 'split', 'sitout'];
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
