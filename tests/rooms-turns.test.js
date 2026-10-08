@@ -9,7 +9,7 @@ const { makeServer } = require('./helpers/fake-firestore.js');
 
 const root = path.join(__dirname, '..');
 const ctx = vm.createContext({ JSON, Promise, Math, Object, Array, Number, String, Error, Date });
-['games/yahtzee/logic.js', 'games/yahtzee/table.js', 'shared/rooms-turns.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
+['games/yahtzee/logic.js', 'games/yahtzee/table.js', 'shared/chat-logic.js', 'shared/rooms-turns.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
 const Y = vm.runInContext('Yahtzee', ctx), T = ctx.YahtzeeTable, R = ctx.PlatformTurnRooms;
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const FAST = { startDelayMs: 0, idleMs: 3000, askMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
@@ -236,4 +236,74 @@ test('начало игры: если игрок вышел и остался о
   assert.equal(host.getView().startIn, -1);
   await host.start();
   assert.equal(host.getView().status, 'lobby');
+});
+
+test('чат: сообщения идут через хоста, видны всем, системные записи о входе, выходе и начале игры', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 3, name: 'Хост', mode: 'sync' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  const p2 = await client(server, 'p2').joinRoom(code, { name: 'Боря' });
+  await step(server, host, [p1, p2], 1000);
+  let chat = p1.getView().chat;
+  assert.deepEqual(plain(chat.map((m) => [m.kind, m.code, m.name])), [['sys', 'join', 'Аня'], ['sys', 'join', 'Боря']]);
+  await p1.send({ type: 'chat', text: '  Привет,   всем!  ', cid: 'c1' });
+  host.send({ type: 'chat', text: 'Здравствуйте', cid: 'h1' });
+  await step(server, host, [p1, p2], 1000);
+  chat = p2.getView().chat;
+  const msgs = chat.filter((m) => m.kind === 'msg');
+  assert.deepEqual(plain(msgs.map((m) => [m.name, m.text, m.cid, m.seat])), [['Хост', 'Здравствуйте', 'h1', 0], ['Аня', 'Привет, всем!', 'c1', 1]]);
+  assert.ok(msgs.every((m) => typeof m.id === 'number' && m.ts > 0 && m.uid));
+  await host.start();
+  await p2.send({ type: 'leave' });
+  await step(server, host, [p1], 1000);
+  const codes = p1.getView().chat.filter((m) => m.kind === 'sys').map((m) => m.code);
+  assert.deepEqual(plain(codes), ['join', 'join', 'start', 'leave']);
+});
+
+test('чат: слишком частые сообщения отбрасываются, текст не длиннее 200 символов, пустые не принимаются, хранятся последние 20', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 2, name: 'Хост' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  await step(server, host, [p1], 500);
+  await p1.send({ type: 'chat', text: 'раз', cid: 'a' });
+  await p1.send({ type: 'chat', text: 'два сразу следом', cid: 'b' });      // в ту же долю секунды: отбрасывается
+  await step(server, host, [p1], 300);
+  assert.deepEqual(plain(p1.getView().chat.filter((m) => m.kind === 'msg').map((m) => m.text)), ['раз']);
+  await step(server, host, [p1], 1000);
+  await p1.send({ type: 'chat', text: 'я'.repeat(500), cid: 'c' });
+  await p1.send({ type: 'chat', text: '   ', cid: 'd' });
+  await step(server, host, [p1], 1000);
+  const texts = p1.getView().chat.filter((m) => m.kind === 'msg').map((m) => m.text);
+  assert.equal(texts.length, 2);
+  assert.equal(Array.from(texts[1]).length, 200);
+  for (let i = 0; i < 25; i++) { await p1.send({ type: 'chat', text: 'сообщение ' + i }); await step(server, host, [p1], 3500); }
+  const last = p1.getView().chat;
+  assert.equal(last.length, 20);
+  assert.equal(last[last.length - 1].text, 'сообщение 24');
+  assert.ok(last[0].id < last[19].id);
+});
+
+test('чат: не участник стола писать не может', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 2, name: 'Хост' });
+  await step(server, host, [], 500);
+  await client(server, 'stranger').joinRoom(code, { name: 'Чужой' }).then(async (c) => { await c.leave(); });
+  await step(server, host, [], 1000);
+  const stranger = client(server, 'stranger');
+  // уже вышедший (убран из участников) отправляет сообщение напрямую в actions
+  const res = await server.fetch('https://firestore.googleapis.com/v1/projects/p/databases/d/documents/rooms/' + code + '/actions', { method: 'POST', headers: { Authorization: 'Bearer tok-stranger' }, body: JSON.stringify({ fields: { uid: { stringValue: 'stranger' }, createdAt: { integerValue: String(server.now) }, payload: { stringValue: JSON.stringify({ type: 'chat', text: 'я здесь' }) } } }) });
+  assert.equal(res.ok, true);
+  await step(server, host, [], 1000);
+  assert.equal(host.getView().chat.filter((m) => m.kind === 'msg').length, 0);
+});
+
+test('чат: больше 20 сообщений в минуту от одного игрока не проходят', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 2, name: 'Хост' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  await step(server, host, [p1], 500);
+  for (let i = 0; i < 30; i++) { await p1.send({ type: 'chat', text: 'м' + i }); await step(server, host, [p1], 1000); }
+  const texts = p1.getView().chat.filter((m) => m.kind === 'msg').map((m) => m.text);
+  assert.ok(texts.length <= 20 && texts.length >= 19, 'прошло ' + texts.length);
+  assert.equal(texts[0], 'м0');
 });

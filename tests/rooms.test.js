@@ -8,7 +8,7 @@ const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
 const ctx = vm.createContext({ JSON, Promise, Math, Object, Array, Number, String, Error, Date });
-['games/blackjack/logic.js', 'shared/rooms.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
+['games/blackjack/logic.js', 'shared/chat-logic.js', 'shared/rooms.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
 const B = ctx.Blackjack, R = ctx.PlatformRooms;
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
@@ -316,4 +316,20 @@ test('начало игры в блэкджеке: с ботами можно с
   await host.start();
   assert.equal(host.getView().status, 'playing');
   assert.equal(p1.getView() && p1.getView().status === 'playing' || (await p1.poll()).status === 'playing', true);
+});
+
+test('чат в блэкджеке: сообщения через хоста, системные записи о входе и начале игры, выбывший молчун отмечается', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 3, fillBots: true, name: 'Хост', chips: 5000 });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня', chips: 5000 });
+  await step(server, host, [p1], 1000);
+  await p1.send({ type: 'chat', text: 'Привет!', cid: 'x1' });
+  await step(server, host, [p1], 1000);
+  host.send({ type: 'chat', text: 'Начинаем', cid: 'x2' });
+  await host.start();
+  await step(server, host, [p1], 1000);
+  const chat = p1.getView().chat;
+  assert.deepEqual(plain(chat.map((m) => m.kind === 'sys' ? m.code : m.text)), ['join', 'Привет!', 'Начинаем', 'start']);
+  assert.ok(chat.filter((m) => m.kind === 'msg').every((m) => m.uid && m.name && m.ts > 0));
+  assert.equal(host.getView().chat.length, 4);
 });
