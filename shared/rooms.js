@@ -332,8 +332,8 @@
       return req('POST', base + ':runQuery', body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
-          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, stale: now() - d.heartbeat > cfg.staleMs };
-        }).filter(function (x) { return !x.stale && x.players < x.size; });
+          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, game: d.game, stale: now() - d.heartbeat > cfg.staleMs };
+        }).filter(function (x) { return x.game === 'blackjack' && !x.stale && x.players < x.size; });
       });
     }
 

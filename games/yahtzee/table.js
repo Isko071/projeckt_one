@@ -91,7 +91,7 @@
     if (action.type === 'leave') {
       if (!p.active) return bad('not-active');
       p.active = false;
-      settle(st);
+      if (!st.gameOver) settle(st);          // после конца игры итог уже подведён
       return { ok: true, state: st };
     }
     if (st.gameOver) return bad('game-over');
