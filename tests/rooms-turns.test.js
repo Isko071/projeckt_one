@@ -356,3 +356,44 @@ test('закрытый стол: не виден в списке открыты�
   assert.equal(p.getView().private, true);
   assert.deepEqual(plain(closed.host.getView().members.map((m) => m.name)), ['Закрытый', 'Аня']);
 });
+
+test('новая игра по предложению любого игрока: гость нажимает «Новая игра» после конца партии, пока партия идёт предложение игнорируется', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 3, name: 'Хост', mode: 'turns' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  const p2 = await client(server, 'p2').joinRoom(code, { name: 'Боря' });
+  await step(server, host, [p1, p2], 1000);
+  await host.start();
+  await step(server, host, [p1, p2], 500);
+  await p1.send({ type: 'again' });                                    // партия ещё идёт
+  await step(server, host, [p1, p2], 500);
+  assert.equal(host.getView().status, 'playing', 'во время партии «новая игра» не действует');
+  await p2.send({ type: 'leave' });
+  await step(server, host, [p1], 500);
+  await p1.send({ type: 'leave' });                                     // остался один хост: партия закончена
+  await step(server, host, [], 500);
+  assert.equal(host.getView().state.gameOver, true);
+  const p3 = await client(server, 'p3').joinRoom(code, { name: 'Глеб' }).catch((e) => e);  // зайти в начатую игру нельзя
+  assert.equal(p3.code, 'started');
+});
+
+test('новая игра по предложению гостя: после конца партии любой оставшийся игрок возвращает стол в комнату ожидания', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 3, name: 'Хост', mode: 'sync' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  const p2 = await client(server, 'p2').joinRoom(code, { name: 'Боря' });
+  await step(server, host, [p1, p2], 1000);
+  await host.start();
+  await step(server, host, [p1, p2], 500);
+  await p2.send({ type: 'leave' });
+  await step(server, host, [p1], 500);
+  const all = [{ send: (a) => host.send(a), getView: () => host.getView() }, p1];
+  let guard = 0;
+  while (!host.getView().state.gameOver && guard++ < 300) { for (const p of all) await turn(p); await step(server, host, [p1], 200); }
+  assert.equal(host.getView().state.gameOver, true);
+  await p1.send({ type: 'again' });
+  await step(server, host, [p1], 500);
+  assert.equal(host.getView().status, 'lobby');
+  assert.deepEqual(plain(host.getView().members.map((m) => m.name)), ['Хост', 'Аня']);
+  assert.equal(p1.getView().status, 'lobby');
+});
