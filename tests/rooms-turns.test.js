@@ -307,3 +307,38 @@ test('чат: больше 20 сообщений в минуту от одног
   assert.ok(texts.length <= 20 && texts.length >= 19, 'прошло ' + texts.length);
   assert.equal(texts[0], 'м0');
 });
+
+test('новая игра за тем же столом: после конца партии хост возвращает стол в комнату ожидания с теми же игроками', async () => {
+  const server = makeServer();
+  const { code, host } = await client(server, 'h').createRoom({ size: 3, name: 'Хост', mode: 'sync' });
+  const p1 = await client(server, 'p1').joinRoom(code, { name: 'Аня' });
+  const p2 = await client(server, 'p2').joinRoom(code, { name: 'Боря' });
+  await step(server, host, [p1, p2], 1000);
+  await host.start();
+  await step(server, host, [p1, p2], 500);
+  await p2.send({ type: 'leave' });                                   // Боря выходит посреди игры
+  await step(server, host, [p1], 500);
+  await rematchGuard(host, 'до конца партии новую игру начать нельзя');
+  // доигрываем партию вдвоём
+  const all = [{ send: (a) => host.send(a), getView: () => host.getView() }, p1];
+  let guard = 0;
+  while (!host.getView().state.gameOver && guard++ < 300) { for (const p of all) await turn(p); await step(server, host, [p1], 200); }
+  assert.equal(host.getView().state.gameOver, true);
+  await host.rematch();
+  await step(server, host, [p1], 500);
+  assert.equal(host.getView().status, 'lobby');
+  assert.deepEqual(plain(host.getView().members.map((m) => m.name)), ['Хост', 'Аня'], 'вышедший убран');
+  assert.deepEqual(plain(host.getView().members.map((m) => m.seat)), [0, 1]);
+  assert.equal(p1.getView().status, 'lobby');
+  assert.equal(p1.getView().state, null);
+  assert.equal(host.getView().startIn, 0, 'те же игроки: начать можно сразу');
+  assert.equal(host.getView().chat.filter((m) => m.code === 'again').length, 1);
+  await host.start();
+  await step(server, host, [p1], 500);
+  assert.equal(host.getView().status, 'playing');
+  assert.equal(host.getView().state.gameOver, false);
+  assert.equal(host.getView().state.players.length, 2);
+  assert.ok(host.getView().state.players.every((p) => Y.openCategories(p).length === 13), 'таблицы очков чистые');
+  assert.equal(p1.getView().state.round, 1);
+});
+async function rematchGuard(host, msg) { await host.rematch(); assert.equal(host.getView().status, 'playing', msg); }

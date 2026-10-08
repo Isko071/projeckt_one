@@ -840,15 +840,21 @@ function closeModal() {
 }
 function playing() { return G && G.mode === 'bot' && G.state && G.state.phase === 'playing'; }
 
+// Ссылка-приглашение вида …/blackjack/#K7M4Q: после входа сразу заходим за стол, адрес очищается
+function consumeInvite() {
+  var code = app.invite;
+  if (!code || !Cloud.getState().user) return;
+  app.invite = null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* адрес не обязателен */ }
+  app.code = code; joinTable(code);
+}
 function onSignIn() {
   if (app.busy) return;
   app.busy = true; app.loginError = null; render();
   Cloud.signIn().then(function (r) {
     app.busy = false;
     if (r && r.cancelled) { render(); return; }
-    var hash = (location.hash || '').replace('#', '').toUpperCase();
-    if (/^[A-Z0-9]{5}$/.test(hash)) { app.code = hash; openTables(); joinTable(hash); return; }
-    openTables();
+    openTables(); consumeInvite();
   }, function (e) {
     app.busy = false;
     var c = e && e.code;
@@ -947,13 +953,13 @@ window.addEventListener('pagehide', function () { if (G && G.mode === 'online') 
 window.PlatformTheme.onChange(render);
 W.onChange(function () { if (app.screen === 'start' || app.screen === 'game') render(); });
 Cloud.onChange(function () {
-  if (app.screen === 'login' && Cloud.getState().status === 'signedIn' && !app.busy) { openTables(); }
+  if (app.screen === 'login' && Cloud.getState().status === 'signedIn' && !app.busy) { openTables(); consumeInvite(); }
   else if (app.screen === 'login' || app.screen === 'tables') render();
 });
 
 // Ссылка вида …/blackjack/#K7M4Q сразу ведёт на вход в стол
 (function () {
   var hash = (location.hash || '').replace('#', '').toUpperCase();
-  if (/^[A-Z0-9]{5}$/.test(hash)) { app.code = hash; app.screen = 'login'; }
+  if (/^[A-Z0-9]{5}$/.test(hash)) { app.code = hash; app.invite = hash; app.screen = 'login'; }
 })();
 render();
