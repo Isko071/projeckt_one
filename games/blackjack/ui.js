@@ -329,13 +329,14 @@ function errorKey(e) {
   if (c === 'full') return 'full';
   if (c === 'closed') return 'closed';
   if (c === 'denied') return 'denied';
+  if (c === 'missing') return 'missing';
   if (!c || c === 'network' || /^http-/.test(c)) return 'network';
   return 'other';
 }
 function loadRooms() {
   var api = getRooms();
   if (!api) return;
-  api.listRooms().then(function (list) { app.rooms = list; app.banner = null; if (app.screen === 'tables') render(); }, function () { app.rooms = app.rooms || []; if (app.screen === 'tables') render(); });
+  api.listRooms().then(function (list) { app.rooms = list; app.banner = null; if (app.screen === 'tables') render(); }, function (e) { app.rooms = app.rooms || []; if (e && (e.code === 'missing' || e.code === 'denied')) app.tableError = errorKey(e); if (app.screen === 'tables') render(); });
 }
 function openTables() {
   app.screen = 'tables'; app.tableError = null; app.codeError = null; app.rooms = null; app.modal = null;

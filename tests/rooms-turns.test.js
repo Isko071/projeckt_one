@@ -186,3 +186,10 @@ test('полная партия на троих по сети в обоих ре
     assert.ok(T.standings(st)[0].winner);
   }
 });
+
+test('запись в несуществующую базу (404) не считается успехом: стол не создаётся молча', async () => {
+  const server = makeServer();
+  const broken = Object.assign({}, server, { fetch: async (url, init) => (init.method === 'GET' ? server.fetch(url, init) : { ok: false, status: 404, json: async () => ({}) }) });
+  await assert.rejects(() => client(broken, 'h').createRoom({ size: 2, name: 'Х' }), { code: 'missing' });
+  await assert.rejects(() => client(broken, 'h').listRooms(), { code: 'missing' });
+});
