@@ -13,4 +13,6 @@ root.FIREBASE_CONFIG = {
 root.FIREBASE_DATABASE = '(default)';
 // Адрес сервера столов (WebSocket), например 'wss://igroteka-server.onrender.com'. Пусто — столы работают по-старому, через Firestore
 // (хост — браузер создателя). Инструкция по запуску сервера: docs/game-server.md
+// Токен Cloudflare Web Analytics (статистика посещений, см. docs/admin.md). Пусто — статистика выключена
+root.CF_ANALYTICS_TOKEN = '';
 root.GAME_SERVER_URL = 'wss://igroteka-server.onrender.com';

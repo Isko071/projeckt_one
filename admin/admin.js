@@ -75,9 +75,10 @@
       (events || '<tr><td colspan="5" class="empty">' + esc(tr('admin.srv.noEvents')) + '</td></tr>') + '</tbody></table></div>';
   }
   function tabsHtml() {
+    var stats = '<a class="tab ext" href="https://dash.cloudflare.com/?to=/:account/web-analytics" target="_blank" rel="noopener">' + esc(tr('admin.tab.visits')) + ' ↗</a>';
     return '<div class="tabs" role="tablist">' + ['players', 'server'].map(function (k) {
       return '<button type="button" role="tab" class="tab" aria-selected="' + (st.tab === k) + '" data-tab="' + k + '">' + esc(tr('admin.tab.' + k)) + '</button>';
-    }).join('') + '</div>';
+    }).join('') + stats + '</div>';
   }
 
   function head(key, label, cls) {
