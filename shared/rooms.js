@@ -16,7 +16,7 @@
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
   // ответ «играю» даёт ещё extendMs (15 с); без ответа и по окончании этого времени ставится «стоп» (или пропуск раздачи).
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, autoStartMs: 20000, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, startDelayMs: 20000, codeLength: 5 };
   var PLAYER_ACTIONS = ['bet', 'hit', 'stand', 'double', 'split', 'sitout'];
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
@@ -93,7 +93,7 @@
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false;
       var members = [{ uid: env.uid, name: opts.name || '', avatar: opts.avatar || 0, chips: opts.chips, seat: 0 }];
       var fillBots = opts.fillBots !== false;
-      var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 человека и больше (отсчёт автозапуска)
+      var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 человека и больше (отсчёт до возможности начать)
       var processed = {}, strikes = {}, pendingJoins = [];
       var wait = { key: '', since: 0 }, autoAt = 0, nextBotNo = 1, idle = {};   // idle[место] = { key, since, stage: 'idle' | 'asking' | 'extended', until }
       var em = emitter();
@@ -103,7 +103,7 @@
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
       function touchReady() { readyAt = members.length >= 2 ? now() : 0; }
-      function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.autoStartMs - now()) : -1; }
+      function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
         var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
@@ -133,8 +133,10 @@
         if (fillBots) for (var i = seats.length; i < size; i++) { var bn = nextBotNo++; seats.push(Object.assign({ id: 'bot' + bn, name: 'Bot ' + bn, chips: game.CONFIG.startChips, kind: 'bot' }, game.makeBot ? game.makeBot(bn - 1) : {})); }
         return seats;
       }
+      // Начать можно с ботами сразу; без ботов нужно 2 человека и startDelayMs после последнего входа или выхода
+      function canStart() { return status === 'lobby' && (fillBots || (members.length >= 2 && !!readyAt && now() - readyAt >= cfg.startDelayMs)); }
       function start() {
-        if (status !== 'lobby') return Promise.resolve();
+        if (!canStart()) return Promise.resolve();
         var seats = seatsForStart();
         full = game.init(seats, Object.assign({ tableSize: size }, env.gameOptions || {}), rng);
         members.forEach(function (m, i) { m.seat = i; });
@@ -257,8 +259,7 @@
           var fresh = docs.filter(function (d) { return !processed[d.name]; });
           fresh.forEach(function (d) { processed[d.name] = true; handle(d.data); });
           auto(t);
-          var starting = status === 'lobby' && readyAt && members.length >= 2 && t - readyAt >= cfg.autoStartMs ? start() : null;   // автозапуск
-          var cleanup = Promise.resolve(starting).then(function () { return Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); })); });
+          var cleanup = Promise.all(docs.map(function (d) { return delDoc(d.name).catch(function () { /* повторим в следующий раз */ }); }));
           return cleanup.then(function () {
             if (dirty || t - lastBeat >= cfg.heartbeatMs) return publish();
           });

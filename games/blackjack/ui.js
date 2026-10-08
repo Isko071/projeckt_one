@@ -550,9 +550,9 @@ function lobbyHtml() {
   for (var i = members.length; i < size; i++) {
     seats.push('<div class="seat empty" data-key="e-' + i + '"><div class="avatar" style="background:transparent;border:1px dashed var(--muted)">·</div><div class="nm">' + esc(bots ? tr('lobby.bot') : tr('lobby.waiting')) + '</div><div class="tg">' + (bots ? esc(tr('lobby.bot')) : '') + '</div></div>');
   }
-  var canStart = members.length >= 2 || bots;
   var startLeft = v && v.startIn >= 0 ? Math.max(0, v.startIn - (now() - (v.receivedAt || now()))) : -1;
-  var autoHtml = startLeft >= 0 ? '<div class="wait-text" role="status">' + esc(tr('lobby.autoStart', { n: Math.ceil(startLeft / 1000) })) + '</div>' : '';
+  var canStart = bots || (members.length >= 2 && startLeft === 0);   // с ботами можно сразу, без ботов: 2 человека и 20 секунд после последнего входа
+  var autoHtml = startLeft > 0 ? '<div class="wait-text" role="status">' + esc(tr('lobby.startIn', { n: Math.ceil(startLeft / 1000) })) + '</div>' : '';
   var code = G ? G.code : '';
   return '<div class="page"><div class="page-head"><h2>' + esc(tr('lobby.title')) + '</h2></div>' +
     '<div class="card-box code-big"><small>' + esc(tr('lobby.code')) + '</small><div class="code" data-key="codeBig">' + esc(code) + '</div><div class="btns">' +
@@ -562,7 +562,7 @@ function lobbyHtml() {
     bannerHtml() +
     (host
       ? '<div class="row-btns"><button class="btn accent big" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('lobby.start')) + '</button><button class="btn big" data-act="closeTable" data-key="closeTable">' + esc(tr('lobby.close')) + '</button></div>' +
-        (canStart ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.needMore')) + '</div>') + '<div class="muted" style="font-size:14px">' + esc(tr('lobby.hostHint')) + '</div>'
+        (members.length >= 2 || bots ? '' : '<div class="muted" style="font-size:14px">' + esc(tr('lobby.needMore')) + '</div>') + '<div class="muted" style="font-size:14px">' + esc(tr('lobby.hostHint')) + '</div>'
       : '<div style="font-weight:700;font-size:16px;text-align:center">' + esc(tr(members.length >= size ? 'lobby.full' : 'lobby.waitHost')) + '</div><button class="btn big" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('lobby.leave')) + '</button>') +
     '</div>';
 }
@@ -806,7 +806,7 @@ function scheduleClock() {
     }
   }
   if (activeNotice()) need = true;
-  if (app.screen === 'lobby' && G && G.view && G.view.startIn >= 0) need = true;   // отсчёт автозапуска
+  if (app.screen === 'lobby' && G && G.view && G.view.startIn > 0) need = true;   // отсчёт до возможности начать
   if (need && !clockTimer) clockTimer = setInterval(render, 500);
   else if (!need && clockTimer) { clearInterval(clockTimer); clockTimer = null; }
 }

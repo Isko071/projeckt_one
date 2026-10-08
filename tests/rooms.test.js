@@ -13,7 +13,7 @@ const B = ctx.Blackjack, R = ctx.PlatformRooms;
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // Те же этапы, что в игре (ожидание, вопрос «играете?», дополнительное время), но короче: 3 с, 1 с и 2 с вместо 30, 7 и 15
-const FAST = { dealDelayMs: 1000, nextDelayMs: 2000, botDelayMs: 500, idleMs: 3000, askMs: 1000, extendMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
+const FAST = { startDelayMs: 0, dealDelayMs: 1000, nextDelayMs: 2000, botDelayMs: 500, idleMs: 3000, askMs: 1000, extendMs: 2000, staleMs: 30000, heartbeatMs: 5000 };
 
 const { makeServer } = require('./helpers/fake-firestore.js');
 
@@ -297,20 +297,23 @@ test('ошибки доступа: нет прав — понятный код, 
   await assert.rejects(denied.createRoom({ size: 2 }), { code: 'denied' });
 });
 
-test('автозапуск блэкджека: два человека за столом, через 20 секунд игра начинается сама; один человек с ботами сам не начинает', async () => {
+test('начало игры в блэкджеке: с ботами можно сразу, без ботов нужно 2 человека и 20 секунд; само игра не начинается', async () => {
   const server = makeServer();
-  const opts = Object.assign({}, FAST, { autoStartMs: 20000 });
+  const opts = Object.assign({}, FAST, { startDelayMs: 20000 });
   const solo = await client(server, 'solo', { options: opts }).createRoom({ size: 3, fillBots: true, name: 'Один', chips: 5000 });
   await step(server, solo.host, [], 30000);
-  assert.equal(solo.host.getView().status, 'lobby', 'один человек: только кнопкой «Начать»');
-  assert.equal(solo.host.getView().startIn, -1);
-  const { code, host } = await client(server, 'h', { options: opts }).createRoom({ size: 3, fillBots: true, name: 'Хост', chips: 5000 });
+  assert.equal(solo.host.getView().status, 'lobby', 'само не начинается');
+  await solo.host.start();
+  assert.equal(solo.host.getView().status, 'playing', 'с ботами один человек начинает сразу');
+  const { code, host } = await client(server, 'h', { options: opts }).createRoom({ size: 3, fillBots: false, name: 'Хост', chips: 5000 });
   const p1 = await client(server, 'p1', { options: opts }).joinRoom(code, { name: 'Аня', chips: 5000 });
   await step(server, host, [p1], 1000);
   assert.ok(host.getView().startIn > 18000);
-  await step(server, host, [p1], 15000);
-  assert.equal(host.getView().status, 'lobby');
-  await step(server, host, [p1], 5000);
-  assert.equal(host.getView().status, 'playing', 'через 20 секунд игра началась сама');
-  assert.equal(p1.getView().status, 'playing');
+  await host.start();
+  assert.equal(host.getView().status, 'lobby', 'без ботов до конца отсчёта нельзя');
+  await step(server, host, [p1], 25000);
+  assert.equal(host.getView().status, 'lobby', 'автозапуска нет');
+  await host.start();
+  assert.equal(host.getView().status, 'playing');
+  assert.equal(p1.getView() && p1.getView().status === 'playing' || (await p1.poll()).status === 'playing', true);
 });

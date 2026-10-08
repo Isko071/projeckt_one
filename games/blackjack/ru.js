@@ -96,7 +96,7 @@
     'lobby.you': 'Вы',
     'lobby.waiting': 'Ждём игрока',
     'lobby.bot': 'Бот',
-    'lobby.autoStart': 'Игра начнётся через {n} с',
+    'lobby.startIn': 'Начать можно через {n} с',
     'lobby.hostHint': 'Не закрывайте эту вкладку, пока идёт игра',
 
     'bet.note': 'Макс. {max} · нажмите «Раздать»',
