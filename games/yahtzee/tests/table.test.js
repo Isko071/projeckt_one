@@ -72,6 +72,16 @@ test('одновременно: все играют сразу, но следу�
   assert.deepEqual(plain(T.waitingSeats(st)), [0, 1, 2]);
 });
 
+test('бросок с маской фиксации: кубики из маски остаются, остальные перебрасываются', () => {
+  let st = T.init(seats(2), { mode: 'sync' });
+  st = run(st, { type: 'roll', seat: 0 }, dice(3, 4, 5, 6, 2));
+  st = run(st, { type: 'roll', seat: 0, held: [true, false, true, false, false] }, dice(1));
+  assert.deepEqual(plain(st.players[0].dice), [3, 1, 5, 1, 1]);
+  st = run(st, { type: 'roll', seat: 0, held: [true, true, true, true, true] }, dice(6));
+  assert.deepEqual(plain(st.players[0].dice), [3, 1, 5, 1, 1], 'все зафиксированы: ничего не меняется, бросок засчитан');
+  assert.equal(st.players[0].rollsUsed, 3);
+});
+
 test('ятзи и жокер работают у каждого игрока по своей таблице', () => {
   let st = T.init(seats(2), { mode: 'sync' });
   st = play(st, 0, 'yahtzee', dice(4));

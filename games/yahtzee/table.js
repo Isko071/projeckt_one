@@ -97,6 +97,8 @@
     if (st.gameOver) return bad('game-over');
     if (!canAct(st, seat)) return bad('not-your-turn');
     if (action.type === 'roll') {
+      // фиксация кубиков копится на экране игрока и приходит вместе с броском: так нет задержки сети на каждое нажатие
+      if (Array.isArray(action.held) && action.held.length === 5 && p.rollsUsed >= 1 && p.rollsUsed < Y.MAX_ROLLS) p.held = action.held.map(Boolean);
       if (!doRoll(p, rng)) return bad('no-rolls');
     } else if (action.type === 'hold') {
       var i = action.index;

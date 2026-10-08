@@ -127,6 +127,7 @@
         var out = { type: payload.type };
         if (typeof payload.index === 'number') out.index = payload.index;
         if (typeof payload.cat === 'string') out.cat = payload.cat.slice(0, 30);
+        if (Array.isArray(payload.held)) out.held = payload.held.slice(0, 5).map(Boolean);
         return out;
       }
 
