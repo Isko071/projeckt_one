@@ -189,5 +189,15 @@
     };
   }
 
-  root.PlatformRoomsWS = { create: create };
+  // «Прогрев»: пустой запрос к /healthz будит уснувший сервер (бесплатный хостинг засыпает), пока человек выбирает настройки стола.
+  // Ответ не нужен (no-cors), повторять чаще раза в 5 минут не нужно.
+  var lastWarm = 0;
+  function warm(url) {
+    var t = Date.now();
+    if (!url || typeof fetch !== 'function' || t - lastWarm < 300000) return;
+    lastWarm = t;
+    try { fetch(String(url).replace(/^ws/, 'http').replace(/\/+$/, '') + '/healthz', { mode: 'no-cors', cache: 'no-store' }).catch(function () { /* сервер ещё просыпается */ }); } catch (e) { /* не страшно */ }
+  }
+
+  root.PlatformRoomsWS = { create: create, warm: warm };
 })(typeof window !== 'undefined' ? window : globalThis);

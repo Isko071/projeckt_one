@@ -900,6 +900,7 @@ appEl.addEventListener('click', function (e) {
     case 'toStart': stopOnline(); app.screen = 'start'; app.busy = false; app.tableError = null; render(); break;
     case 'bot': startLocal(); break;
     case 'online':
+      if (window.GAME_SERVER_URL && window.PlatformRoomsWS) window.PlatformRoomsWS.warm(window.GAME_SERVER_URL);
       if (Cloud.getState().status === 'signedIn') openTables(); else { app.screen = 'login'; app.loginError = null; render(); }
       break;
     case 'signin': onSignIn(); break;
