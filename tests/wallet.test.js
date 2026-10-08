@@ -239,18 +239,18 @@ test('ограничение выигрыша: повреждённые данн
   assert.deepEqual(plain(W.capStatus(D(2026, 10, 1))), { limit: 500, used: 0, left: 500 });
 });
 
-test('онлайн-предел: за день начисляется не больше 20 000, на следующий день счётчик сбрасывается', () => {
+test('онлайн-предел: за день начисляется не больше 5 000, на следующий день счётчик сбрасывается', () => {
   const W = load({ localStorage: fakeBackend() });
   const d1 = D(2026, 10, 1), d2 = D(2026, 10, 2);
   const start = W.getBalance();
-  let r = W.onlineWin('blackjack', 15000, d1);
-  assert.deepEqual(plain(r), { granted: 15000, capped: false, left: 5000 });
-  r = W.onlineWin('blackjack', 8000, d1);
-  assert.deepEqual(plain(r), { granted: 5000, capped: true, left: 0 });
+  let r = W.onlineWin('blackjack', 3000, d1);
+  assert.deepEqual(plain(r), { granted: 3000, capped: false, left: 2000 });
+  r = W.onlineWin('blackjack', 4000, d1);
+  assert.deepEqual(plain(r), { granted: 2000, capped: true, left: 0 });
   r = W.onlineWin('blackjack', 100, d1);
   assert.deepEqual(plain(r), { granted: 0, capped: true, left: 0 });
-  assert.equal(W.getBalance(), start + 20000);
+  assert.equal(W.getBalance(), start + 5000);
   assert.equal(W.onlineStatus(d1).left, 0);
-  assert.equal(W.onlineStatus(d2).left, 20000);
+  assert.equal(W.onlineStatus(d2).left, 5000);
   assert.equal(W.onlineWin('blackjack', 300, d2).granted, 300);
 });
