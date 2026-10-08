@@ -52,13 +52,15 @@
       if (!res.ok && res.status !== 404) throw fail('http-' + res.status);
       return res;
     }
+    // Запись в несуществующую базу или комнату (404) нельзя считать успехом: иначе стол «создаётся», а на деле его нет
+    function strict(res) { if (res.status === 404) throw fail('missing'); return check(res); }
     function getDoc(path) {
       return req('GET', base + '/' + path).then(check).then(function (res) { return res.status === 404 ? null : res.json().then(function (d) { return { data: decode(d), name: d.name }; }); });
     }
     function putDoc(path, obj, onlyIfNew) {
-      return req('PATCH', base + '/' + path + (onlyIfNew ? '?currentDocument.exists=false' : ''), encode(obj)).then(check);
+      return req('PATCH', base + '/' + path + (onlyIfNew ? '?currentDocument.exists=false' : ''), encode(obj)).then(strict);
     }
-    function addDoc(collection, obj) { return req('POST', base + '/' + collection, encode(obj)).then(check); }
+    function addDoc(collection, obj) { return req('POST', base + '/' + collection, encode(obj)).then(strict); }
     function listDocs(collection) {
       return req('GET', base + '/' + collection + '?pageSize=100').then(check).then(function (res) {
         return res.status === 404 ? [] : res.json().then(function (d) { return (d.documents || []).map(function (x) { return { name: x.name, data: decode(x) }; }); });
@@ -253,7 +255,7 @@
     // Открытые комнаты, которые ждут игроков
     function listRooms() {
       var body = { structuredQuery: { from: [{ collectionId: 'rooms' }], where: { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'lobby' } } }, limit: 30 } };
-      return req('POST', base + ':runQuery', body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
+      return req('POST', base + ':runQuery', body).then(strict).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
           return { code: name.split('/').pop(), game: d.game, size: d.size, players: d.players, hostName: d.hostName || '', mode: d.mode || '', stale: now() - d.heartbeat > cfg.staleMs };
