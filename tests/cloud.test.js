@@ -40,7 +40,7 @@ function device(cloud, opts) {
     cloud.calls.push(init.method);
     if (cloud.offline) throw new TypeError('network');
     if (cloud.deny) return { ok: false, status: 403 };
-    assert.ok(url.includes('/databases/igroteka-db/documents/users/u1'));
+    assert.ok(url.includes('/databases/(default)/documents/users/u1'));
     assert.equal(init.headers.Authorization, 'Bearer tok-u1');
     if (init.method === 'GET') return cloud.docs.u1 ? { ok: true, status: 200, json: async () => cloud.docs.u1 } : { ok: false, status: 404 };
     cloud.docs.u1 = JSON.parse(init.body);

@@ -8,7 +8,7 @@
 - `shared/progress.js` (`PlatformProgress`): снимок прогресса (ключи `platform:profile`, `platform:wallet` и все `game:*`), его применение, отпечаток, проверка «чистый гость».
 - `shared/sync-logic.js`: чистая функция `decide`: загрузить в облако, взять из облака, ничего не делать или спросить игрока.
 - `catalog/account-ui.js`: пункты меню аватара «Войти через Google» / «Выйти из аккаунта», статус облака, окно выбора прогресса при конфликте.
-- `shared/firebase-config.js`: публичные настройки проекта и имя базы (`igroteka-db`).
+- `shared/firebase-config.js`: публичные настройки проекта и имя базы (`(default)`).
 
 ## Правила синхронизации
 
@@ -31,7 +31,7 @@
 
 1. Authentication → Sign-in method → Google включён.
 2. Authentication → Settings → Authorized domains: домен сайта (например `isko071.github.io`).
-3. Firestore: база `igroteka-db`, правила:
+3. Firestore: база `(default)` (именованной базы `igroteka-db` в проекте нет, запросы к ней дают 404), правила:
 ```
 rules_version = '2';
 service cloud.firestore {
