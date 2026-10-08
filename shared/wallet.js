@@ -4,6 +4,9 @@
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
 //   PlatformWallet.add(n, source)          → пополнение (выигрыш в игре на аконы)
+//   PlatformWallet.capStatus(now)          → { limit, used, left }: сколько ещё можно выиграть сегодня в игре с ограничением (половина баланса на начало дня)
+//   PlatformWallet.capStart(now)           → зафиксировать баланс на начало дня (вызывать перед первой ставкой дня)
+//   PlatformWallet.capPayout(source, payout, bet, now) → выплата с ограничением выигрыша → { paid, net, granted, capped, left }
 //   PlatformWallet.countWin(source)        → засчитать победу в рекордах (для игр на ставки)
 //   PlatformWallet.earn(source, n, now)    → награда за одиночную игру с дневным лимитом → { granted, capped }
 //   PlatformWallet.markPlayed(now)         → отметить, что сегодня сыграли (продлевает серию, открывает бонус дня)
@@ -20,6 +23,7 @@
     dailyStep: 250,     // прибавка за каждый следующий день подряд
     dailyMax: 2000,     // потолок (достигается на 7-й день)
     rewards: { minesweeper: { novice: 100, amateur: 250, expert: 400 }, yahtzee: { easy: 100, hard: 250 } }, // награды за победу в одиночных играх
+    capShare: 0.5,      // в игре с ботом за день можно выиграть не больше этой доли баланса (на начало дня)
     earnDailyCap: 1500, // сколько можно заработать в одиночных играх за день
     milestones: { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 }, // разовые бонусы за длину серии
     logSize: 20
@@ -34,7 +38,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, log: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, capDay: null, capBase: 0, capUsed: 0, log: [] };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -58,7 +62,7 @@
     return {
       balance: balance, streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
       playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0),
-      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, log: log
+      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), log: log
     };
   }
 
@@ -110,6 +114,30 @@
     record(s, source || 'add', n, now);
     save(s);
     return true;
+  }
+
+  // Ограничение выигрыша в игре с ботом: за день не больше capShare баланса, каким он был перед первой ставкой дня
+  function capOf(s, today) {
+    var base = s.capDay === today ? s.capBase : s.balance, used = s.capDay === today ? s.capUsed : 0;
+    var limit = Math.floor(base * CONFIG.capShare);
+    return { limit: limit, used: used, left: Math.max(0, limit - used) };
+  }
+  function capStatus(now) { return capOf(load(), dayOf(now)); }
+  function capStart(now) {
+    var s = load(), today = dayOf(now);
+    if (s.capDay === today) return;
+    s.capDay = today; s.capBase = s.balance; s.capUsed = 0;
+    save(s);
+  }
+  function capPayout(source, payout, bet, now) {
+    var s = load(), today = dayOf(now), profit = payout - bet;
+    if (s.capDay !== today) { s.capDay = today; s.capBase = s.balance + bet; s.capUsed = 0; } // день сменился посреди раздачи: база — баланс до ставки
+    var left = capOf(s, today).left, granted = profit > 0 ? Math.min(profit, left) : 0;
+    var paid = profit > 0 ? bet + granted : payout;
+    if (profit > 0) s.capUsed += granted;
+    if (paid > 0) { s.balance += paid; record(s, source || 'win', paid, now); }
+    save(s);
+    return { paid: paid, net: paid - bet, granted: granted, capped: profit > 0 && granted < profit, left: Math.max(0, left - granted) };
   }
 
   // Засчитать победу в игре, где выигрыш идёт через add (например, блэкджек): попадает в таблицу рекордов
@@ -207,6 +235,7 @@
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin,
+    capStatus: capStatus, capStart: capStart, capPayout: capPayout,
     markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget
   };

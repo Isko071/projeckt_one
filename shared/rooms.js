@@ -9,9 +9,9 @@
 //   var rooms = PlatformRooms.create({ fetch, getToken, uid, projectId, db, game, now, rng, options })
 //   rooms.createRoom({ size, fillBots, name, avatar, chips }) → хост: { code, host }
 //   rooms.joinRoom(code, { name, avatar, chips })              → игрок
-//   rooms.listRooms()                                          → открытые комнаты в ожидании: [{ code, size, players, hostName }]
+//   rooms.listRooms()                                          → открытые комнаты в ожидании: [{ code, size, players, hostName, bots }]
 //   Контроллер (host или игрок): poll(), send(action), leave(), onChange(fn), getView(); у хоста ещё start(), tick(), close()
-//   Игра (game): init(seats, options, rng), reduce(state, action, rng), view(state), readyToDeal, nextBotAction, waitingSeats.
+//   Игра (game): init(seats, options, rng), reduce(state, action, rng), view(state), readyToDeal, nextBotAction (с генератором случайных чисел), makeBot, waitingSeats.
 (function (root) {
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
@@ -100,7 +100,7 @@
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
       function fields() {
-        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, rev: rev, heartbeat: now(), meta: meta() };
+        var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0].name, fillBots: fillBots, rev: rev, heartbeat: now(), meta: meta() };
         if (full) f.state = JSON.stringify(game.view(full));
         f.timers = JSON.stringify(timersNow());
         return f;
@@ -125,7 +125,7 @@
 
       function seatsForStart() {
         var seats = members.map(function (m) { return { id: m.uid, name: m.name, chips: m.chips, kind: 'human' }; });
-        if (fillBots) for (var i = seats.length; i < size; i++) seats.push({ id: 'bot' + (nextBotNo++), name: 'Бот ' + (i), chips: game.CONFIG.startChips, kind: 'bot' });
+        if (fillBots) for (var i = seats.length; i < size; i++) { var bn = nextBotNo++; seats.push(Object.assign({ id: 'bot' + bn, name: 'Bot ' + bn, chips: game.CONFIG.startChips, kind: 'bot' }, game.makeBot ? game.makeBot(bn - 1) : {})); }
         return seats;
       }
       function start() {
@@ -200,7 +200,7 @@
             if (!apply({ type: 'join', seat: free, id: mm.uid, name: mm.name, chips: mm.chips, kind: 'human' })) break;
             mm.seat = free; pendingJoins.shift();
           }
-          var bot = game.nextBotAction(full);
+          var bot = game.nextBotAction(full, rng);
           if (bot) { apply(bot); autoAt = t + cfg.botDelayMs; return; }
           if (game.readyToDeal(full)) {
             var first = -1;
@@ -210,7 +210,7 @@
             return;
           }
         } else if (st.phase === 'playing') {
-          var b = game.nextBotAction(full);
+          var b = game.nextBotAction(full, rng);
           if (b) { apply(b); autoAt = t + cfg.botDelayMs; return; }
         } else if (st.phase === 'settled') {
           if (wait.key !== 'next') wait = { key: 'next', since: t };
@@ -332,7 +332,7 @@
       return req('POST', base + ':runQuery', body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
-          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', stale: now() - d.heartbeat > cfg.staleMs };
+          return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, stale: now() - d.heartbeat > cfg.staleMs };
         }).filter(function (x) { return !x.stale && x.players < x.size; });
       });
     }

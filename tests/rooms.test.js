@@ -133,7 +133,7 @@ test('старт: пустые места заполняют боты; стол 
   await p1.poll();
   let v = p1.getView();
   assert.equal(v.status, 'playing');
-  assert.deepEqual(plain(v.state.seats.map((s) => [s.kind, s.name, s.active])), [['human', 'Хост', true], ['human', 'Аня', true], ['bot', 'Бот 2', true], ['bot', 'Бот 3', true]]);
+  assert.deepEqual(plain(v.state.seats.map((s) => [s.kind, s.name, s.active])), [['human', 'Хост', true], ['human', 'Аня', true], ['bot', 'Бот Макс', true], ['bot', 'Бот Рико', true]]);
   assert.equal(v.state.shoe, undefined, 'колода не публикуется');
   // доводим до раздачи
   host.send({ type: 'bet', amount: 100 });

@@ -192,3 +192,49 @@ test('победы в играх на ставки: countWin попадает в
   assert.deepEqual(plain(W.records().wins), { blackjack: 2 });
   assert.equal(W.getBalance(), 5000);
 });
+
+test('ограничение выигрыша в игре с ботом: половина баланса на начало дня, потом выплата не больше ставки', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const now = D(2026, 10, 1);
+  assert.deepEqual(plain(W.capStatus(now)), { limit: 2500, used: 0, left: 2500 }, 'до первой ставки: половина текущего баланса');
+  W.capStart(now);
+  // ставка 1000 → выплата 2000: выигрыш 1000 укладывается
+  W.spend(1000, 'blackjack', now);
+  let r = W.capPayout('blackjack', 2000, 1000, now);
+  assert.deepEqual(plain(r), { paid: 2000, net: 1000, granted: 1000, capped: false, left: 1500 });
+  assert.equal(W.getBalance(), 6000);
+  // ещё ставка 2000 → выплата 4000: выигрыш 2000, а осталось 1500
+  W.spend(2000, 'blackjack', now);
+  r = W.capPayout('blackjack', 4000, 2000, now);
+  assert.deepEqual(plain(r), { paid: 3500, net: 1500, granted: 1500, capped: true, left: 0 });
+  assert.equal(W.getBalance(), 4000 + 3500);
+  // лимит исчерпан: возвращается только ставка
+  W.spend(500, 'blackjack', now);
+  r = W.capPayout('blackjack', 1000, 500, now);
+  assert.deepEqual(plain(r), { paid: 500, net: 0, granted: 0, capped: true, left: 0 });
+  // проигрыш и ничья не ограничиваются
+  W.spend(100, 'blackjack', now);
+  assert.equal(W.capPayout('blackjack', 0, 100, now).paid, 0);
+  W.spend(100, 'blackjack', now);
+  assert.equal(W.capPayout('blackjack', 100, 100, now).paid, 100);
+});
+
+test('ограничение выигрыша: на следующий день лимит считается от нового баланса; блэкджек 3:2 учитывается', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const d1 = D(2026, 10, 1), d2 = D(2026, 10, 2);
+  W.capStart(d1);
+  W.spend(100, 'blackjack', d1); W.capPayout('blackjack', 250, 100, d1);     // блэкджек: +150
+  assert.equal(W.capStatus(d1).used, 150);
+  assert.equal(W.capStatus(d1).left, 2500 - 150);
+  assert.equal(W.capStatus(d2).limit, Math.floor(W.getBalance() / 2), 'новый день — лимит от баланса');
+  assert.equal(W.capStatus(d2).used, 0);
+  W.capStart(d2);
+  assert.equal(W.capStatus(d2).used, 0);
+});
+
+test('ограничение выигрыша: повреждённые данные не ломают расчёт', () => {
+  const backend = fakeBackend();
+  backend.data['platform:wallet'] = JSON.stringify({ balance: 1000, capDay: 'вчера', capBase: -5, capUsed: 'много' });
+  const W = load({ localStorage: backend });
+  assert.deepEqual(plain(W.capStatus(D(2026, 10, 1))), { limit: 500, used: 0, left: 500 });
+});
