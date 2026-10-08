@@ -125,6 +125,8 @@
     'online.err.startedText': 'Присоединиться можно только до начала',
     'online.err.network': 'Нет связи',
     'online.err.networkText': 'Проверьте интернет и попробуйте снова',
+    'online.err.missing': 'База данных не найдена',
+    'online.err.missingText': 'Столы сейчас недоступны, сообщите владельцу сайта',
     'online.err.denied': 'Нет доступа к столам',
     'online.err.deniedText': 'Войдите снова или проверьте правила базы',
     'online.err.other': 'Что-то пошло не так',

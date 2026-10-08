@@ -16,7 +16,7 @@
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   // Таймеры молчащего игрока: idleMs (30 с) на ход или ставку, затем вопрос «Вы играете?» на askMs (7 с);
   // ответ «играю» даёт ещё extendMs (15 с); без ответа и по окончании этого времени ставится «стоп» (или пропуск раздачи).
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 6000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 30000, askMs: 7000, extendMs: 15000, dealDelayMs: 1500, nextDelayMs: 10000, botDelayMs: 900, maxStrikes: 3, codeLength: 5 };
   var PLAYER_ACTIONS = ['bet', 'hit', 'stand', 'double', 'split', 'sitout'];
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
@@ -58,13 +58,15 @@
       if (!res.ok && res.status !== 404) throw fail('http-' + res.status);
       return res;
     }
+    // Запись в несуществующую базу или комнату (404) нельзя считать успехом: иначе стол «создаётся», а на деле его нет
+    function strict(res) { if (res.status === 404) throw fail('missing'); return check(res); }
     function getDoc(path) {
       return req('GET', base + '/' + path).then(check).then(function (res) { return res.status === 404 ? null : res.json().then(function (d) { return { data: decode(d), name: d.name, createTime: d.createTime }; }); });
     }
     function putDoc(path, obj, onlyIfNew) {
-      return req('PATCH', base + '/' + path + (onlyIfNew ? '?currentDocument.exists=false' : ''), encode(obj)).then(check);
+      return req('PATCH', base + '/' + path + (onlyIfNew ? '?currentDocument.exists=false' : ''), encode(obj)).then(strict);
     }
-    function addDoc(collection, obj) { return req('POST', base + '/' + collection, encode(obj)).then(check); }
+    function addDoc(collection, obj) { return req('POST', base + '/' + collection, encode(obj)).then(strict); }
     function listDocs(collection) {
       return req('GET', base + '/' + collection + '?pageSize=100').then(check).then(function (res) {
         return res.status === 404 ? [] : res.json().then(function (d) { return (d.documents || []).map(function (x) { return { name: x.name, data: decode(x) }; }); });
@@ -329,7 +331,7 @@
     // Открытые комнаты, которые ждут игроков
     function listRooms() {
       var body = { structuredQuery: { from: [{ collectionId: 'rooms' }], where: { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'lobby' } } }, limit: 20 } };
-      return req('POST', base + ':runQuery', body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
+      return req('POST', base + ':runQuery', body).then(strict).then(function (res) { return res.json(); }).then(function (rows) {
         return rows.filter(function (r) { return r.document; }).map(function (r) {
           var d = decode(r.document), name = r.document.name;
           return { code: name.split('/').pop(), size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, game: d.game, stale: now() - d.heartbeat > cfg.staleMs };

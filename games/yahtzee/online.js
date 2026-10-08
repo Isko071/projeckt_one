@@ -35,13 +35,14 @@
     if (c === 'closed') return 'closed';
     if (c === 'started') return 'started';
     if (c === 'denied') return 'denied';
+    if (c === 'missing') return 'missing';
     if (!c || c === 'network' || /^http-/.test(c)) return 'network';
     return 'other';
   }
   function loadRooms() {
     var api = getRooms();
     if (!api) return;
-    api.listRooms().then(function (list) { on.rooms = list; if (isOn() && on.screen === 'tables') render(); }, function () { on.rooms = on.rooms || []; if (isOn() && on.screen === 'tables') render(); });
+    api.listRooms().then(function (list) { on.rooms = list; if (isOn() && on.screen === 'tables') render(); }, function (e) { on.rooms = on.rooms || []; if (e && (e.code === 'missing' || e.code === 'denied')) on.tableError = errorKey(e); if (isOn() && on.screen === 'tables') render(); });
   }
   function openTables() {
     stopTimers();
