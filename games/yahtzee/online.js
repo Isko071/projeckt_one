@@ -72,6 +72,7 @@
     G.view = v; on.pending = false;
     chat.update(v, chatMode(v));
     if (v.closed || v.hostGone) { stopTimers(); chat.reset(); on.closedReason = v.hostGone ? 'hostGone' : 'closed'; G = null; on.screen = 'closed'; app.modal = null; render(); return; }
+    if (v.status === 'lobby' && on.screen === 'game') { on.screen = 'lobby'; on.banner = null; app.modal = null; G.counted = false; G.recapSeen = (v.state && v.state.recap && v.state.recap.id) || G.recapSeen; G.lastRolls = 0; on.heldKey = ''; }
     if (v.status === 'playing' && v.state) {
       if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); on.banner = null; on.held = [false, false, false, false, false]; if (G.role === 'host') notify(tr('online.creatorNote'), 6000); }
       var me = v.seat, p = v.state.players[me];
@@ -151,15 +152,21 @@
     app.modal = null; on.banner = null; on.pending = false;
     if (toScreen === 'tables') openTables(); else { app.screen = 'start'; render(); }
   }
+  // Ссылка-приглашение вида …/yahtzee/#K7M4Q: после входа сразу заходим за стол, адрес очищается
+  function consumeInvite() {
+    var code = on.invite;
+    if (!code || !Cloud.getState().user) return;
+    on.invite = null;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* адрес не обязателен */ }
+    on.code = code; joinTable(code);
+  }
   function signIn() {
     if (on.busy) return;
     on.busy = true; on.loginError = null; render();
     Cloud.signIn().then(function (r) {
       on.busy = false;
       if (r && r.cancelled) { render(); return; }
-      var hash = (location.hash || '').replace('#', '').toUpperCase();
-      if (/^[A-Z0-9]{5}$/.test(hash)) { on.code = hash; openTables(); joinTable(hash); return; }
-      openTables();
+      openTables(); consumeInvite();
     }, function (e) {
       on.busy = false;
       var c = e && e.code;
@@ -394,7 +401,9 @@
     }).join('');
     return '<div class="overlay" role="dialog" aria-label="' + esc(tr('over.aria')) + '"><div class="dialog"><div><small>' + esc(st.reason === 'alone' ? tr('online.over.alone') : tr('over.title')) + '</small><h2>' + esc(title) + '</h2></div>' +
       '<div class="results">' + list + '</div>' +
-      '<div class="dialog-actions"><button class="btn-secondary" data-act="exitTable" data-key="overExit">' + esc(tr('online.over.leave')) + '</button></div></div></div>';
+      (G && G.role === 'host' ? '' : '<p class="muted-text">' + esc(tr('online.over.waitHost')) + '</p>') +
+      '<div class="dialog-actions"><button class="btn-secondary" data-act="exitTable" data-key="overExit">' + esc(tr('online.over.leave')) + '</button>' +
+      (G && G.role === 'host' ? '<button class="btn-primary" data-act="rematch" data-key="rematch">' + esc(tr('online.over.again')) + '</button>' : '') + '</div></div></div>';
   }
 
   function askHtml(me) {
@@ -526,6 +535,7 @@
         if (st && st.gameOver) leaveGame('tables'); else { app.modal = 'leaveOnline'; render(); }
         return true;
       }
+      case 'rematch': if (G && G.role === 'host') G.ctrl.rematch(); return true;
       case 'confirmLeave': leaveGame('tables'); return true;
     }
     return false;
@@ -543,14 +553,9 @@
   window.addEventListener('pagehide', function () { if (G) { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
   Cloud.onChange(function () {
     if (!isOn()) return;
-    if (on.screen === 'login' && Cloud.getState().status === 'signedIn' && !on.busy) openTables();
+    if (on.screen === 'login' && Cloud.getState().status === 'signedIn' && !on.busy) { openTables(); consumeInvite(); }
     else if (on.screen === 'login' || on.screen === 'tables' || G) render();
   });
-  // Ссылка вида …/yahtzee/#K7M4Q сразу ведёт на вход в стол
-  (function () {
-    var hash = (location.hash || '').replace('#', '').toUpperCase();
-    if (/^[A-Z0-9]{5}$/.test(hash)) { on.code = hash; app.mode = 'online'; enter(); }
-  })();
   // Таймеры на экране обновляются раз в секунду, пока идёт игра
   setInterval(function () { if (isOn() && G && (on.screen === 'game' || on.screen === 'lobby')) render(); }, 1000);
 
@@ -561,5 +566,10 @@
     return chat.panelHtml({ mode: 'game', myTurn: myTurn }) + chat.extraHtml();
   }
   window.YahtzeeOnlineUI = { enter: enter, html: html, modalHtml: modalHtml, click: click, overlayHtml: overlayHtml, afterRender: function () { chat.afterRender(); }, isActive: function () { return isOn(); } };
+  // Ссылка вида …/yahtzee/#K7M4Q сразу ведёт на вход в стол (читается после того, как интерфейс создан)
+  (function () {
+    var hash = (location.hash || '').replace('#', '').toUpperCase();
+    if (/^[A-Z0-9]{5}$/.test(hash)) { on.invite = hash; on.code = hash; app.mode = 'online'; enter(); if (Cloud.getState().user) consumeInvite(); }
+  })();
   render();
 })();

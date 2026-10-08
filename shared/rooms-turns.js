@@ -136,6 +136,18 @@
         status = 'playing'; dirty = true; sys('start', '');
         return publish();
       }
+      // Новая игра за тем же столом: после конца партии хост возвращает стол в комнату ожидания с теми же игроками (вышедшие убираются)
+      function rematch() {
+        if (status !== 'playing' || !full || !full.gameOver) return Promise.resolve();
+        var alive = {};
+        full.players.forEach(function (p) { if (p.active) alive[p.id] = true; });
+        members = members.filter(function (m) { return m.uid === env.uid || alive[m.uid]; });
+        members.forEach(function (m, i) { m.seat = i; });
+        full = null; status = 'lobby'; idle = {};
+        readyAt = members.length >= game.CONFIG.minSeats ? now() - cfg.startDelayMs : 0;   // те же игроки: ждать 20 секунд не нужно
+        sys('again', ''); dirty = true;
+        return publish();
+      }
       function apply(action) {
         var r = game.reduce(full, action, rng);
         if (!r.ok) return false;
@@ -230,7 +242,7 @@
         });
       }
       return tryCreate().then(function () {
-        return { code: code, host: { code: code, role: 'host', start: start, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish } };
+        return { code: code, host: { code: code, role: 'host', start: start, rematch: rematch, tick: tick, close: close, send: dispatch, leave: close, getView: getView, onChange: em.on, publish: publish } };
       });
     }
 

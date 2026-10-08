@@ -188,6 +188,8 @@
     'online.over.title': 'Игра окончена',
     'online.over.alone': 'Остальные игроки вышли',
     'online.over.leave': 'К выбору стола',
+    'online.over.again': 'Играть снова',
+    'online.over.waitHost': 'Ждём, пока создатель начнёт новую игру или закроет стол.',
     'online.out.title': 'Вы выбыли из-за стола',
     'online.out.text': 'Вы не отвечали 2 минуты, поэтому сдались.',
     'online.out.btn': 'К выбору стола',
