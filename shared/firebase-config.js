@@ -1,0 +1,13 @@
+// Настройки Firebase для входа через Google и облачного сохранения.
+// Это публичные значения (они видны любому сайту в браузере): защиту дают правила базы Firestore и список разрешённых доменов.
+var root = typeof window !== 'undefined' ? window : globalThis;
+root.FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDmQQX3omdd32VDo-BQZBM0mbf90bEkMtQ',
+  authDomain: 'igroteka-29263.firebaseapp.com',
+  projectId: 'igroteka-29263',
+  storageBucket: 'igroteka-29263.firebasestorage.app',
+  messagingSenderId: '830740979850',
+  appId: '1:830740979850:web:f0921df69204ef1cc68d73'
+};
+// Имя базы Firestore (создана с собственным именем, не «(default)»)
+root.FIREBASE_DATABASE = 'igroteka-db';

@@ -31,6 +31,8 @@
     </div>
     <div class="menu" id="profile-menu" role="menu" hidden>
       <button class="menu-item" id="open-profile" type="button" role="menuitem" data-i18n="profile.title"></button>
+      <button class="menu-item" id="cloud-action" type="button" role="menuitem"></button>
+      <p class="menu-status" id="cloud-status" role="status"></p>
     </div>
   </header>
 
@@ -70,6 +72,14 @@
   </main>
 </div>
 
+<dialog class="dialog account-dialog" id="account-dialog" aria-labelledby="account-title">
+  <div class="wallet-head">
+    <h2 class="dialog-title" id="account-title"></h2>
+    <button class="icon-btn" id="account-close" type="button" data-i18n-aria-label="wallet.close">✕</button>
+  </div>
+  <div class="account-form" id="account-body"></div>
+</dialog>
+
 <dialog class="dialog" id="profile-dialog" aria-labelledby="profile-title">
   <form class="profile-form" id="profile-form" method="dialog">
     <h2 class="dialog-title" id="profile-title" data-i18n="profile.title"></h2>
@@ -105,31 +115,32 @@
     <p class="streak-hint" id="wd-milestone"></p>
     <button class="btn-primary" id="wd-claim" type="button" hidden></button>
   </section>
+  <section aria-labelledby="rec-title">
+    <h3 id="rec-title" data-i18n="wallet.records.title"></h3>
+    <dl class="records" id="wd-records"></dl>
+  </section>
   <section aria-labelledby="log-title">
     <h3 id="log-title" data-i18n="wallet.log.title"></h3>
     <ul class="log" id="wd-log"></ul>
   </section>
   <p class="dialog-note" data-i18n="wallet.note"></p>
-  <div class="reset-box">
-    <button class="btn-secondary" id="wd-reset" type="button" data-i18n="wallet.reset"></button>
-    <div id="wd-reset-ask" hidden>
-      <p class="dialog-note" id="wd-reset-text"></p>
-      <div class="dialog-actions">
-        <button class="btn-secondary" id="wd-reset-cancel" type="button" data-i18n="wallet.reset.cancel"></button>
-        <button class="btn-primary" id="wd-reset-ok" type="button" data-i18n="wallet.reset.ok"></button>
-      </div>
-    </div>
-  </div>
 </dialog>
 
 <script src="locales/ru.js"></script>
 <script src="shared/i18n.js"></script>
 <script src="shared/profile.js"></script>
 <script src="shared/wallet.js"></script>
+<script src="shared/progress.js"></script>
+<script src="shared/sync-logic.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="shared/firebase-config.js"></script>
+<script src="shared/cloud.js"></script>
 <script src="games/games.js"></script>
 <script src="catalog/logic.js"></script>
 <script src="catalog/catalog.js"></script>
 <script src="catalog/profile-ui.js"></script>
 <script src="catalog/wallet-ui.js"></script>
+<script src="catalog/account-ui.js"></script>
 </body>
 </html>

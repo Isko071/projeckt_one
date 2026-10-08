@@ -247,8 +247,21 @@
 .log-amount { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-variant-numeric: tabular-nums; }
 .log-amount.plus { color: var(--accent); }
 .log-empty { color: var(--muted); display: block !important; }
-.reset-box { display: flex; flex-direction: column; gap: 8px; }
-.reset-box [hidden] { display: none; }
+.records { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 15px; }
+.records dt { color: var(--muted); }
+.records dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .wallet-dialog .btn-primary, .wallet-dialog .btn-secondary { min-height: 48px; }
 @media (max-width: 380px) { .chip { padding: 0 12px; font-size: 15px; } .step-amount { font-size: 10px; } .wallet-balance b { font-size: 34px; } }
 .wallet-dialog[open] { display: grid; gap: 16px; }
+
+/* Аккаунт: окно и меню */
+.account-dialog { max-height: 90vh; overflow: auto; }
+.account-dialog[open] { display: grid; gap: 14px; }
+.account-form { display: grid; gap: 14px; }
+.account-dialog [hidden] { display: none !important; }
+.conflict-list { display: grid; gap: 8px; }
+.conflict-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); font-size: 15px; line-height: 1.4; }
+.menu-status { margin: 4px 0 0; padding: 6px 12px 8px; color: var(--muted); font-size: 13px; line-height: 1.4; max-width: 240px; overflow-wrap: anywhere; }
+.menu-status:empty { display: none; }
+.avatar-btn { position: relative; }
+.avatar-btn.offline::after { content: ''; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: oklch(0.65 0.17 45); border: 2px solid var(--bg); }
