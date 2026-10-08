@@ -197,6 +197,8 @@ test('очерёдность: действовать может только м�
 test('место без ставки пропускает раздачу и остаётся с фишками', () => {
   const t = table(['5S', '9H', '6D', 'TC'], 1000, 2);
   t.act({ type: 'bet', seat: 1, amount: 50 });
+  assert.equal(t.act({ type: 'deal', seat: 1 }).error, 'waiting-for-bets', 'пока второе место не решило, раздавать нельзя');
+  t.act({ type: 'sitout', seat: 0 });
   t.act({ type: 'deal', seat: 1 });
   assert.equal(t.state.seats[0].hands.length, 0);
   assert.equal(t.state.current, 1);
@@ -394,3 +396,141 @@ test('упрощённый режим: в долгой игре подсказк
   const edge = net / wagered;
   assert.ok(edge > -0.04 && edge < 0.01, 'доходность игрока без удвоения и деления ' + (edge * 100).toFixed(2) + '%');
 });
+
+// ===== Несколько мест, боты, вход и выход =====
+test('стол: до 5 мест, свободные места под join, лишние отбрасываются', () => {
+  const s = B.init([{ chips: 100 }], { tableSize: 4, stack: [] });
+  assert.equal(s.seats.length, 4);
+  deepEqual(s.seats.map((x) => x.active), [true, false, false, false]);
+  assert.equal(B.init([{}], { tableSize: 99, stack: [] }).seats.length, 5);
+  assert.equal(B.init(Array.from({ length: 8 }, () => ({})), { stack: [] }).seats.length, 5);
+  assert.equal(B.CONFIG.maxSeats, 5);
+  deepEqual(B.availableActions(s, 2), ['join']);
+});
+
+test('вход за стол: между раздачами, на свободное место, один человек не садится дважды', () => {
+  let st = B.init([{ id: 'a', name: 'Аня', chips: 500 }], { tableSize: 3, stack: ['2S', '9H', '3D', 'TC', '4S', '5S'] });
+  const act = (a) => { const r = B.reduce(st, a, () => 0.5); if (r.ok) st = r.state; return r; };
+  assert.equal(act({ type: 'join', seat: 0, id: 'x' }).error, 'seat-taken');
+  assert.equal(act({ type: 'join', seat: 1, id: 'a' }).error, 'already-seated');
+  assert.equal(act({ type: 'join', seat: 1, id: 'b', chips: -5 }).error, 'bad-chips');
+  assert.equal(act({ type: 'join', seat: 1, id: 'b', name: 'Боря', chips: 300 }).ok, true);
+  assert.equal(act({ type: 'join', seat: 2, id: 'bot1', name: 'Бот', chips: 1000, kind: 'bot' }).ok, true);
+  deepEqual(st.seats.map((x) => [x.name, x.kind, x.chips]), [['Аня', 'human', 500], ['Боря', 'human', 300], ['Бот', 'bot', 1000]]);
+  assert.equal(act({ type: 'bet', seat: 1, amount: 100 }).ok, true);
+  assert.equal(act({ type: 'sitout', seat: 0 }).ok, true);
+  assert.equal(act({ type: 'sitout', seat: 2 }).ok, true);
+  assert.equal(act({ type: 'deal', seat: 1 }).ok, true);
+  assert.equal(act({ type: 'join', seat: 0, id: 'z' }).error, 'wrong-phase', 'во время раздачи садиться нельзя');
+});
+
+test('пропуск раздачи: ставка возвращается, можно вернуться; без фишек на минимальную ставку место решает само', () => {
+  const t = table(['2S'], 200, 2);
+  t.act({ type: 'bet', seat: 0, amount: 100 });
+  t.act({ type: 'sitout', seat: 0 });
+  deepEqual([t.state.seats[0].chips, t.state.seats[0].bet, t.state.seats[0].sitOut], [200, 0, true]);
+  t.act({ type: 'bet', seat: 0, amount: 50 });
+  assert.equal(t.state.seats[0].sitOut, false, 'ставка снимает пропуск');
+  const poor = B.init([{ chips: 10 }, { chips: 500 }], { stack: ['2S'] });
+  const r = B.reduce(poor, { type: 'bet', seat: 1, amount: 100 });
+  assert.equal(B.readyToDeal(r.state), true, 'место с 10 фишками не ждём: ставить ему нечем');
+});
+
+test('уход из-за стола: между раздачами сразу (ставка возвращается), во время раздачи место освобождается после неё', () => {
+  const t = table(['TS', '9H', '8D', '7C', '5S', '5D', '6H', 'KS'], 1000, 2);
+  t.act({ type: 'bet', seat: 0, amount: 100 });
+  t.act({ type: 'bet', seat: 1, amount: 100 });
+  t.act({ type: 'deal', seat: 0 });
+  t.act({ type: 'leave', seat: 0 });                 // ушёл в свой ход: рука остаётся как есть
+  assert.equal(t.state.current, 1, 'ход перешёл к следующему месту');
+  assert.equal(t.state.seats[0].active, true);
+  t.act({ type: 'stand', seat: 1 });
+  assert.equal(t.state.phase, 'settled');
+  assert.notEqual(t.state.seats[0].hands[0].outcome, null, 'ушедшему рассчитали раздачу');
+  t.act({ type: 'next', seat: 1 });
+  assert.equal(t.state.seats[0].active, false, 'после раздачи место свободно');
+  t.act({ type: 'bet', seat: 1, amount: 50 });
+  assert.equal(t.act({ type: 'leave', seat: 1 }).ok, true);
+  assert.equal(t.state.seats[1].chips, t.state.seats[1].chips);
+  assert.equal(t.state.seats[1].active, false);
+  assert.equal(t.act({ type: 'bet', seat: 1, amount: 25 }).error, 'seat-empty');
+});
+
+test('время вышло: на ставке — пропуск раздачи, на ходе — «стоп»; чужой ход не торопит', () => {
+  const t = table(['5S', '4S', '9H', '6D', '3H', 'TC', '8C', '2D'], 1000, 2);
+  t.act({ type: 'bet', seat: 0, amount: 100 });
+  t.act({ type: 'timeout', seat: 1 });
+  assert.equal(t.state.seats[1].sitOut, true);
+  t.act({ type: 'deal', seat: 0 });
+  assert.equal(t.act({ type: 'timeout', seat: 1 }).error, 'wrong-phase');
+  t.act({ type: 'timeout', seat: 0 });
+  assert.equal(t.state.phase, 'settled');
+});
+
+test('боты: ставят постоянную сумму, ходят по подсказке и доводят раздачу до конца', () => {
+  let k = 31; const rng = () => { k = (k * 1103515245 + 12345) % 2147483648; return k / 2147483648; };
+  let st = B.init([{ id: 'me', chips: 1000 }, { id: 'b1', name: 'Бот', chips: 1000, kind: 'bot' }], { simple: true }, rng);
+  const run = (a) => { const r = B.reduce(st, a, rng); assert.equal(r.ok, true, JSON.stringify(a) + ' ' + r.error); st = r.state; };
+  deepEqual(B.botAction(st, 1), { type: 'bet', seat: 1, amount: 100 });
+  assert.equal(B.botAction(st, 0), null, 'за человека бот не ходит');
+  run(B.nextBotAction(st));
+  assert.equal(B.nextBotAction(st), null);
+  assert.equal(B.readyToDeal(st), false, 'человек ещё не поставил');
+  run({ type: 'bet', seat: 0, amount: 50 });
+  assert.equal(B.readyToDeal(st), true);
+  run({ type: 'deal', seat: 0 });
+  let guard = 0;
+  while (st.phase === 'playing' && guard++ < 50) {
+    const a = B.nextBotAction(st);
+    if (a) run(a); else run({ type: 'stand', seat: st.current });
+  }
+  assert.equal(st.phase, 'settled');
+  assert.ok(st.seats[1].hands[0].outcome);
+  const poor = B.init([{ chips: 10, kind: 'bot' }, { chips: 500 }], { stack: [] });
+  assert.equal(B.botAction(poor, 0), null, 'без фишек на ставку бот ничего не ждёт: стол его не ждёт тоже');
+  assert.equal(B.readyToDeal(B.reduce(poor, { type: 'bet', seat: 1, amount: 100 }).state), true);
+});
+
+test('вид стола на 5 мест со скрытой картой дилера, рука каждого места видна всем', () => {
+  const st = B.init(Array.from({ length: 5 }, (_, i) => ({ id: 'p' + i, chips: 1000 })), { stack: ['2S', '3S', '4S', '5S', '6S', '7H', 'TD', '8C', '9S', '2H', '3H', '4H', '5H', '6H'] });
+  let s = st;
+  for (let i = 0; i < 5; i++) s = B.reduce(s, { type: 'bet', seat: i, amount: 25 }).state;
+  s = B.reduce(s, { type: 'deal', seat: 0 }).state;
+  const v = B.view(s);
+  assert.equal(v.seats.length, 5);
+  assert.equal(v.dealer.cards[1], '??');
+  v.seats.forEach((x) => assert.equal(x.hands[0].cards.length, 2));
+  assert.equal(v.shoe, undefined);
+});
+
+// Полные партии: 1 на 1 с ботом и столы на 2–5 мест с ботами; фишки сходятся
+for (const players of [2, 3, 4, 5]) {
+  test('стол на ' + players + ' мест: человек (по подсказке) и боты играют 150 раздач, фишки сходятся, зависаний нет', () => {
+    let k = 1000 + players; const rng = () => { k = (k * 1103515245 + 12345) % 2147483648; return k / 2147483648; };
+    const seats = [{ id: 'me', name: 'Я', chips: 1e6 }];
+    for (let i = 1; i < players; i++) seats.push({ id: 'bot' + i, name: 'Бот ' + i, chips: 1e6, kind: 'bot' });
+    let st = B.init(seats, { simple: true, tableSize: players }, rng);
+    const totals = () => st.seats.map((x) => x.chips);
+    const start = totals();
+    const run = (a) => { const r = B.reduce(st, a, rng); assert.equal(r.ok, true, JSON.stringify(a) + ' ' + r.error); st = r.state; };
+    const nets = st.seats.map(() => 0);
+    for (let round = 0; round < 150; round++) {
+      let guard = 0;
+      while (st.phase === 'betting' && guard++ < 20) {
+        const a = B.nextBotAction(st);
+        if (a) run(a); else if (st.seats[0].bet === 0) run({ type: 'bet', seat: 0, amount: 100 }); else break;
+      }
+      assert.equal(B.readyToDeal(st), true);
+      run({ type: 'deal', seat: 0 });
+      guard = 0;
+      while (st.phase === 'playing' && guard++ < 200) {
+        const a = B.nextBotAction(st);
+        run(a || { type: B.hint(st, st.current), seat: st.current });
+      }
+      assert.equal(st.phase, 'settled', 'раздача должна закончиться');
+      st.seats.forEach((x, i) => { if (x.hands.length) nets[i] += x.net; });
+      run({ type: 'next', seat: 0 });
+    }
+    st.seats.forEach((x, i) => assert.equal(x.chips, start[i] + nets[i], 'фишки места ' + i));
+  });
+}

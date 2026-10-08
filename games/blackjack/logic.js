@@ -18,10 +18,15 @@
 //   { type: 'deal', seat }         раздать карты (нужна хотя бы одна ставка)
 //   { type: 'hit' | 'stand' | 'double' | 'split', seat }
 //   { type: 'next', seat }         новая раздача после окончания прежней
+//   { type: 'sitout', seat, value } пропустить раздачу (value: false — вернуться)
+//   { type: 'join', seat, id, name, chips, kind } занять свободное место между раздачами (kind: 'human' | 'bot')
+//   { type: 'leave', seat }        уйти из-за стола; во время раздачи рука остаётся с тем, что есть, место освободится после неё
+//   { type: 'timeout', seat }      время хода или ставки вышло: ставка — пропуск раздачи, ход — «стоп»
+// За столом до CONFIG.maxSeats мест (5). Боты (kind: 'bot') ходят по базовой стратегии: см. botAction / nextBotAction.
 (function (root) {
   var RANKS = 'A23456789TJQK'.split('');
   var SUITS = ['S', 'H', 'D', 'C'];
-  var CONFIG = { decks: 6, minBet: 25, maxBet: 2500, step: 25, reshuffleBelow: 0.25, startChips: 5000 };
+  var CONFIG = { decks: 6, minBet: 25, maxBet: 2500, step: 25, reshuffleBelow: 0.25, startChips: 5000, maxSeats: 5, botBet: 100 };
 
   // ===== Карты и подсчёт =====
   function rankOf(card) { return card.charAt(0); }
@@ -59,7 +64,29 @@
   // ===== Состояние =====
   function emptyHand() { return { cards: [], bet: 0, done: false, doubled: false, fromSplit: false, splitAces: false, outcome: null, payout: 0 }; }
 
-  // seats: [{ id, name, chips }]; options: { decks, simple, stack } (stack — карты в порядке выдачи, для тестов)
+  function tableSeats(list, size) {
+    list = (list && list.length ? list : [{}]).slice(0, CONFIG.maxSeats);
+    var count = Math.max(list.length, Math.min(CONFIG.maxSeats, Math.floor(size) || 0));
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var s = list[i];
+      out.push(s ? occupy({}, i, s) : { id: 'seat' + i, name: '', kind: 'human', active: false, chips: 0, bet: 0, hands: [], wagered: 0, net: 0, sitOut: false, leaving: false });
+    }
+    return out;
+  }
+  function occupy(seat, i, s) {
+    seat.id = s.id !== undefined ? String(s.id) : 'seat' + i;
+    seat.name = s.name ? String(s.name).slice(0, 20) : '';
+    seat.kind = s.kind === 'bot' ? 'bot' : 'human';
+    seat.active = true;
+    seat.chips = typeof s.chips === 'number' && s.chips >= 0 ? Math.floor(s.chips) : CONFIG.startChips;
+    seat.bet = 0; seat.hands = []; seat.wagered = 0; seat.net = 0; seat.sitOut = false; seat.leaving = false;
+    return seat;
+  }
+
+  // seats: [{ id, name, chips, kind }]; options: { decks, simple, tableSize, stack }
+// tableSize — число мест за столом (до maxSeats); места сверх переданных остаются свободными для join.
+// stack — карты в порядке выдачи, для тестов
   function init(seats, options, rng) {
     options = options || {};
     rng = rng || Math.random;
@@ -67,10 +94,7 @@
     var shoe = options.stack ? options.stack.slice().reverse() : buildShoe(decks, rng);
     return {
       v: 1, decks: decks, simple: !!options.simple, shoe: shoe, fixed: !!options.stack, round: 0, phase: 'betting',
-      seats: (seats && seats.length ? seats : [{}]).map(function (s, i) {
-        return { id: s.id !== undefined ? String(s.id) : 'seat' + i, name: s.name || '', chips: typeof s.chips === 'number' ? s.chips : CONFIG.startChips,
-          bet: 0, hands: [], wagered: 0, net: 0 };
-      }),
+      seats: tableSeats(seats, options.tableSize),
       current: -1, hand: 0, dealer: { cards: [], hidden: true }
     };
   }
@@ -110,7 +134,8 @@
     return !!h && state.current === seat && !h.splitAces && handValue(h.cards).total < 21;
   }
   function availableActions(state, seat) {
-    if (state.phase === 'betting') return ['bet', 'deal'];
+    if (!state.seats[seat] || !state.seats[seat].active) return state.phase === 'betting' ? ['join'] : [];
+    if (state.phase === 'betting') return ['bet', 'deal', 'sitout', 'leave'];
     if (state.phase === 'settled') return ['next'];
     var out = [];
     if (canHit(state, seat)) out.push('hit');
@@ -214,6 +239,49 @@
     if (!s) return { ok: false, error: 'bad-seat' };
     var next = clone(state), events = [], ns = next.seats[seat];
 
+    if (action.type === 'join') {
+      if (state.phase !== 'betting') return { ok: false, error: 'wrong-phase' };
+      if (s.active) return { ok: false, error: 'seat-taken' };
+      if (action.chips !== undefined && (!Number.isInteger(action.chips) || action.chips < 0)) return { ok: false, error: 'bad-chips' };
+      if (state.seats.some(function (x) { return x.active && action.id !== undefined && x.id === String(action.id); })) return { ok: false, error: 'already-seated' };
+      occupy(ns, seat, action);
+      events.push({ type: 'join', seat: seat });
+      return { ok: true, state: next, events: events };
+    }
+    if (!s.active) return { ok: false, error: 'seat-empty' };
+
+    if (action.type === 'leave') {
+      if (state.phase === 'playing' || state.phase === 'dealer') {
+        if (!s.hands.length) { ns.chips += ns.bet; ns.bet = 0; ns.active = false; }       // сидел без ставки: уходит сразу
+        else {
+          ns.leaving = true;
+          ns.hands.forEach(function (h) { h.done = true; });                              // рука остаётся с тем, что есть
+          if (next.current === seat) advance(next, rng, events);
+        }
+      } else { ns.chips += ns.bet; ns.bet = 0; ns.hands = []; ns.active = false; ns.sitOut = false; }
+      events.push({ type: 'leave', seat: seat });
+      return { ok: true, state: next, events: events };
+    }
+
+    if (action.type === 'sitout') {
+      if (state.phase !== 'betting') return { ok: false, error: 'wrong-phase' };
+      var on = action.value !== false;
+      if (on) { ns.chips += ns.bet; ns.bet = 0; }
+      ns.sitOut = on;
+      events.push({ type: 'sitout', seat: seat, value: on });
+      return { ok: true, state: next, events: events };
+    }
+
+    if (action.type === 'timeout') {
+      if (state.phase === 'betting') { ns.chips += ns.bet; ns.bet = 0; ns.sitOut = true; events.push({ type: 'sitout', seat: seat, value: true }); return { ok: true, state: next, events: events }; }
+      if (state.phase === 'playing' && state.current === seat) {
+        ns.hands[next.hand].done = true; advance(next, rng, events);
+        events.push({ type: 'timeout', seat: seat });
+        return { ok: true, state: next, events: events };
+      }
+      return { ok: false, error: 'wrong-phase' };
+    }
+
     if (action.type === 'bet') {
       if (state.phase !== 'betting') return { ok: false, error: 'wrong-phase' };
       var a = action.amount;
@@ -221,6 +289,7 @@
       if (a > 0 && (a < CONFIG.minBet || a > CONFIG.maxBet || a % CONFIG.step !== 0)) return { ok: false, error: 'bad-amount' };
       if (ns.chips + ns.bet < a) return { ok: false, error: 'not-enough-chips' };
       ns.chips += ns.bet - a; ns.bet = a;
+      if (a > 0) ns.sitOut = false;
       events.push({ type: 'bet', seat: seat, amount: a });
       return { ok: true, state: next, events: events };
     }
@@ -228,6 +297,7 @@
     if (action.type === 'deal') {
       if (state.phase !== 'betting') return { ok: false, error: 'wrong-phase' };
       if (!(ns.bet > 0)) return { ok: false, error: 'no-bet' };
+      if (!readyToDeal(state)) return { ok: false, error: 'waiting-for-bets' };
       try { dealRound(next, rng, events); } catch (e) { return { ok: false, error: e.message }; }
       return { ok: true, state: next, events: events };
     }
@@ -236,7 +306,10 @@
       if (state.phase !== 'settled') return { ok: false, error: 'wrong-phase' };
       next.round++; next.phase = 'betting'; next.current = -1; next.hand = 0;
       next.dealer = { cards: [], hidden: true };
-      next.seats.forEach(function (x) { x.bet = 0; x.hands = []; x.wagered = 0; x.net = 0; });
+      next.seats.forEach(function (x) {
+        x.bet = 0; x.hands = []; x.wagered = 0; x.net = 0; x.sitOut = false;
+        if (x.leaving) { x.active = false; x.leaving = false; }
+      });
       if (!next.fixed && next.shoe.length < CONFIG.reshuffleBelow * 52 * next.decks) {
         next.shoe = buildShoe(next.decks, rng);
         events.push({ type: 'shuffle' });
@@ -288,6 +361,51 @@
     var hands = state.seats[seat].hands;
     for (var h = 0; h < hands.length; h++) if (!hands[h].done) { state.current = seat; state.hand = h; return true; }
     return false;
+  }
+
+  // Место определилось с раздачей: поставило, пропускает или не может поставить
+  function decided(s) { return !s.active || s.sitOut || s.bet > 0 || s.chips < CONFIG.minBet; }
+
+  // Можно раздавать: все решили, и есть хотя бы одна ставка
+  function readyToDeal(state) {
+    return state.phase === 'betting' && state.seats.every(decided) && state.seats.some(function (s) { return s.active && s.bet > 0; });
+  }
+
+  // ===== Боты =====
+  // Что должен сделать бот на этом месте сейчас (или null). Ставка постоянная, ход по базовой стратегии.
+  function botAction(state, seat) {
+    var s = state.seats[seat];
+    if (!s || !s.active || s.kind !== 'bot') return null;
+    if (state.phase === 'betting') {
+      if (decided(s)) return null;
+      var amount = Math.min(CONFIG.botBet, Math.floor((s.chips) / CONFIG.step) * CONFIG.step);
+      return amount >= CONFIG.minBet ? { type: 'bet', seat: seat, amount: amount } : { type: 'sitout', seat: seat };
+    }
+    if (state.phase === 'playing' && state.current === seat) {
+      var a = hint(state, seat);
+      return a ? { type: a, seat: seat } : { type: 'stand', seat: seat };
+    }
+    return null;
+  }
+
+  // Первое действие, которое ждёт от какого-нибудь бота (для ведущего: цикл «пока есть действие бота»)
+  function nextBotAction(state) {
+    for (var i = 0; i < state.seats.length; i++) {
+      var a = botAction(state, i);
+      if (a) return a;
+    }
+    return null;
+  }
+
+  // Места-люди, которых сейчас ждёт стол (для таймеров): на ставке — не решившие, в игре — чей ход
+  function waitingSeats(state) {
+    var out = [];
+    state.seats.forEach(function (s, i) {
+      if (!s.active || s.kind === 'bot') return;
+      if (state.phase === 'betting' && !decided(s)) out.push(i);
+      if (state.phase === 'playing' && state.current === i) out.push(i);
+    });
+    return out;
   }
 
   // Что видит место за столом: закрытая карта дилера и колода спрятаны
@@ -345,6 +463,7 @@
     CONFIG: CONFIG, RANKS: RANKS, SUITS: SUITS,
     rankOf: rankOf, suitOf: suitOf, cardValue: cardValue, handValue: handValue, isNatural: isNatural, isBust: isBust,
     buildShoe: buildShoe, init: init, reduce: reduce, view: view, hint: hint, availableActions: availableActions,
-    activeHand: activeHand, canDouble: canDouble, canSplit: canSplit, canHit: canHit
+    activeHand: activeHand, canDouble: canDouble, canSplit: canSplit, canHit: canHit,
+    readyToDeal: readyToDeal, botAction: botAction, nextBotAction: nextBotAction, waitingSeats: waitingSeats
   };
 })(typeof window !== 'undefined' ? window : globalThis);
