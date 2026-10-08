@@ -386,7 +386,7 @@
   function colW(n) { return n <= 2 ? 84 : (n === 3 ? 72 : (n === 4 ? 60 : (n === 5 ? 52 : 46))); }
   function sheetsHtml(st, me, canAct) {
     var order = [me].concat(st.players.map(function (_, i) { return i; }).filter(function (i) { return i !== me; }));
-    var p = st.players[me], cols = 'minmax(92px,1fr) repeat(' + order.length + ', ' + colW(order.length) + 'px)';
+    var p = st.players[me], cols = 'minmax(0,1fr) repeat(' + order.length + ', ' + colW(order.length) + 'px)', minW = 132 + order.length * (colW(order.length) + 4);   // одинаковая ширина у всех строк, иначе колонки «плывут»
     var allowed = canAct && p.rollsUsed > 0 && !on.pending && !spin.active ? Yahtzee.allowedCategories(p, p.dice) : null, best = null, bestPts = 0;
     if (allowed) allowed.forEach(function (c) { var pts = Yahtzee.possibleScore(p, c, p.dice); if (pts > bestPts) { bestPts = pts; best = c; } });
     function cell(pi, cat) {
@@ -401,10 +401,10 @@
       }
       return '<button class="cell" disabled aria-label="' + esc(tr('cell.empty', { name: name })) + '"></button>';
     }
-    function row(cls, lab, sub, cells) { return '<div class="grid row ' + cls + '" style="grid-template-columns:' + cols + '"><span class="label">' + lab + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + cells + '</div>'; }
+    function row(cls, lab, sub, cells) { return '<div class="grid row ' + cls + '" style="min-width:' + minW + 'px;grid-template-columns:' + cols + '"><span class="label">' + lab + (sub ? '<small>' + sub + '</small>' : '') + '</span>' + cells + '</div>'; }
     function info(fn) { return order.map(function (i) { return fn(st.players[i]); }).join(''); }
     function plain(text, cls) { return '<span class="cell ' + (cls || '') + '">' + text + '</span>'; }
-    var head = '<div class="grid sheet-head" style="grid-template-columns:' + cols + '"><span></span>' + order.map(function (i) {
+    var head = '<div class="grid sheet-head" style="min-width:' + minW + 'px;grid-template-columns:' + cols + '"><span></span>' + order.map(function (i) {
       var q = st.players[i], acting = !st.gameOver && q.active && (st.mode === 'turns' ? st.current === i : !q.done);
       return '<span class="head-name' + (acting ? ' current' : '') + '">' + esc(q.name || '') + '<small>' + esc(seatStatus(st, i)) + '</small></span>';
     }).join('') + '</div>';
