@@ -385,8 +385,9 @@ function render() {
   if (game && game.gameOver && !app.reward) settleReward();
   var tpl = document.createElement('template');
   tpl.innerHTML = '<div class="screen" data-morph-key="' + app.screen + '">' +
-    (app.screen === 'start' ? startHtml() : (app.screen === 'online' && window.YahtzeeOnlineUI ? window.YahtzeeOnlineUI.html() : gameHtml())) + '</div>' + modalHtml();
+    (app.screen === 'start' ? startHtml() : (app.screen === 'online' && window.YahtzeeOnlineUI ? window.YahtzeeOnlineUI.html() : gameHtml())) + '</div>' + (window.YahtzeeOnlineUI ? window.YahtzeeOnlineUI.overlayHtml() : '') + modalHtml();
   morph(appEl, tpl.content);
+  if (window.YahtzeeOnlineUI) window.YahtzeeOnlineUI.afterRender();
   if (app.modal) {
     var auto = appEl.querySelector('[data-autofocus]');
     if (auto && !auto.closest('.overlay').contains(document.activeElement)) auto.focus();

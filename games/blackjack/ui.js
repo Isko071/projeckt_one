@@ -19,6 +19,21 @@ var gameToken = 0;       // растёт при выходе из игры: от
 var hostTimer = null, pollTimer = null, roomsTimer = null, clockTimer = null;
 var roomsApi = null;
 
+// Чат стола (shared/chat-ui.js): только в онлайн-режиме
+var chat = window.PlatformChatUI.create({
+  root: appEl,
+  getView: function () { return G && G.mode === 'online' ? G.view : null; },
+  myUid: function () { var u = Cloud.getState().user; return u ? u.uid : null; },
+  send: function (text, cid) { return G && G.mode === 'online' ? G.ctrl.send({ type: 'chat', text: text, cid: cid }) : false; },
+  render: function () { render(); }
+});
+function chatMode(v) { return v && v.status === 'playing' ? 'game' : 'lobby'; }
+function chatOverlayHtml() {
+  if (!G || G.mode !== 'online' || app.screen !== 'game') return '';
+  var D = describe(), myTurn = !!(D && D.me !== null && D.vs.phase === 'playing' && D.vs.current === D.me);
+  return chat.panelHtml({ mode: 'game', myTurn: myTurn }) + chat.extraHtml();
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
 }
@@ -26,7 +41,7 @@ function reduced() { try { return window.matchMedia('(prefers-reduced-motion: re
 function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 function unit(n) { return window.I18n.plural(n, 'wallet.unit'); }
 function now() { return Date.now(); }
-function viewport() { return document.documentElement.clientWidth || window.innerWidth; }
+function viewport() { return (document.documentElement.clientWidth || window.innerWidth) - (typeof chat !== 'undefined' && chat ? chat.sideWidth() : 0); }
 
 // ===== Тема и значки =====
 function themeButtonHtml(cls) {
@@ -246,7 +261,7 @@ function scheduleSeq(st) {
 
 // ===== Сессия «С ботом» =====
 function startLocal() {
-  gameToken++;
+  gameToken++; chat.reset();
   stopOnline();
   var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }], { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1, free: false };
@@ -354,6 +369,7 @@ function backOnline() {
 function onView(v) {
   if (!G || G.mode !== 'online') return;
   G.view = v;
+  chat.update(v, chatMode(v));
   app.pending = false;
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
@@ -385,13 +401,13 @@ function onView(v) {
   render();
 }
 function handleClosed(v) {
-  stopOnline();
+  stopOnline(); chat.reset();
   app.closedReason = v.hostGone ? 'hostGone' : 'closed';
   G = null; app.screen = 'closed'; app.modal = null;
   render();
 }
 function handleLeft() {
-  stopOnline();
+  stopOnline(); chat.reset();
   var ctrl = G && G.ctrl;
   if (ctrl && G.role === 'player') ctrl.stop();
   G = null; app.screen = 'out'; app.modal = null;
@@ -406,7 +422,9 @@ function createTable() {
   api.createRoom({ size: app.size, fillBots: app.fillBots, name: prof.name, avatar: prof.avatar, chips: prof.chips }).then(function (res) {
     stopOnline();
     var host = res.host;
+    chat.reset();
     G = { mode: 'online', role: 'host', ctrl: host, view: host.getView(), code: res.code, settledRound: -1 };
+    chat.update(G.view, 'lobby');
     host.onChange(onView);
     var failing = 0;
     hostTimer = setInterval(function () {
@@ -425,6 +443,7 @@ function joinTable(code) {
   var prof = onlineProfile();
   api.joinRoom(code, prof).then(function (ctrl) {
     stopOnline();
+    chat.reset();
     G = { mode: 'online', role: 'player', ctrl: ctrl, view: null, code: code, settledRound: -1 };
     ctrl.onChange(onView);
     var failing = 0;
@@ -443,7 +462,7 @@ function onlineSend(action) {
   G.ctrl.send(action).catch(function () { app.pending = false; app.banner = 'offline'; render(); });
 }
 function leaveGame(toScreen) {
-  gameToken++;
+  gameToken++; chat.reset();
   var g = G;
   stopOnline();
   G = null;
@@ -461,7 +480,7 @@ function topbarHtml() {
   return '<div class="topbar">' + catalogButtonHtml() +
     '<div class="title">' + (L.narrow ? '' : esc(window.I18n.t('games.blackjack.title'))) + '</div>' +
     '<button class="icon-btn" data-act="rules" data-key="rules" aria-label="' + esc(tr('rulesBtn')) + '">?</button>' +
-    themeButtonHtml('') + '<div class="bal-chip" data-key="bal">' + esc(balText) + '</div></div>';
+    (G && G.mode === 'online' && app.screen === 'game' ? chat.buttonHtml() : '') + themeButtonHtml('') + '<div class="bal-chip" data-key="bal">' + esc(balText) + '</div></div>';
 }
 
 function startHtml() {
@@ -558,7 +577,7 @@ function lobbyHtml() {
     '<div class="card-box code-big"><small>' + esc(tr('lobby.code')) + '</small><div class="code" data-key="codeBig">' + esc(code) + '</div><div class="btns">' +
       '<button class="btn ghost" data-act="copyCode" data-key="copy">' + esc(tr(app.copied ? 'lobby.copied' : 'lobby.copy')) + '</button>' +
       '<button class="btn ghost" data-act="shareLink" data-key="share">' + esc(tr('lobby.share')) + '</button></div></div>' +
-    '<div class="seats">' + seats.join('') + '</div>' + autoHtml +
+    '<div class="seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
     bannerHtml() +
     (host
       ? '<div class="row-btns"><button class="btn accent big" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('lobby.start')) + '</button><button class="btn big" data-act="closeTable" data-key="closeTable">' + esc(tr('lobby.close')) + '</button></div>' +
@@ -786,8 +805,9 @@ function screenHtml() {
 function render() {
   renderPass = { fresh: 0, keys: [] };
   var tpl = document.createElement('template');
-  tpl.innerHTML = '<div class="screen" data-key="' + app.screen + '">' + screenHtml() + '</div>' + modalHtml();
+  tpl.innerHTML = '<div class="screen" data-key="' + app.screen + '">' + screenHtml() + '</div>' + chatOverlayHtml() + modalHtml();
   morph(appEl, tpl.content);
+  chat.afterRender();
   renderPass.keys.forEach(function (k) { app.seen[k] = true; });
   if (app.modal || appEl.querySelector('.overlay')) {
     var auto = appEl.querySelector('[data-autofocus]');

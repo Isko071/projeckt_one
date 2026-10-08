@@ -10,6 +10,15 @@
   var G = null, roomsApi = null, hostTimer = null, pollTimer = null, roomsTimer = null;
 
   function now() { return Date.now(); }
+  // Чат стола (shared/chat-ui.js)
+  var chat = window.PlatformChatUI.create({
+    root: appEl,
+    getView: function () { return G ? G.view : null; },
+    myUid: function () { var u = Cloud.getState().user; return u ? u.uid : null; },
+    send: function (text, cid) { return G ? G.ctrl.send({ type: 'chat', text: text, cid: cid }) : false; },
+    render: function () { render(); }
+  });
+  function chatMode(v) { return v && v.status === 'playing' ? 'game' : 'lobby'; }
   function mine() { return G && G.view && G.view.state && G.view.seat !== null && G.view.seat !== undefined ? G.view.state.players[G.view.seat] : null; }
   function notify(text, ms) { on.notice = text; on.noticeUntil = now() + (ms || 4000); }
   function activeNotice() { if (on.notice && now() > on.noticeUntil) on.notice = null; return on.notice; }
@@ -61,12 +70,13 @@
   function onView(v) {
     if (!G) return;
     G.view = v; on.pending = false;
-    if (v.closed || v.hostGone) { stopTimers(); on.closedReason = v.hostGone ? 'hostGone' : 'closed'; G = null; on.screen = 'closed'; app.modal = null; render(); return; }
+    chat.update(v, chatMode(v));
+    if (v.closed || v.hostGone) { stopTimers(); chat.reset(); on.closedReason = v.hostGone ? 'hostGone' : 'closed'; G = null; on.screen = 'closed'; app.modal = null; render(); return; }
     if (v.status === 'playing' && v.state) {
       if (on.screen === 'lobby') { on.screen = 'game'; window.PlatformWallet.markPlayed(); on.banner = null; on.held = [false, false, false, false, false]; if (G.role === 'host') notify(tr('online.creatorNote'), 6000); }
       var me = v.seat, p = v.state.players[me];
       if (me === null || me === undefined || !p || !p.active) {
-        if (!v.state.gameOver && !G.left) { G.left = true; stopTimers(); if (G.role === 'player') G.ctrl.stop(); G = null; on.screen = 'out'; app.modal = null; }
+        if (!v.state.gameOver && !G.left) { G.left = true; stopTimers(); chat.reset(); if (G.role === 'player') G.ctrl.stop(); G = null; on.screen = 'out'; app.modal = null; }
       } else {
         var key = T.progressKey(v.state, me);
         if (key !== on.heldKey) {
@@ -96,7 +106,9 @@
     api.createRoom({ size: on.size, mode: on.mode, name: prof.name, avatar: prof.avatar }).then(function (res) {
       stopTimers();
       var host = res.host, failing = 0;
+      chat.reset();
       G = { role: 'host', ctrl: host, view: host.getView(), code: res.code };
+      chat.update(G.view, 'lobby');
       host.onChange(onView);
       hostTimer = setInterval(function () {
         host.tick().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { on.banner = 'offline'; render(); } });
@@ -115,6 +127,7 @@
     api.joinRoom(code, { name: prof.name, avatar: prof.avatar }).then(function (ctrl) {
       stopTimers();
       var failing = 0;
+      chat.reset();
       G = { role: 'player', ctrl: ctrl, view: null, code: code };
       ctrl.onChange(onView);
       var poll = function () { ctrl.poll().then(function () { if (failing) { failing = 0; backOnline(); } }, function () { if (++failing >= 3) { on.banner = 'offline'; render(); } }); };
@@ -131,7 +144,7 @@
     G.ctrl.send(action).catch(function () { on.pending = false; on.banner = 'offline'; render(); });
   }
   function leaveGame(toScreen) {
-    var g = G;
+    var g = G; chat.reset();
     stopTimers();
     G = null;
     if (g) { if (g.role === 'host') g.ctrl.close(); else g.ctrl.leave(); }
@@ -232,7 +245,7 @@
         '<div class="o-mode-tag">' + esc(modeName(mode)) + ' · ' + esc(tr('online.lobby.seats', { n: size })) + '</div>' +
         '<div class="o-btns"><button class="btn-secondary small" data-act="copyCode" data-key="copy">' + esc(tr(on.copied ? 'online.lobby.copied' : 'online.lobby.copy')) + '</button>' +
         '<button class="btn-secondary small" data-act="shareLink" data-key="share">' + esc(tr('online.lobby.share')) + '</button></div></div>' +
-      '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml +
+      '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) +
       bannerHtml() +
       (host
         ? '<div class="o-btns"><button class="btn-play" style="flex:2" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('online.lobby.start')) + '</button><button class="btn-secondary wide" style="flex:1" data-act="closeTable" data-key="closeTable">' + esc(tr('online.lobby.close')) + '</button></div>' +
@@ -406,7 +419,7 @@
     var mineActive = T.canAct(st, me);
     return '<div class="topbar"><div class="topbar-head"><div class="turn"><small>' + esc(modeName(st.mode)) + ' · ' + esc(tr('online.round', { n: st.round, m: Yahtzee.CATEGORIES.length })) + '</small><strong>' +
         esc(st.gameOver ? tr('online.over.title') : (st.mode === 'turns' && st.current === me ? tr('online.yourTurn') : tr('online.table', { code: G.code }))) + '</strong></div>' + themeButtonHtml() + '</div>' +
-      '<div class="topbar-actions"><button class="btn-secondary small" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button>' +
+      '<div class="topbar-actions"><button class="btn-secondary small" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button>' + chat.buttonHtml() +
       '<button class="btn-secondary small" data-act="exitTable" data-key="exit">' + esc(tr('online.leave')) + '</button></div></div>' +
       bannerHtml() + (notice ? '<div class="o-notice" role="status">' + esc(notice) + '</div>' : '') +
       '<div class="layout"><section class="card play"><div class="status-row"><span class="status" aria-live="polite">' + esc(statusLine(st, me, p)) + '</span>' +
@@ -541,6 +554,12 @@
   // Таймеры на экране обновляются раз в секунду, пока идёт игра
   setInterval(function () { if (isOn() && G && (on.screen === 'game' || on.screen === 'lobby')) render(); }, 1000);
 
-  window.YahtzeeOnlineUI = { enter: enter, html: html, modalHtml: modalHtml, click: click, isActive: function () { return isOn(); } };
+  // Панель и плашка чата во время игры (кладутся рядом с экраном, чтобы не зависеть от его прокрутки)
+  function overlayHtml() {
+    if (!G || !isOn() || on.screen !== 'game') return '';
+    var st = G.view && G.view.state, me = G.view && G.view.seat, myTurn = !!(st && me !== null && me !== undefined && T.canAct(st, me));
+    return chat.panelHtml({ mode: 'game', myTurn: myTurn }) + chat.extraHtml();
+  }
+  window.YahtzeeOnlineUI = { enter: enter, html: html, modalHtml: modalHtml, click: click, overlayHtml: overlayHtml, afterRender: function () { chat.afterRender(); }, isActive: function () { return isOn(); } };
   render();
 })();
