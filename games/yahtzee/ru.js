@@ -150,6 +150,7 @@
     'online.lobby.share': 'Поделиться ссылкой',
     'online.lobby.start': 'Начать игру',
     'online.lobby.needMore': 'Нужен ещё игрок',
+    'online.lobby.startIn': 'Начать можно через {n} с',
     'online.lobby.hostHint': 'Не закрывайте эту вкладку, пока идёт игра',
     'online.lobby.close': 'Закрыть стол',
     'online.lobby.leave': 'Выйти',

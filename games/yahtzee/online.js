@@ -218,17 +218,19 @@
       return '<div class="o-seat" data-key="m-' + esc(m.uid) + '"><span class="av" style="background:' + P.avatarColor(m.avatar) + '">' + esc(P.initial(m.name)) + '</span><span class="nm">' + esc(m.name || tr('online.lobby.you')) + '</span><span class="tg">' + esc(tags.join(' · ')) + '</span></div>';
     });
     for (var i = members.length; i < size; i++) seats.push('<div class="o-seat empty" data-key="e-' + i + '"><span class="av">·</span><span class="nm">' + esc(tr('online.lobby.waiting')) + '</span></div>');
-    var canStart = members.length >= T.CONFIG.minSeats;
+    var startLeft = v && v.startIn >= 0 ? Math.max(0, v.startIn - (now() - (v.receivedAt || now()))) : -1;
+    var canStart = members.length >= T.CONFIG.minSeats && startLeft === 0;   // 2 игрока и 20 секунд после последнего входа или выхода
+    var autoHtml = startLeft > 0 ? '<div class="o-hint" role="status"><b>' + esc(tr('online.lobby.startIn', { n: Math.ceil(startLeft / 1000) })) + '</b></div>' : '';
     return '<div class="o-page"><div class="o-head"><h2>' + esc(tr('online.lobby.title')) + '</h2>' + themeButtonHtml() + '</div>' +
       '<div class="card o-box o-center"><small>' + esc(tr('online.lobby.code')) + '</small><div class="o-bigcode" data-key="codeBig">' + esc(G ? G.code : '') + '</div>' +
         '<div class="o-mode-tag">' + esc(modeName(mode)) + ' · ' + esc(tr('online.lobby.seats', { n: size })) + '</div>' +
         '<div class="o-btns"><button class="btn-secondary small" data-act="copyCode" data-key="copy">' + esc(tr(on.copied ? 'online.lobby.copied' : 'online.lobby.copy')) + '</button>' +
         '<button class="btn-secondary small" data-act="shareLink" data-key="share">' + esc(tr('online.lobby.share')) + '</button></div></div>' +
-      '<div class="o-seats">' + seats.join('') + '</div>' +
+      '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml +
       bannerHtml() +
       (host
         ? '<div class="o-btns"><button class="btn-play" style="flex:2" data-act="start" data-key="start"' + (canStart ? '' : ' disabled') + '>' + esc(tr('online.lobby.start')) + '</button><button class="btn-secondary wide" style="flex:1" data-act="closeTable" data-key="closeTable">' + esc(tr('online.lobby.close')) + '</button></div>' +
-          '<div class="o-hint">' + esc(tr(canStart ? 'online.lobby.hostHint' : 'online.lobby.needMore')) + '</div>'
+          '<div class="o-hint">' + esc(tr(members.length >= T.CONFIG.minSeats ? 'online.lobby.hostHint' : 'online.lobby.needMore')) + '</div>'
         : '<div class="o-p o-center"><b>' + esc(tr(members.length >= size ? 'online.lobby.full' : 'online.lobby.waitHost')) + '</b></div><button class="btn-secondary wide" data-act="leaveLobby" data-key="leaveLobby">' + esc(tr('online.lobby.leave')) + '</button>') +
       '</div>';
   }
