@@ -333,8 +333,9 @@ a.theme-btn { color: var(--ink); }
 .o-pl .s { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
 .o-pl .o-mini { grid-column: 1 / -1; font-size: 18px; line-height: 1.1; letter-spacing: 1px; }
 .o-sheet { overflow-x: auto; }
-.o-sheet .grid { min-width: 100%; }
+.o-sheet .grid { min-width: 100%; width: max-content; }
 .o-sheet .grid::after { display: none; }
+.o-sheet .head-name small { display: block; font-size: 10px; font-weight: 400; opacity: .85; line-height: 1.2; margin-top: 1px; white-space: normal; }
 .o-ask { display: flex; align-items: baseline; gap: 10px; }
 .o-ask b { font-size: 56px; line-height: 1; }
 .o-ask span { color: var(--muted); }
