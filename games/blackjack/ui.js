@@ -5,12 +5,13 @@ var CATALOG_URL = '../../index.html';
 var tr = function (key, params) { return window.I18n.t('games.blackjack.' + key, params); };
 var BJ = window.Blackjack, W = window.PlatformWallet, P = window.PlatformProfile, Cloud = window.PlatformCloud;
 var appEl = document.getElementById('app');
-var CHIPS = [25, 50, 100, 250, 500, 1000, 2000];
-var MIN_BET = BJ.CONFIG.minBet, MAX_BET = BJ.CONFIG.maxBet;
+var MIN_BET = BJ.CONFIG.minBet;
+// Ставок нет: движок играет с условной ставкой, а игрок получает только награду (кошелёк не списывается)
+var FLAT_BET = MIN_BET, VIRTUAL_CHIPS = 100000, REWARD = { win: 250, blackjack: 400 };
 var ROOM_CFG = window.PlatformRooms ? window.PlatformRooms.DEFAULTS : { idleMs: 30000, askMs: 7000, extendMs: 15000, nextDelayMs: 10000 };
 
 var app = {
-  screen: 'start', startMode: 'bot', modal: null, chips: [100], lastBet: 100, size: 4, fillBots: true, private: false,
+  screen: 'start', startMode: 'bot', modal: null, size: 4, fillBots: true, private: false,
   code: '', codeError: null, tableError: null, rooms: null, busy: false, loginError: null, copied: false,
   notice: null, noticeUntil: 0, resultAt: 0, pending: false, banner: null, seen: {}, settledAt: 0, closedReason: null, askShown: false
 };
@@ -104,19 +105,6 @@ function cardHtml(code, w, extra) {
   return out + '</div>';
 }
 var CHIP_COLOR = { 25: 'oklch(0.48 0.04 260)', 50: 'oklch(0.5 0.15 250)', 100: 'oklch(0.32 0.03 260)', 250: 'oklch(0.52 0.14 45)', 500: 'oklch(0.46 0.16 315)', 1000: 'oklch(0.45 0.12 150)', 2000: 'oklch(0.42 0.15 20)' };
-function chipHtml(v, w) {
-  return '<div class="chip" style="width:' + w + 'px;height:' + w + 'px;background:' + (CHIP_COLOR[v] || 'oklch(0.4 0.03 260)') + ';border:' + (w * 0.1) + 'px dashed oklch(1 0 0 / .92)" role="img" aria-label="' + esc(tr('bet.chip', { n: v })) + '">' +
-    '<div class="in" style="font-size:' + (w * (v >= 100 ? 0.25 : 0.29)) + 'px">' + v + '</div></div>';
-}
-// Разложение суммы на фишки (крупные номиналы первыми)
-function chipsOf(amount) {
-  var out = [], rest = amount;
-  [2000, 1000, 500, 250, 100, 50, 25].forEach(function (v) { while (rest >= v) { out.push(v); rest -= v; } });
-  return out;
-}
-function chipStackHtml(values, w) {
-  return values.slice(-4).map(function (v, i) { return '<div style="flex:none;margin-top:' + (i ? -w * 0.7 : 0) + 'px">' + chipHtml(v, w) + '</div>'; }).join('');
-}
 
 // Ряд карт внахлёст. fresh-карты (ещё не показанные) выезжают по очереди.
 var renderPass = { fresh: 0, keys: [] };
@@ -186,13 +174,11 @@ function seatStatus(D, idx) {
   var vs = D.vs, s = vs.seats[idx], h = seatHand(s), tm = timerFor(D, idx);
   if (!s.active) return [tr('st.left'), ''];
   if (vs.phase === 'betting') {
-    if (s.sitOut) return [tr('st.skips'), ''];
-    if (s.bet > 0) return [tr('st.betsDone', { n: s.bet }), 'good'];
-    return [tr('st.bets'), ''];
+    return [s.sitOut ? tr('st.skips') : tr('st.deals'), ''];
   }
   if (vs.phase === 'settled' && h) {
-    var d = s.net;
-    return [d > 0 ? tr('res.delta.plus', { n: fmt(d), unit: unit(d) }) : (d < 0 ? tr('res.delta.minus', { n: fmt(-d), unit: unit(-d) }) : tr('res.delta.zero')), d > 0 ? 'good' : (d < 0 ? 'bad' : '')];
+    var oc = h.outcome, win = oc === 'win' || oc === 'blackjack';
+    return [tr('res.' + (oc === 'blackjack' ? 'bj' : (oc === 'win' || oc === 'push' || oc === 'bust' ? oc : 'lose'))), win ? 'good' : (oc === 'push' ? '' : 'bad')];
   }
   if (!h) return [s.sitOut ? tr('st.skips') : '', ''];
   if (BJ.isBust(h)) return [tr('st.bust'), 'bad'];
@@ -215,22 +201,13 @@ function myOutcome(D) {
   if (!h) return null;
   var dealerBj = BJ.handValue(D.vs.dealer.cards).total === 21 && D.vs.dealer.cards.length === 2;
   var key = h.outcome === 'blackjack' ? 'bj' : (h.outcome === 'bust' ? 'bust' : (h.outcome === 'push' ? 'push' : (h.outcome === 'win' ? 'win' : (dealerBj ? 'dealerBj' : 'lose'))));
-  var me = sumOf(h.cards), dl = sumOf(D.vs.dealer.cards), bet = h.bet, net = s.net;
-  var free = D.mode === 'bot' && G && G.free;
-  var sub = { win: tr('res.subWin', { bet: bet }), bj: tr('res.subBj'), push: tr('res.subPush', { bet: bet }), lose: tr('res.subLose', { a: me, b: dl }), bust: tr('res.subBust'), dealerBj: tr('res.subDealerBj') }[key];
-  var reward = free && G.limited && (key === 'win' || key === 'bj');
-  if (free) { sub = reward ? tr('res.subLimit', { n: FREE_WIN }) : (key === 'win' || key === 'bj' || key === 'push' ? tr('res.subFree') : sub); net = reward ? FREE_WIN : 0; }
-  var delta = reward ? tr('res.delta.plus', { n: fmt(FREE_WIN), unit: unit(FREE_WIN) }) : free ? tr('res.free') : net > 0 ? tr('res.delta.plus', { n: fmt(net), unit: unit(net) }) : (net < 0 ? tr('res.delta.minus', { n: fmt(-net), unit: unit(-net) }) : tr('res.delta.zero'));
-  return { key: key, title: tr('res.' + key), sub: sub, delta: delta, tone: free ? (key === 'win' || key === 'bj' ? 'good' : (key === 'push' ? '' : 'bad')) : (net > 0 ? 'good' : (net < 0 ? 'bad' : '')), net: net, bet: bet };
+  var me = sumOf(h.cards), dl = sumOf(D.vs.dealer.cards);
+  var rw = G && G.rw && G.rw.round === D.vs.round ? G.rw : null, got = rw ? rw.granted : 0, capped = !!(rw && rw.capped && !rw.granted);
+  var sub = { win: tr('res.subWin'), bj: tr('res.subBj'), push: tr('res.subPush'), lose: tr('res.subLose', { a: me, b: dl }), bust: tr('res.subBust'), dealerBj: tr('res.subDealerBj') }[key];
+  if (capped) sub = tr('cap.reached');
+  var delta = got > 0 ? tr('res.delta.plus', { n: fmt(got), unit: unit(got) }) : tr('res.delta.zero');
+  return { key: key, title: tr('res.' + key), sub: sub, delta: delta, tone: got > 0 || key === 'win' || key === 'bj' ? 'good' : (key === 'push' ? '' : 'bad'), net: got };
 }
-function betBounds() {
-  var bal = W.getBalance();
-  return { bal: bal, max: Math.min(MAX_BET, Math.floor(bal / 25) * 25) };
-}
-function chipsTotal() { return app.chips.reduce(function (a, b) { return a + b; }, 0); }
-// Стол ставок всегда пустой: ставку игрок выбирает сам (или играет без ставки в режиме «С ботом»)
-function emptyBet() { return []; }
-
 // ===== Уведомления =====
 function notify(text, ms) { app.notice = text; app.noticeUntil = now() + (ms || 4000); }
 function activeNotice() {
@@ -253,42 +230,36 @@ function scheduleSeq(st) {
 }
 
 // ===== Сессия «С ботом» =====
-// Дневной предел выигрыша достигнут: ставок нет, раздача идёт сразу, за победу фиксированно FREE_WIN аконов
-var FREE_WIN = 250;
-function limitReached() { return W.capStatus(now()).left <= 0; }
+// Награда за раздачу: победа 250, блэкджек 400, ничья и проигрыш без награды; за день не больше предела (W.rewardStatus)
+function rewardOf(outcome) { return REWARD[outcome] || 0; }
+function grantReward(outcome) {
+  var want = rewardOf(outcome), r = want ? W.reward('blackjack', want, now()) : { granted: 0, capped: false, left: W.rewardStatus('blackjack', now()).left };
+  G.rw = { round: G.state.round, want: want, granted: r.granted, capped: r.capped, left: r.left };
+  if (want) W.countWin('blackjack');
+  if (r.capped) notify(tr(r.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(r.granted) }), 6000);
+}
+
 function startLocal() {
   gameToken++; chat.reset();
   stopOnline();
-  var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }], { simple: true });
-  G = { mode: 'bot', state: st, settledRound: -1, free: false };
-  app.chips = emptyBet();
+  var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: VIRTUAL_CHIPS, kind: 'human' }], { simple: true });
+  G = { mode: 'bot', state: st, settledRound: -1 };
   app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
   render();
-  if (limitReached()) localDeal(true, true);
+  localDeal();
 }
 function lDispatch(action) {
   var before = G.state.phase, r = BJ.reduce(G.state, action);
   if (!r.ok) return false;
   G.state = r.state;
   var st = G.state;
-  if (before === 'betting' && st.phase !== 'betting') {
-    var h = st.seats[0].hands[0];
-    if (h && !G.free) { W.spend(h.bet, 'blackjack'); W.markPlayed(); W.countPlay('blackjack'); app.lastBet = h.bet; }
-  }
+  if (before === 'betting' && st.phase !== 'betting') { W.markPlayed(); W.countPlay('blackjack'); }
   if (st.phase === 'settled' && G.settledRound !== st.round) {
     G.settledRound = st.round;
     var mine = seatHand(st.seats[0]);
-    G.cap = null;
-    if (mine && !G.free) {
-      var cr = W.capPayout('blackjack', mine.payout, mine.bet, now());
-      G.cap = cr;
-      if (cr.capped) notify(tr(cr.left > 0 || cr.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(cr.granted) }), 6000);
-      if (mine.outcome === 'win' || mine.outcome === 'blackjack') W.countWin('blackjack');
-    } else if (mine && G.limited && (mine.outcome === 'win' || mine.outcome === 'blackjack')) {
-      W.add(FREE_WIN, 'blackjack', now());
-    }
+    G.rw = null;
+    if (mine) grantReward(mine.outcome);
     scheduleSeq(st);
-   
   }
   return true;
 }
@@ -303,15 +274,8 @@ function runBots() {
   })();
 }
 // Своя ставка, ставка бота и раздача
-function localDeal(free, limited) {
-  var total = free ? MIN_BET : chipsTotal(), st = G.state;
-  if (!free && (total < MIN_BET || total > betBounds().max)) return;
-  G.free = !!free;                               // без ставки: кошелёк не трогаем, выигрыша нет
-  G.limited = !!limited;                         // без ставки из-за дневного предела: за победу фиксированная награда
-  if (limited) notify(tr('cap.free', { n: FREE_WIN, unit: unit(FREE_WIN) }), 6000);
-  st.seats[0].chips = free ? Math.max(MIN_BET, W.getBalance()) : W.getBalance();
-  if (!free) W.capStart(now());
-  if (!lDispatch({ type: 'bet', seat: 0, amount: total })) return;
+function localDeal() {
+  if (!lDispatch({ type: 'bet', seat: 0, amount: FLAT_BET })) return;
   var a;
   while ((a = BJ.nextBotAction(G.state)) && G.state.phase === 'betting') lDispatch(a);
   lDispatch({ type: 'deal', seat: 0 });
@@ -321,12 +285,10 @@ function localDeal(free, limited) {
 }
 function localNext() {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
-  G.state.seats[0].chips = W.getBalance();
-  G.free = false; G.limited = false;
+  G.state.seats[0].chips = VIRTUAL_CHIPS;
   app.seen = {}; app.resultAt = 0; app.seq = null;
-  app.chips = emptyBet();
   render();
-  if (limitReached()) localDeal(true, true);
+  localDeal();
 }
 
 // ===== Сессия «Онлайн» =====
@@ -397,7 +359,7 @@ function onView(v) {
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
   if (v.status === 'playing' && st) {
-    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.chips = emptyBet(); app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
+    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
     var me = v.seat;
     if (me === null || me === undefined || !st.seats[me] || !st.seats[me].active) {
       if (!G.left) { G.left = true; handleLeft(); }
@@ -412,16 +374,12 @@ function onView(v) {
     if (st.phase === 'settled' && G.settledRound !== st.round) {
       G.settledRound = st.round; app.settledAt = now();
       var h = seatHand(seat);
-      if (h) {
-        if (seat.net > 0) {
-          var oc = W.onlineWin('blackjack', seat.net, now());
-          if (oc.capped) notify(tr(oc.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(oc.granted) }), 6000);
-        } else if (seat.net < 0) W.spend(Math.min(-seat.net, W.getBalance()), 'blackjack');
-        if (h.outcome === 'win' || h.outcome === 'blackjack') W.countWin('blackjack');
-      }
+      G.rw = null;
+      if (h) grantReward(h.outcome);
       scheduleSeq(st);
     }
-    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.chips = emptyBet(); }
+    // Ставок нет: в начале раздачи отправляем условную ставку сами
+    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; if (!seat.sitOut && !(seat.bet > 0)) onlineSend({ type: 'bet', amount: FLAT_BET }); }
     if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); W.countPlay('blackjack'); }
   }
   render();
@@ -439,7 +397,7 @@ function handleLeft() {
   G = null; app.screen = 'out'; app.modal = null;
   render();
 }
-function onlineProfile() { var p = P.getProfile(); return { name: p.name, avatar: p.avatar, chips: W.getBalance() }; }
+function onlineProfile() { var p = P.getProfile(); return { name: p.name, avatar: p.avatar, chips: VIRTUAL_CHIPS }; }
 function createTable() {
   var api = getRooms();
   if (!api || app.busy) return;
@@ -513,19 +471,15 @@ function topbarHtml() {
 
 var LOGO = '<div class="logo" aria-hidden="true"><div class="lc"><span>A</span><i>♠</i></div><div class="lc red"><span>10</span><i>♥</i></div></div>';
 function startHtml() {
-  var bal = W.getBalance(), poor = bal < MIN_BET, daily = W.dailyStatus(), online = app.startMode === 'online';
-  var modes = poor
-    ? '<div class="poor-card"><b>' + esc(tr('poor.title')) + '</b><p>' + esc(tr('poor.text', { n: MIN_BET })) + '</p>' +
-      (daily.pending ? '<button class="btn accent" data-act="claim" data-key="claim">' + esc(tr('poor.claim')) + '</button>' : '<a class="btn accent" href="' + CATALOG_URL + '" data-key="tocat">' + esc(tr('toCatalog')) + '</a>') +
-      '<button class="btn" data-act="bot" data-key="botFree">' + esc(tr('poor.free')) + '</button></div>'
-    : '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
-      '<button class="mode-btn" data-act="pickMode" data-v="bot" data-key="bot" aria-pressed="' + !online + '">' + esc(tr('modeBot')) + '<small>' + esc(tr('modeBotSub')) + '</small></button>' +
-      '<button class="mode-btn" data-act="pickMode" data-v="online" data-key="online" aria-pressed="' + online + '">' + esc(tr('modeOnline')) + '<small>' + esc(tr('modeOnlineSub')) + '</small></button></div></div>';
+  var bal = W.getBalance(), online = app.startMode === 'online';
+  var modes = '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
+    '<button class="mode-btn" data-act="pickMode" data-v="bot" data-key="bot" aria-pressed="' + !online + '">' + esc(tr('modeBot')) + '<small>' + esc(tr('modeBotSub')) + '</small></button>' +
+    '<button class="mode-btn" data-act="pickMode" data-v="online" data-key="online" aria-pressed="' + online + '">' + esc(tr('modeOnline')) + '<small>' + esc(tr('modeOnlineSub')) + '</small></button></div></div>';
   return '<div class="start" data-key="start"><div class="brand-row"><div class="brand">' + LOGO + '<h1>' + esc(window.I18n.t('games.blackjack.title')) + '</h1></div>' +
     '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr('tagline')) + '</div>' + modes +
-    '<div class="start-actions">' + (poor ? '' : '<button class="btn-play" data-act="play" data-key="play">' + esc(tr('start.play')) + '</button>') +
-    '<button class="btn-secondary wide" style="' + (poor ? 'flex:1' : '') + '" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
+    '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play">' + esc(tr('start.play')) + '</button>' +
+    '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
     '<div class="bal-line">' + esc(tr('balance', { n: fmt(bal), unit: unit(bal) })) + '</div></div>';
 }
 
@@ -645,45 +599,6 @@ function othersOf(D) {
 }
 function feltStyle(L) { return 'width:' + L.Wf + 'px;height:' + L.F + 'px;border-radius:' + (Math.min(L.Wf, L.F) / 2) + 'px'; }
 
-function betHtml(D) {
-  var vs = D.vs, me = D.me, seat = vs.seats[me], b = betBounds(), online = D.online;
-  var others = othersOf(D), L = layout(others.length);
-  var placed = seat.bet > 0, total = placed ? seat.bet : chipsTotal();
-  var plates = others.map(function (idx, i) { return plateHtml(D, L, idx, i, others.length, false); }).join('');
-  var note = total >= MAX_BET ? tr('bet.maxNote', { max: fmt(MAX_BET) }) : (b.max < MAX_BET && !placed && total >= b.max ? tr('bet.poorNote') : tr(online ? 'bet.noteOnline' : 'bet.note', { max: fmt(MAX_BET) }));
-  note += ' ' + tr('cap.left', { n: fmt((online ? W.onlineStatus(now()) : W.capStatus(now())).left) });
-  if (!placed && !seat.sitOut && total === 0) note = tr(online ? 'bet.emptyOnline' : 'bet.emptyLocal');
-  if (placed) note = tr('bet.placed');
-  if (seat.sitOut) note = tr('bet.sitting');
-  var shownChips = placed ? chipsOf(seat.bet) : app.chips;
-  var chipBtns = CHIPS.map(function (v) {
-    var on = !placed && !seat.sitOut && total + v <= b.max;
-    return '<button class="chip-btn" data-act="addChip" data-v="' + v + '" data-key="c' + v + '" aria-label="' + esc(tr(on ? 'bet.chip' : 'bet.chipOff', { n: v })) + '"' + (on ? '' : ' disabled') + '>' + chipHtml(v, L.narrow ? 44 : 52) + '</button>';
-  }).join('');
-  var humans = vs.seats.filter(function (s) { return s.active && s.kind !== 'bot'; }), done = humans.filter(function (s) { return s.bet > 0 || s.sitOut; }).length;
-  var waiting = humans.filter(function (s) { return !(s.bet > 0 || s.sitOut); });
-  var main;
-  if (!online) {
-    main = '<button class="btn big" style="flex:1" data-act="clearBet" data-key="clear">' + esc(tr('bet.clear')) + '</button>' +
-      '<button class="btn accent big" style="flex:2;font-size:20px" data-act="deal" data-key="deal"' + (total >= MIN_BET && total <= b.max ? '' : ' disabled') + '>' + esc(tr('bet.deal')) + '</button>';
-  } else if (seat.sitOut) {
-    main = '<button class="btn accent big" style="flex:1" data-act="unsit" data-key="unsit">' + esc(tr('bet.back')) + '</button>';
-  } else if (placed) {
-    main = '<button class="btn big" style="flex:1" data-act="cancelBet" data-key="cancelBet"' + (app.pending ? ' disabled' : '') + '>' + esc(tr('bet.cancel')) + '</button>';
-  } else {
-    main = '<button class="btn big" style="flex:1" data-act="clearBet" data-key="clear">' + esc(tr('bet.clear')) + '</button>' +
-      '<button class="btn accent big" style="flex:2;font-size:20px" data-act="place" data-key="place"' + (total >= MIN_BET && total <= b.max && !app.pending ? '' : ' disabled') + '>' + esc(tr('bet.place')) + '</button>';
-  }
-  return '<div class="game"><div class="felt" style="' + feltStyle(L) + '"><div class="dealer-slot" style="position:absolute;left:50%;top:20px;transform:translateX(-50%)">' + esc(tr('dealer')) + '</div>' + plates +
-    '<div class="bet-zone"><div class="bet-circle" data-act="popChip" role="button" aria-label="' + esc(tr('bet.clear')) + '">' + chipStackHtml(shownChips, 38) + '</div><div class="bet-title">' + esc(tr('bet.title', { n: fmt(total) })) + '</div><div class="bet-note">' + esc(note) + '</div></div>' +
-    '<div class="you-line"><div class="av">' + esc(P.initial(P.getProfile().name)) + '</div><div>' + esc(tr('youBal', { n: fmt(b.bal) })) + '</div></div></div>' +
-    (online ? '<div class="wait-text" role="status">' + esc(waiting.length === 1 && done < humans.length ? tr('bet.waitFor', { n: done, m: humans.length, name: waiting[0].name || '' }) : tr('bet.ready', { n: done, m: humans.length })) + '</div>' : '') +
-    '<div class="chip-row" style="gap:' + (L.narrow ? 6 : 12) + 'px">' + chipBtns + '</div>' +
-    '<div class="act-row" style="gap:10px">' + main + '</div>' +
-    (online && !placed && !seat.sitOut ? '<div style="text-align:center"><button class="sit-link" data-act="sit" data-key="sit">' + esc(tr('bet.sit')) + '</button></div>' : '') +
-    (!online ? '<div style="text-align:center"><button class="sit-link" data-act="dealFree" data-key="dealFree">' + esc(tr('bet.free')) + '</button></div>' : '') + '</div>';
-}
-
 function playHtml(D) {
   var vs = D.vs, me = D.me, seat = vs.seats[me], hand = seatHand(seat);
   var others = othersOf(D), L = layout(others.length);
@@ -708,7 +623,7 @@ function playHtml(D) {
   var sumText = seatSumText(seat, true);
   if (hand && vs.phase === 'playing' && hand.done && !BJ.isBust(hand) && !BJ.isNatural(hand)) sumText += ' · ' + tr('st.stand');
   var label = myTurn ? tr(tm && tm.stage === 'idle' ? 'turn.youSec' : 'turn.you', { n: tm ? tm.sec : 0 }) : (showResult || vs.phase === 'settled' ? '' : tr('you'));
-  var betCol = D.mode === 'bot' && G && G.free ? '' : '<div class="bet-col"><div class="chip-stack">' + chipStackHtml(chipsOf(hand ? hand.bet : 0), 30) + '</div><div class="bet-n">' + (hand ? hand.bet : '') + '</div></div>';
+  var betCol = '';
   var meBox = '<div class="me-box"><div class="me-col"><div class="me-top">' + (label ? '<span class="me-label' + (myTurn ? ' turn' : '') + '">' + esc(label) + '</span>' : '') +
     '<span class="pill" style="padding:2px 10px">' + esc(sumText) + '</span></div><div class="me-ring' + (myTurn ? ' turn' : '') + '">' + mine + '</div></div>' + betCol + '</div>';
   var res = showResult ? myOutcome(D) : null;
@@ -717,11 +632,9 @@ function playHtml(D) {
   // Итог игры с ботом: отдельное окошко над своими картами
   var pop = '';
   if (res && botMode) {
-    var bb = betBounds(), brokeNow = bb.bal < MIN_BET;
     pop = '<div class="result-pop ' + res.tone + '" style="bottom:' + Math.round(pw * 1.4 + 64) + 'px" role="status"><div class="t">' + esc(res.title) + '</div><div class="t">' + esc(res.delta) + '</div><div class="s">' + esc(res.sub) + '</div>' +
-      (G.cap ? '<div class="cap">' + esc(tr('cap.left', { n: fmt(G.cap.left) })) + '</div>' : '') +
-      (brokeNow ? '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>' : '') +
-      '<div class="pop-btns">' + (brokeNow ? '' : '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>') +
+      (G.rw ? '<div class="cap">' + esc(tr('cap.left', { n: fmt(G.rw.left) })) + '</div>' : '') +
+      '<div class="pop-btns">' + '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>' +
       '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
   }
   var felt = '<div class="felt" style="' + feltStyle(L) + '">' + dealerBox + plates + center + meBox + pop + '</div>';
@@ -731,15 +644,14 @@ function playHtml(D) {
   var panel = '';
   if (!showResult) {
     var cur = vs.current >= 0 ? vs.seats[vs.current] : null;
-    var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : '';
+    var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : (vs.phase === 'betting' ? tr('wait.dealing') : '');
     if (D.online && app.pending) waitText = tr('wait.sent'); else if (D.online && app.banner === 'offline') waitText = tr('wait.offline');
     var dis = !myTurn;
     panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') +
       '<div class="act-row"><button class="act" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button>' +
       '<button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button></div></div>';
   } else if (showResult) {
-    var b = betBounds(), broke = b.bal < MIN_BET, bits = '';
-    if (broke && D.online) bits += '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>';
+    var bits = '';
     if (D.online) {
       var left = Math.max(0, ROOM_CFG.nextDelayMs - (now() - app.settledAt)), pct = Math.round(100 * left / ROOM_CFG.nextDelayMs);
       bits += '<div><div style="font-size:14px;font-weight:700;margin-bottom:4px" role="status">' + esc(tr('res.nextIn', { n: Math.ceil(left / 1000) })) + '</div><div class="next-bar"><i style="width:' + pct + '%"></i></div></div>' +
@@ -764,7 +676,7 @@ function gameHtml() {
   var D = describe();
   if (!D) return '<div class="page"><div class="dashed">…</div></div>';
   if (D.me === null) return '<div class="page"><div class="dashed">…</div></div>';
-  return topbarHtml() + bannerHtml() + (D.vs.phase === 'betting' ? betHtml(D) : playHtml(D));
+  return topbarHtml() + bannerHtml() + playHtml(D);
 }
 
 // ===== Окна =====
@@ -933,15 +845,6 @@ appEl.addEventListener('click', function (e) {
     case 'start': if (isOwner()) G.ctrl.start().then(function () { G.ctrl.tick(); }); break;
     case 'closeTable': leaveGame('tables'); break;
     case 'leaveLobby': leaveGame('tables'); break;
-    case 'addChip': { var b = betBounds(), n = Number(v); if (chipsTotal() + n <= b.max) { app.chips.push(n); render(); } break; }
-    case 'popChip': if (app.chips.length > 0) { app.chips.pop(); render(); } break;
-    case 'clearBet': app.chips = emptyBet(); render(); break;
-    case 'deal': localDeal(); break;
-    case 'dealFree': localDeal(true); break;
-    case 'place': if (G && G.mode === 'online') { app.lastBet = chipsTotal(); onlineSend({ type: 'bet', amount: chipsTotal() }); } break;
-    case 'cancelBet': onlineSend({ type: 'bet', amount: 0 }); break;
-    case 'sit': onlineSend({ type: 'sitout', value: true }); break;
-    case 'unsit': onlineSend({ type: 'sitout', value: false }); break;
     case 'hit': case 'stand': {
       if (!G) break;
       if (G.mode === 'bot') { if (lDispatch({ type: act, seat: 0 })) { render(); runBots(); } } else onlineSend({ type: act });

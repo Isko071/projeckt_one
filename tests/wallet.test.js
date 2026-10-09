@@ -254,3 +254,27 @@ test('онлайн-предел: за день начисляется не бо�
   assert.equal(W.onlineStatus(d2).left, 5000);
   assert.equal(W.onlineWin('blackjack', 300, d2).granted, 300);
 });
+
+test('награды без ставок: за день не больше предела, на следующий день счётчик заново', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const t0 = D(2026, 5, 1, 10);
+  assert.equal(W.rewardStatus('blackjack', t0).left, 3000);
+  let total = 0, last;
+  for (let i = 0; i < 13; i++) { last = W.reward('blackjack', 250, t0 + i); total += last.granted; }
+  assert.equal(total, 3000, 'за день не больше 3000');
+  assert.equal(last.granted, 0);
+  assert.equal(last.capped, true);
+  assert.equal(W.getBalance(), 5000 + 3000);
+  assert.equal(W.rewardStatus('blackjack', D(2026, 5, 2, 10)).left, 3000, 'на следующий день предел обновился');
+  assert.equal(W.reward('blackjack', 400, D(2026, 5, 2, 11)).granted, 400);
+});
+
+test('награды без ставок: частичная выдача на границе предела', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const t0 = D(2026, 5, 1, 10);
+  for (let i = 0; i < 11; i++) W.reward('blackjack', 250, t0);      // 2750
+  const r = W.reward('blackjack', 400, t0);
+  assert.equal(r.granted, 250);
+  assert.equal(r.capped, true);
+  assert.equal(r.left, 0);
+});
