@@ -1,6 +1,6 @@
 // Ход партии в покере без интерфейса: стол «С ботами» (локально) и онлайн-стол (через сервер) отдают экранам одну и ту же модель.
 // Зависит от games/poker/logic.js (Poker) и bots.js (PokerBots); без обращений к document.
-//   PokerCore.createSolo({ variant, size, botsMode, ante | bigBlind, name, wallet, source })   → стол против ботов
+//   PokerCore.createSolo({ variant, size, ante | bigBlind, name, wallet, source })   → стол против ботов
 //   PokerCore.createOnline({ ctrl, wallet, source, uid, variant })                              → онлайн-стол (контроллер из shared/rooms-ws.js)
 // Общие методы стола: model(), subscribe(fn), act(type, extra), back(), leave(), tick(); у онлайн-стола ещё here(), start(), chat.
 // model() — всё, что нужно нарисовать: места, карты, банк, статусы, панели итога, вопросы, готовность, баннеры.
@@ -99,11 +99,13 @@
   }
 
   // ===== Стол против ботов =====
-  function botSeats(n, mode) {
-    var out = [];
+  // Характеры ботов случайные: порядок осторожный/средний/смелый перемешивается при каждой посадке за стол (имена у каждого характера свои)
+  function botSeats(n) {
+    var out = [], order = Bots.ORDER.slice();
+    for (var k = order.length - 1; k > 0; k--) { var j = Math.floor(Math.random() * (k + 1)), t = order[k]; order[k] = order[j]; order[j] = t; }
     for (var i = 1; i < n; i++) {
-      var bot = Bots.makeBot(i);
-      if (mode === 'careful') bot.style = 'careful'; else if (mode === 'risky') bot.style = 'risky';
+      var bot = Bots.makeBot(i), style = order[(i - 1) % order.length];
+      bot.style = style; bot.name = Bots.STYLES[style].name;
       out.push(bot);
     }
     return out;
@@ -114,7 +116,7 @@
     this.listeners = []; this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.timer = null; this.spent = 0; this.stopped = false;
     var balance = this.W.getBalance(), n = cfg.size;
     this.W.capStart(now());
-    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n, cfg.botsMode).map(function (b) { return Object.assign(b, { chips: balance }); }));
+    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n).map(function (b) { return Object.assign(b, { chips: balance }); }));
     var gopts = { variant: cfg.variant, tableSize: n };
     if (cfg.variant === 'simple') { gopts.ante = cfg.ante; gopts.minBet = cfg.minBet || cfg.ante * 2; } else { gopts.bigBlind = cfg.bigBlind; gopts.smallBlind = cfg.smallBlind || Math.floor(cfg.bigBlind / 2); }
     this.st = PK.init(seats, gopts, null);
