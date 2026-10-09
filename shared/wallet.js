@@ -41,7 +41,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, plays: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, plays: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [], days: [] };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -72,8 +72,16 @@
     return {
       balance: balance, streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
       playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0),
-      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, plays: plays, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log
+      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, plays: plays, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log, days: cleanDays(raw.days)
     };
+  }
+
+  // Дни, когда играли (для календаря серии): последние 120, без повторов
+  function cleanDays(v) {
+    var out = [];
+    (Array.isArray(v) ? v : []).forEach(function (d) { var x = day(d); if (x && out.indexOf(x) < 0) out.push(x); });
+    out.sort();
+    return out.slice(-120);
   }
 
   function load() {
@@ -220,12 +228,26 @@
     s.streak = liveStreak(s, today) + 1;
     s.best = Math.max(s.best, s.streak);
     s.playDay = today;
+    if (s.days.indexOf(today) < 0) s.days = cleanDays(s.days.concat([today]));
     s.pending = { amount: dailyAmount(Math.min(7, s.streak)), bonus: CONFIG.milestones[s.streak] || 0, streak: s.streak };
     save(s);
     return { counted: true, streak: s.streak, amount: s.pending.amount, bonus: s.pending.bonus };
   }
 
   // Состояние для интерфейса
+  // День на n дней раньше (n ≥ 0), строкой ГГГГ-ММ-ДД
+  function dayBefore(d, n) {
+    var p = d.split('-'), t = new Date(+p[0], +p[1] - 1, +p[2] - n, 12);
+    return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+  }
+  // Дни, в которые играли: записанные и дни текущей серии (она идёт подряд до последнего игрового дня)
+  function playedDays() {
+    var s = load(), set = {};
+    s.days.forEach(function (d) { set[d] = true; });
+    if (s.playDay) for (var i = 0; i < s.streak; i++) set[dayBefore(s.playDay, i)] = true;
+    return set;
+  }
+
   function dailyStatus(now) {
     var s = load(), today = dayOf(now);
     var streak = liveStreak(s, today), playedToday = s.playDay === today;
@@ -268,7 +290,7 @@
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
-    markPlayed: markPlayed, dailyStatus: dailyStatus, claimDaily: claimDaily,
+    markPlayed: markPlayed, playedDays: playedDays, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget
   };
 })(typeof window !== 'undefined' ? window : globalThis);
