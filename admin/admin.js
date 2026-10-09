@@ -56,8 +56,8 @@
           body: JSON.stringify({ fields: { data: { stringValue: out.json }, updatedAt: { integerValue: String(Date.now()) } } })
         });
       })
-      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); },
-        function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
+      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); })
+      .catch(function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
   }
 
   // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------
