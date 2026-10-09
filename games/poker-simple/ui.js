@@ -10,7 +10,7 @@ var PREFS_KEY = 'game:poker-simple:prefs';
 var DEN = Core.DEN, HUE = Core.HUE;
 var HANDS = [['royalFlush', 'AS KS QS JS TS'], ['straightFlush', '9H 8H 7H 6H 5H'], ['quads', '8S 8H 8D 8C KD'], ['fullHouse', 'QS QD QC 4H 4S'], ['flush', 'AD JD 9D 6D 3D'],
   ['straight', '9C 8D 7S 6H 5C'], ['trips', '7S 7H 7D KC 2S'], ['twoPair', 'JS JD 4H 4C AS'], ['pair', 'TH TC AD 8S 3H'], ['high', 'AS JD 9C 6H 3S']];
-var ANTES = [50, 100, 250], SIZES = [2, 3, 4, 5, 6], BOT_MODES = ['careful', 'mixed', 'risky'];
+var ANTES = [50, 100, 250], SIZES = [2, 3, 4, 5, 6];
 var ICON = { win: '★ ', fold: '✕ ', allin: '▲ ', turn: '● ', check: '✓ ', call: '✓ ', raise: '▲ ', wait: '… ', ready: '✓ ', skip: '– ', left: '✕ ', yourTurn: '', out: '', '': '' };
 var IDLE_MS = 30000, ASK_MS = 7000;
 
@@ -37,7 +37,7 @@ function now() { return Date.now(); }
 function unit(n) { return window.I18n.plural(n, 'wallet.unit'); }
 function loadPrefs() {
   var p = window.PlatformStorage.get(PREFS_KEY, null) || {};
-  return { n: SIZES.indexOf(p.n) >= 0 ? p.n : 4, bots: BOT_MODES.indexOf(p.bots) >= 0 ? p.bots : 'mixed', ante: ANTES.indexOf(p.ante) >= 0 ? p.ante : 50, size: SIZES.indexOf(p.size) >= 0 ? p.size : 4, closed: !!p.closed };
+  return { n: SIZES.indexOf(p.n) >= 0 ? p.n : 4, ante: ANTES.indexOf(p.ante) >= 0 ? p.ante : 50, size: SIZES.indexOf(p.size) >= 0 ? p.size : 4, closed: !!p.closed };
 }
 function savePrefs() { window.PlatformStorage.set(PREFS_KEY, app.prefs); }
 function user() { return Cloud.getState().user; }
@@ -107,7 +107,7 @@ function sitDown() {
   var ante = app.prefs.ante;
   if (W.getBalance() < ante) return;
   var prof = P.getProfile();
-  T = Core.createSolo({ variant: 'simple', size: app.prefs.n, botsMode: app.prefs.bots, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
+  T = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
   bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = [];
   T.begin();
 }
@@ -210,7 +210,6 @@ function setupHtml() {
     '<div class="page" data-key="page">' +
     '<div><div class="lbl">' + esc(tr('setup.players')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.n, 'size') + '</div>' +
     '<div class="prev" data-key="prev"><div class="felt"></div>' + dots + '</div>' +
-    '<div><div class="lbl">' + esc(tr('setup.bots')) + '</div>' + segHtml([{ v: 'careful', t: tr('setup.botsCareful') }, { v: 'mixed', t: tr('setup.botsMixed') }, { v: 'risky', t: tr('setup.botsRisky') }], pr.bots, 'bots') + '</div>' +
     '<div><div class="lbl">' + esc(tr('setup.ante')) + '</div>' + segHtml(ANTES.map(function (n) { return { v: n, t: String(n) }; }), pr.ante, 'ante') + '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(tr('setup.minNote', { n: pr.ante * 2 })) + '</div></div>' +
     '<div class="stackline">' + esc(tr('setup.stack', { n: fmt(bal) + ' ' + unit(bal) })) + '</div>' +
     '<div class="capline">' + esc(tr('setup.cap', { n: fmt(cap.left) })) + '</div>' +
@@ -451,7 +450,6 @@ function onClick(e) {
     case 'toStart': clearInterval(listTimer); app.screen = 'start'; render(); break;
     case 'size': app.prefs.n = Number(v); savePrefs(); render(); break;
     case 'osize': app.prefs.size = Number(v); savePrefs(); render(); break;
-    case 'bots': app.prefs.bots = v; savePrefs(); render(); break;
     case 'ante': app.prefs.ante = Number(v); savePrefs(); render(); break;
     case 'sit': sitDown(); break;
     case 'toPick': if (T) leaveTable(); else openPick(); break;

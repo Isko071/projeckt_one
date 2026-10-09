@@ -33,7 +33,7 @@ const passive = (m, t) => { const la = m.me.la; if (la.mustBet && la.raise) t.ac
 
 test('стол с ботами: раздача идёт до итога, деньги списываются сразу и возвращаются по итогу', async () => {
   const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
-  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 4, botsMode: 'mixed', ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 4, ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
   const start = W.getBalance();
   t.begin();
   const m0 = t.model();
@@ -51,7 +51,7 @@ test('стол с ботами: раздача идёт до итога, ден�
 
 test('стол с ботами: скрытые карты ботов закрыты, пока не вскрытие; после «Вернуться к столу» идёт новая раздача', async () => {
   const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
-  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'classic', size: 3, botsMode: 'careful', bigBlind: 100, name: 'Аня', wallet: W, source: 'poker' }, FAST));
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'classic', size: 3, bigBlind: 100, name: 'Аня', wallet: W, source: 'poker' }, FAST));
   t.begin();
   const m0 = t.model();
   m0.seats.slice(1).forEach((s) => s.cards.forEach((c) => assert.equal(c.code, null)));
@@ -68,7 +68,7 @@ test('стол с ботами: скрытые карты ботов закры�
 
 test('обязательный круг: чек недоступен, а подпись и допустимые действия отдаются экрану', async () => {
   const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
-  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 2, botsMode: 'careful', ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 2, ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
   t.begin();
   let m = t.model(), seen = false;
   for (let step = 0; step < 300 && !seen; step++) {
