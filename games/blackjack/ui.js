@@ -10,7 +10,7 @@ var MIN_BET = BJ.CONFIG.minBet, MAX_BET = BJ.CONFIG.maxBet;
 var ROOM_CFG = window.PlatformRooms ? window.PlatformRooms.DEFAULTS : { idleMs: 30000, askMs: 7000, extendMs: 15000, nextDelayMs: 10000 };
 
 var app = {
-  screen: 'start', modal: null, chips: [100], lastBet: 100, hint: null, size: 4, fillBots: true, private: false,
+  screen: 'start', startMode: 'bot', modal: null, chips: [100], lastBet: 100, size: 4, fillBots: true, private: false,
   code: '', codeError: null, tableError: null, rooms: null, busy: false, loginError: null, copied: false,
   notice: null, noticeUntil: 0, resultAt: 0, pending: false, banner: null, seen: {}, settledAt: 0, closedReason: null, askShown: false
 };
@@ -222,14 +222,6 @@ function myOutcome(D) {
   var delta = free ? tr('res.free') : net > 0 ? tr('res.delta.plus', { n: fmt(net), unit: unit(net) }) : (net < 0 ? tr('res.delta.minus', { n: fmt(-net), unit: unit(-net) }) : tr('res.delta.zero'));
   return { key: key, title: tr('res.' + key), sub: sub, delta: delta, tone: free ? (key === 'win' || key === 'bj' ? 'good' : (key === 'push' ? '' : 'bad')) : (net > 0 ? 'good' : (net < 0 ? 'bad' : '')), net: net, bet: bet };
 }
-function hintText(D) {
-  var vs = D.vs, a = BJ.hint(vs, D.me);
-  if (!a) return '';
-  var h = seatHand(vs.seats[D.me]), v = BJ.handValue(h.cards), up = BJ.cardValue(vs.dealer.cards[0]);
-  var upName = up === 11 ? 'A' : String(up);
-  if (a === 'stand') return up >= 2 && up <= 6 && v.total < 17 ? tr('hint.dealerWeak', { up: upName }) : tr('hint.enough', { total: v.total });
-  return v.soft ? tr('hint.softHit', { total: v.total }) : tr('hint.hit', { total: v.total, up: upName });
-}
 function betBounds() {
   var bal = W.getBalance();
   return { bal: bal, max: Math.min(MAX_BET, Math.floor(bal / 25) * 25) };
@@ -266,7 +258,7 @@ function startLocal() {
   var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: W.getBalance(), kind: 'human' }], { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1, free: false };
   app.chips = emptyBet();
-  app.screen = 'game'; app.modal = null; app.hint = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
+  app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
   render();
 }
 function lDispatch(action) {
@@ -289,7 +281,7 @@ function lDispatch(action) {
       if (mine.outcome === 'win' || mine.outcome === 'blackjack') W.countWin('blackjack');
     }
     scheduleSeq(st);
-    app.hint = null;
+   
   }
   return true;
 }
@@ -314,7 +306,7 @@ function localDeal(free) {
   var a;
   while ((a = BJ.nextBotAction(G.state)) && G.state.phase === 'betting') lDispatch(a);
   lDispatch({ type: 'deal', seat: 0 });
-  app.hint = null; app.seen = {};
+  app.seen = {};
   render();
   runBots();
 }
@@ -322,7 +314,7 @@ function localNext() {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
   G.state.seats[0].chips = W.getBalance();
   G.free = false;
-  app.hint = null; app.seen = {}; app.resultAt = 0; app.seq = null;
+  app.seen = {}; app.resultAt = 0; app.seq = null;
   app.chips = emptyBet();
   render();
 }
@@ -408,7 +400,7 @@ function onView(v) {
     else if ((G.prevStage === 'asking' || G.prevStage === 'extended') && !stage && now() - (G.lastAction || 0) > 2000) notify(tr('notice.auto'), 5000);
     G.prevStage = stage;
     if (st.phase === 'settled' && G.settledRound !== st.round) {
-      G.settledRound = st.round; app.settledAt = now(); app.hint = null;
+      G.settledRound = st.round; app.settledAt = now();
       var h = seatHand(seat);
       if (h) {
         if (seat.net > 0) {
@@ -419,7 +411,7 @@ function onView(v) {
       }
       scheduleSeq(st);
     }
-    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.chips = emptyBet(); app.hint = null; }
+    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.chips = emptyBet(); }
     if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); W.countPlay('blackjack'); }
   }
   render();
@@ -495,7 +487,7 @@ function leaveGame(toScreen) {
   if (g && g.mode === 'online') {
     if (g.role === 'host') g.ctrl.close(); else g.ctrl.leave();
   }
-  app.modal = null; app.banner = null; app.pending = false; app.hint = null;
+  app.modal = null; app.banner = null; app.pending = false;
   if (toScreen === 'tables') openTables(); else { app.screen = 'start'; render(); }
 }
 
@@ -509,18 +501,21 @@ function topbarHtml() {
     (G && G.mode === 'online' && app.screen === 'game' ? chat.buttonHtml() : '') + themeButtonHtml('') + '<div class="bal-chip" data-key="bal">' + esc(balText) + '</div></div>';
 }
 
+var LOGO = '<div class="logo" aria-hidden="true"><div class="lc"><span>A</span><i>♠</i></div><div class="lc red"><span>10</span><i>♥</i></div></div>';
 function startHtml() {
-  var bal = W.getBalance(), poor = bal < MIN_BET, daily = W.dailyStatus();
-  var hero = '<div class="hero"><div class="c1">' + cardHtml('AS', 62) + '</div><div class="c2">' + cardHtml('TH', 62) + '</div><div class="chip-w">' + chipHtml(100, 40) + '</div></div>';
+  var bal = W.getBalance(), poor = bal < MIN_BET, daily = W.dailyStatus(), online = app.startMode === 'online';
   var modes = poor
     ? '<div class="poor-card"><b>' + esc(tr('poor.title')) + '</b><p>' + esc(tr('poor.text', { n: MIN_BET })) + '</p>' +
       (daily.pending ? '<button class="btn accent" data-act="claim" data-key="claim">' + esc(tr('poor.claim')) + '</button>' : '<a class="btn accent" href="' + CATALOG_URL + '" data-key="tocat">' + esc(tr('toCatalog')) + '</a>') +
       '<button class="btn" data-act="bot" data-key="botFree">' + esc(tr('poor.free')) + '</button></div>'
-    : '<div class="modes"><button class="mode-card primary" data-act="bot" data-key="bot"><b>' + esc(tr('modeBot')) + '</b><span>' + esc(tr('modeBotSub')) + '</span></button>' +
-      '<button class="mode-card" data-act="online" data-key="online"><b>' + esc(tr('modeOnline')) + '</b><span>' + esc(tr('modeOnlineSub')) + '</span></button></div>';
-  return '<div class="start">' + catalogLinkHtml('corner-l') + themeButtonHtml('corner-r') + hero +
-    '<div><h1>' + esc(window.I18n.t('games.blackjack.title')) + '</h1><div class="tag">' + esc(tr('tagline')) + '</div></div>' + modes +
-    '<button class="btn ghost" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button>' +
+    : '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
+      '<button class="mode-btn" data-act="pickMode" data-v="bot" data-key="bot" aria-pressed="' + !online + '">' + esc(tr('modeBot')) + '<small>' + esc(tr('modeBotSub')) + '</small></button>' +
+      '<button class="mode-btn" data-act="pickMode" data-v="online" data-key="online" aria-pressed="' + online + '">' + esc(tr('modeOnline')) + '<small>' + esc(tr('modeOnlineSub')) + '</small></button></div></div>';
+  return '<div class="start" data-key="start"><div class="brand-row"><div class="brand">' + LOGO + '<h1>' + esc(window.I18n.t('games.blackjack.title')) + '</h1></div>' +
+    '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
+    '<div class="muted-text">' + esc(tr('tagline')) + '</div>' + modes +
+    '<div class="start-actions">' + (poor ? '' : '<button class="btn-play" data-act="play" data-key="play">' + esc(tr('start.play')) + '</button>') +
+    '<button class="btn-secondary wide" style="' + (poor ? 'flex:1' : '') + '" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
     '<div class="bal-line">' + esc(tr('balance', { n: fmt(bal), unit: unit(bal) })) + '</div></div>';
 }
 
@@ -529,7 +524,7 @@ function loginHtml() {
   var msg = '';
   if (st.status === 'unsupported') msg = tr('login.unsupported');
   else if (app.loginError) msg = tr('login.' + app.loginError);
-  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('login.title')) + '</h2></div>' +
+  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('login.title')) + '</h2>' + themeButtonHtml('') + '</div>' +
     '<div class="card-box"><p style="margin:0 0 12px;font-size:16px">' + esc(tr('login.text')) + '</p>' +
     '<button class="btn accent big" style="width:100%" data-act="signin" data-key="signin"' + (busy || st.status === 'unsupported' ? ' disabled' : '') + '>' + esc(tr(busy ? 'login.busy' : (app.loginError === 'error' ? 'login.retry' : 'login.btn'))) + '</button>' +
     (msg ? '<p class="field-err" role="alert">' + esc(msg) + '</p>' : '') +
@@ -553,7 +548,7 @@ function tablesHtml() {
   }).join('') + '</div>';
   var cur = app.code;
   return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2 style="flex:1">' + esc(tr('tables.title')) + '</h2>' +
-      (user ? '<div class="you-chip"><span class="avatar" style="width:32px;height:32px;background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</span>' + esc(tr('tables.you', { name: P.getProfile().name })) + '</div>' : '') + '</div>' +
+      (user ? '<div class="you-chip"><span class="avatar" style="width:32px;height:32px;background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</span>' + esc(tr('tables.you', { name: P.getProfile().name })) + '</div>' : '') + themeButtonHtml('') + '</div>' +
     tableErrorHtml() +
     '<button class="btn accent big" data-act="toCreate" data-key="create">' + esc(tr('tables.create')) + '</button>' +
     '<div class="card-box"><h3>' + esc(tr('tables.codeTitle')) + '</h3><div class="code-row">' +
@@ -574,7 +569,7 @@ function createPreviewHtml() {
   return '<div class="preview"><div class="pv-table" aria-hidden="true"><span class="pv-dealer">' + esc(tr('create.dealer')) + '</span>' + parts + '</div><div class="muted" style="font-size:14px">' + esc(tr(app.fillBots ? 'create.previewBots' : 'create.previewFree', { n: k, w: w })) + '</div></div>';
 }
 function createHtml() {
-  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toTables" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('create.title')) + '</h2></div>' +
+  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="toTables" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><h2>' + esc(tr('create.title')) + '</h2>' + themeButtonHtml('') + '</div>' +
     createPreviewHtml() +
     '<div><div style="font-weight:700;margin-bottom:8px">' + esc(tr('create.seats')) + '</div><div class="seg" role="group" aria-label="' + esc(tr('create.seats')) + '">' +
       [2, 3, 4, 5].map(function (n) { return '<button data-act="size" data-v="' + n + '" data-key="size' + n + '" aria-pressed="' + (app.size === n) + '">' + n + '</button>'; }).join('') + '</div></div>' +
@@ -589,7 +584,6 @@ function lobbyHtml() {
   var members = v ? v.members : [], size = v ? v.size : app.size, bots = v ? v.fillBots !== false : app.fillBots;
   var seats = members.map(function (m) {
     var me = m.uid === myUid, tags = [];
-    if (me) tags.push(tr('lobby.you'));
     if (v && v.owner ? m.uid === v.owner : m.seat === 0) tags.push(tr('lobby.creator'));
     return '<div class="seat" data-key="m-' + esc(m.uid) + '"><div class="avatar" style="background:' + P.avatarColor(m.avatar) + '">' + esc(P.initial(m.name)) + '</div><div class="nm">' + esc(m.name || tr('you')) + '</div><div class="tg">' + esc(tags.join(' · ')) + '</div></div>';
   });
@@ -600,7 +594,7 @@ function lobbyHtml() {
   var canStart = bots || (members.length >= 2 && startLeft === 0);   // с ботами можно сразу, без ботов: 2 человека и 20 секунд после последнего входа
   var autoHtml = startLeft > 0 ? '<div class="wait-text" role="status">' + esc(tr('lobby.startIn', { n: Math.ceil(startLeft / 1000) })) + '</div>' : '';
   var code = G ? G.code : '';
-  return '<div class="page"><div class="page-head"><h2>' + esc(tr('lobby.title')) + '</h2></div>' +
+  return '<div class="page"><div class="page-head"><button class="icon-btn" data-act="' + (host ? 'closeTable' : 'leaveLobby') + '" data-key="exit" aria-label="' + esc(tr('lobby.leave')) + '">←</button><h2>' + esc(tr('lobby.title')) + '</h2>' + themeButtonHtml('') + '</div>' +
     '<div class="card-box code-big"><small>' + esc(tr('lobby.code')) + '</small><div class="code" data-key="codeBig">' + esc(code) + '</div>' + (v && v.private ? '<div class="muted" style="font-size:14px;font-weight:700">' + esc(tr('lobby.private')) + '</div>' : '') + '<div class="btns">' +
       '<button class="btn ghost" data-act="copyCode" data-key="copy">' + esc(tr(app.copied ? 'lobby.copied' : 'lobby.copy')) + '</button>' +
       '<button class="btn ghost" data-act="shareLink" data-key="share">' + esc(tr('lobby.share')) + '</button></div></div>' +
@@ -729,12 +723,10 @@ function playHtml(D) {
     var cur = vs.current >= 0 ? vs.seats[vs.current] : null;
     var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : '';
     if (D.online && app.pending) waitText = tr('wait.sent'); else if (D.online && app.banner === 'offline') waitText = tr('wait.offline');
-    var hintHtml = app.hint && myTurn ? '<div class="hint-box" role="status"><i>?</i><span>' + esc(hintText(D)) + '</span></div>' : '';
     var dis = !myTurn;
-    panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') + hintHtml +
-      '<div class="act-row"><button class="act' + (app.hint === 'stand' && myTurn ? ' hl' : '') + '" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button>' +
-      '<button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button></div>' +
-      '<div style="display:flex;justify-content:center"><button class="btn ghost" data-act="hint" data-key="hint"' + (dis ? ' disabled' : '') + '>' + esc(tr('act.hint')) + '</button></div></div>';
+    panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') +
+      '<div class="act-row"><button class="act" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button>' +
+      '<button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button></div></div>';
   } else if (showResult) {
     var b = betBounds(), broke = b.bal < MIN_BET, bits = '';
     if (broke && D.online) bits += '<div class="broke"><b>' + esc(tr('res.broke')) + '</b> ' + esc(tr('res.brokeText')) + '</div>';
@@ -891,6 +883,10 @@ function onSignIn() {
   });
 }
 
+function openOnlineFlow() {
+  if (window.GAME_SERVER_URL && window.PlatformRoomsWS) window.PlatformRoomsWS.warm(window.GAME_SERVER_URL);
+  if (Cloud.getState().status === 'signedIn') openTables(); else { app.screen = 'login'; app.loginError = null; render(); }
+}
 appEl.addEventListener('click', function (e) {
   var el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
@@ -901,11 +897,10 @@ appEl.addEventListener('click', function (e) {
     case 'close': closeModal(); break;
     case 'claim': W.claimDaily(); render(); break;
     case 'toStart': stopOnline(); app.screen = 'start'; app.busy = false; app.tableError = null; render(); break;
+    case 'pickMode': app.startMode = v; render(); break;
+    case 'play': if (app.startMode === 'online') openOnlineFlow(); else startLocal(); break;
     case 'bot': startLocal(); break;
-    case 'online':
-      if (window.GAME_SERVER_URL && window.PlatformRoomsWS) window.PlatformRoomsWS.warm(window.GAME_SERVER_URL);
-      if (Cloud.getState().status === 'signedIn') openTables(); else { app.screen = 'login'; app.loginError = null; render(); }
-      break;
+    case 'online': openOnlineFlow(); break;
     case 'signin': onSignIn(); break;
     case 'relogin': Cloud.signIn().then(function () { render(); }, function () { render(); }); break;
     case 'toTables': stopOnline(); openTables(); break;
@@ -939,14 +934,12 @@ appEl.addEventListener('click', function (e) {
     case 'unsit': onlineSend({ type: 'sitout', value: false }); break;
     case 'hit': case 'stand': {
       if (!G) break;
-      app.hint = null;
       if (G.mode === 'bot') { if (lDispatch({ type: act, seat: 0 })) { render(); runBots(); } } else onlineSend({ type: act });
       break;
     }
-    case 'hint': { var D = describe(); if (D) { app.hint = BJ.hint(D.vs, D.me); render(); } break; }
     case 'here': onlineSend({ type: 'here' }); break;
     case 'newBet': localNext(); break;
-    case 'backMenu': gameToken++; G = null; app.modal = null; app.hint = null; app.seq = null; app.screen = 'start'; render(); break;
+    case 'backMenu': gameToken++; G = null; app.modal = null; app.seq = null; app.screen = 'start'; render(); break;
     case 'exit':
       if (G && G.mode === 'bot') { if (playing()) { app.modal = 'exitCatalog'; render(); } else window.location.href = CATALOG_URL; }
       else if (G && G.mode === 'online') { app.modal = G.role === 'host' ? 'closeTable' : 'leaveTable'; render(); }

@@ -241,3 +241,28 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .asknum { font-size: 28px; font-weight: 700; min-width: 32px; font-variant-numeric: tabular-nums; }
 .askbar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .askbar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+
+/* Веер у соперников: карты стоят над аватаром, точка поворота внизу, верхние края расходятся. Ваши карты без наклона */
+.seat .cards .card { transform-origin: 50% 100%; }
+.seat .cards .card:first-child { rotate: -10deg; }
+.seat .cards .card:last-child { rotate: 10deg; }
+/* Пас: карты остаются на столе и переворачиваются рубашкой вверх */
+.card.fold { animation: flipx .6s ease-in-out both; }
+.card.fold .tl, .card.fold .mid, .card.fold .br { opacity: 0; animation: faceoff .6s step-end both; }
+.card.fold::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 1; opacity: 1; background: repeating-linear-gradient(45deg, transparent 0 4px, oklch(0.9 0.05 25 / .5) 4px 5px), repeating-linear-gradient(-45deg, transparent 0 4px, oklch(0.9 0.05 25 / .5) 4px 5px), var(--back-red); box-shadow: inset 0 0 0 1.5px var(--back-red), inset 0 0 0 2.5px oklch(0.9 0.05 25 / .6); animation: foldback .6s step-end both; }
+.mine-card.fold { opacity: .6; }
+@keyframes faceoff { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes foldback { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card.fold, .card.fold .tl, .card.fold .mid, .card.fold .br, .card.fold::before { animation: none; } }
+
+/* Шапка экранов выбора и настройки стоит в одной колонке с содержимым; на столе шапка во всю ширину */
+.bar { width: 100%; max-width: 560px; margin: 0 auto; }
+.bar.wide { max-width: none; }
+/* Телефон: стол вытянут вниз и занимает всё свободное место между шапкой и кнопками, как в макете */
+@media (max-width: 599px) {
+  .area { max-height: none; min-height: 430px; }
+  .felt { inset: 3% 3% 2% 3%; }
+}
+
+/* Длинное название «Покер: Чожук» помещается в одну строку */
+.brand h1 { font-size: clamp(26px, 5vh, 34px); }

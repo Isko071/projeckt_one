@@ -49,18 +49,22 @@ function setBanner(s) {
 }
 
 // ===== Значки =====
-function themeButtonHtml() {
+function themeButtonHtml(cls) {
   var dark = window.PlatformTheme.isDark();
   var icon = dark
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 13.2A8.5 8.5 0 1 1 10.8 3a6.7 6.7 0 0 0 10.2 10.2z"/></svg>';
-  return '<button class="icon-btn" data-act="theme" data-key="theme" aria-label="' + esc(window.I18n.t(dark ? 'theme.toLight' : 'theme.toDark')) + '">' + icon + '</button>';
+  return '<button class="' + (cls || 'icon-btn') + '" data-act="theme" data-key="theme" aria-label="' + esc(window.I18n.t(dark ? 'theme.toLight' : 'theme.toDark')) + '">' + icon + '</button>';
 }
 var GRID_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">' +
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/>' +
   '<rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>';
-function catalogLinkHtml() {
-  return '<a class="icon-btn" href="' + CATALOG_URL + '" data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
+function catalogLinkHtml(cls) {
+  return '<a class="' + (cls || 'icon-btn') + '" href="' + CATALOG_URL + '" data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
+}
+// Шапка экранов выбора, настройки и ожидания: слева назад или выход, посередине название, справа переключатель темы (как в «Ятзи»)
+function headHtml(act, title, label) {
+  return '<div class="o-head" data-key="head"><button class="theme-btn" data-act="' + act + '" data-key="back" aria-label="' + esc(label) + '">←</button><h2>' + esc(title) + '</h2>' + themeButtonHtml('theme-btn') + '</div>';
 }
 function balHtml() { return '<div class="bal" data-key="bal">' + esc(fmt(W.getBalance()) + ' ' + tr('unitShort')) + '</div>'; }
 function bannerHtml() {
@@ -86,9 +90,10 @@ function handName(key) { return tr('hand.' + key); }
 
 // ===== Размещение мест за столом =====
 function ring(n) {
-  var small = (document.documentElement.clientWidth || window.innerWidth) < 360;
-  var a = { 1: [270], 2: [235, 305], 3: [150, 270, 30], 4: [150, 240, 300, 30], 5: [150, 228, 270, 312, 30] }[n] || [];
-  return a.map(function (deg) { var r = deg * Math.PI / 180; return { x: 50 + (small ? 37 : 40) * Math.cos(r), y: 55 + 40 * Math.sin(r) }; });
+  // Места соперников в процентах стола: боковые стоят выше, по бокам от общих карт; ближе к краю на узком экране
+  var w = document.documentElement.clientWidth || window.innerWidth, k = w < 360 ? 0.86 : w < 500 ? 0.9 : 1;
+  var t = { 1: [[50, 14]], 2: [[27, 20], [73, 20]], 3: [[12, 50], [50, 14], [88, 50]], 4: [[12, 52], [34, 17], [66, 17], [88, 52]], 5: [[11, 58], [24, 25], [50, 13], [76, 25], [89, 58]] }[n] || [];
+  return t.map(function (p) { return { x: 50 + (p[0] - 50) * k, y: p[1] + (w < 500 && Math.abs(p[0] - 50) > 35 ? 18 : 0) }; });
 }
 function seatColor(i) { return 'oklch(' + (window.PlatformTheme.isDark() ? 0.42 : 0.86) + ' 0.07 ' + (i * 70 + 20) + ')'; }
 function statusText(s) { return s.k ? ICON[s.k] + tr('st.' + s.k, { n: fmt(s.n || 0) }) : ''; }
@@ -105,7 +110,7 @@ function ringStyle(timer) {
 // ===== Партия =====
 function sitDown() {
   var ante = app.prefs.ante;
-  if (W.getBalance() < ante) return;
+  if (W.getBalance() < ante && W.capStatus(now()).left > 0) return;
   var prof = P.getProfile();
   T = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
   bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = [];
@@ -191,23 +196,27 @@ function consumeInvite() {
 }
 
 // ===== Экраны =====
+var LOGO = '<div class="logo" aria-hidden="true"><div class="lc"><span>A</span><i>♠</i></div><div class="lc red"><span>K</span><i>♥</i></div></div>';
 function startHtml() {
   var online = app.mode === 'online', avail = net.available(), needAuth = online && !signedIn();
-  var seg = avail ? '<div class="seg" data-key="modes"><button data-act="mode" data-v="bots" data-key="mbots" aria-pressed="' + !online + '">' + esc(tr('mode.bots')) + '</button><button data-act="mode" data-v="online" data-key="monline" aria-pressed="' + online + '">' + esc(tr('mode.online')) + '</button></div>' : '';
-  return '<div class="bar" data-key="bar">' + catalogLinkHtml() + '<div class="title">' + esc(tr('title')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
-    '<div class="page" data-key="page"><div><div class="h1">' + esc(tr('title')) + '</div><div class="muted" style="font-size:14px;line-height:1.4">' + esc(tr('sub')) + '</div></div>' + seg +
+  var modes = avail ? '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes" data-key="modes">' +
+    '<button class="mode-btn" data-act="mode" data-v="bots" data-key="mbots" aria-pressed="' + !online + '">' + esc(tr('mode.bots')) + '</button>' +
+    '<button class="mode-btn" data-act="mode" data-v="online" data-key="monline" aria-pressed="' + online + '">' + esc(tr('mode.online')) + '</button></div></div>' : '';
+  return '<div class="start" data-key="start"><div class="brand-row"><div class="brand">' + LOGO + '<h1>' + esc(tr('title')) + '</h1></div>' +
+    '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
+    '<div class="muted-text">' + esc(tr(online ? 'start.onlineSub' : 'sub')) + '</div>' + modes +
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
-    '<div style="display:flex;flex-direction:column;gap:12px"><button class="btn primary full" data-act="play" data-key="play"' + (needAuth ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
-    '<button class="btn full" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div></div>';
+    '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
+    '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
+    '<div class="bal-line" data-key="bal">' + esc(tr('balance', { n: fmt(W.getBalance()) + ' ' + unit(W.getBalance()) })) + '</div></div>';
 }
 function segHtml(items, sel, act) {
   return '<div class="seg">' + items.map(function (it) { return '<button data-act="' + act + '" data-v="' + it.v + '" data-key="' + act + it.v + '" aria-pressed="' + (it.v === sel) + '">' + esc(it.t) + '</button>'; }).join('') + '</div>';
 }
 function setupHtml() {
-  var pr = app.prefs, bal = W.getBalance(), broke = bal < pr.ante, cap = W.capStatus(now());
+  var pr = app.prefs, bal = W.getBalance(), cap = W.capStatus(now()), broke = bal < pr.ante && cap.left > 0;
   var dots = ring(pr.n - 1).concat([{ x: 50, y: 88 }]).map(function (p, i, a) { return '<div class="dot' + (i === a.length - 1 ? ' me' : '') + '" data-key="d' + i + '" style="left:' + p.x + '%;top:' + p.y + '%"></div>'; }).join('');
-  return '<div class="bar" data-key="bar"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><div class="title">' + esc(tr('modeBots')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
-    '<div class="page" data-key="page">' +
+  return '<div class="page" data-key="page">' + headHtml('toStart', tr('modeBots'), tr('back')) +
     '<div><div class="lbl">' + esc(tr('setup.players')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.n, 'size') + '</div>' +
     '<div class="prev" data-key="prev"><div class="felt"></div>' + dots + '</div>' +
     '<div><div class="lbl">' + esc(tr('setup.ante')) + '</div>' + segHtml(ANTES.map(function (n) { return { v: n, t: String(n) }; }), pr.ante, 'ante') + '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(tr('setup.minNote', { n: pr.ante * 2 })) + '</div></div>' +
@@ -226,8 +235,8 @@ function pickHtml() {
       '<button class="btn primary sm" data-act="joinRoom" data-v="' + esc(r.code) + '" data-key="j' + esc(r.code) + '"' + (app.busy ? ' disabled' : '') + '>' + esc(tr('online.enter')) + '</button></div>';
   }).join('') + '</div>';
   var hint = bad ? tr('online.codeBad') : (code.length && code.length < 5 ? tr('online.codeMore', { n: 5 - code.length }) : tr('online.codeHint'));
-  return '<div class="bar" data-key="bar"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><div class="title">' + esc(tr('online.title')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' + bannerHtml() +
-    '<div class="page tight" data-key="page"><button class="btn primary full" data-act="toCreate" data-key="create">' + esc(tr('online.create')) + '</button>' +
+  return '<div class="page tight" data-key="page">' + headHtml('toStart', tr('online.title'), tr('back')) + bannerHtml() +
+    '<button class="btn primary full" data-act="toCreate" data-key="create">' + esc(tr('online.create')) + '</button>' +
     '<div style="display:flex;flex-direction:column;gap:6px"><div class="codeline"><input class="code-input' + (bad ? ' bad' : '') + '" id="code" data-key="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(code) + '" placeholder="' + esc(tr('online.code')) + '" aria-label="' + esc(tr('online.code')) + '">' +
     '<button class="btn" data-act="paste" data-key="paste">' + esc(tr('online.paste')) + '</button><button class="btn primary" data-act="joinCode" data-key="joinCode"' + (code.length === 5 && !app.busy ? '' : ' disabled') + '>' + esc(tr(app.busy ? 'online.busy' : 'online.join')) + '</button></div>' +
     '<div class="codehint' + (bad ? ' bad' : '') + '">' + esc(hint) + '</div></div>' +
@@ -235,8 +244,8 @@ function pickHtml() {
 }
 function createHtml() {
   var pr = app.prefs;
-  return '<div class="bar" data-key="bar"><button class="icon-btn" data-act="toPick" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><div class="title">' + esc(tr('create.title')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
-    '<div class="page" data-key="page"><div><div class="lbl">' + esc(tr('create.seats')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.size, 'osize') + '</div>' +
+  return '<div class="page" data-key="page">' + headHtml('toPick', tr('create.title'), tr('back')) +
+    '<div><div class="lbl">' + esc(tr('create.seats')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.size, 'osize') + '</div>' +
     '<div><div class="lbl">' + esc(tr('setup.ante')) + '</div>' + segHtml(ANTES.map(function (n) { return { v: n, t: String(n) }; }), pr.ante, 'ante') + '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(tr('setup.minNote', { n: pr.ante * 2 })) + '</div></div>' +
     '<button class="switch-row" role="switch" data-act="closedSw" data-key="closedSw" aria-checked="' + pr.closed + '"><span><b>' + esc(tr('create.closed')) + '</b><span class="muted" style="display:block;font-size:13px">' + esc(tr('create.closedSub')) + '</span></span><span class="knob' + (pr.closed ? ' on' : '') + '"><i></i></span></button>' +
     '<div style="display:flex"><button class="btn primary full" data-act="createGo" data-key="createGo"' + (app.busy ? ' disabled' : '') + '>' + esc(tr('create.go')) + '</button></div></div>';
@@ -247,14 +256,14 @@ function waitHtml(m) {
   for (var i = 0; i < m.size; i++) {
     var p = i === 0 ? pos[pos.length - 1] : pos[i - 1], mem = order[i], me = mem && mem.uid === user().uid;
     seats.push('<div class="wseat" data-key="w' + i + '" style="left:' + p.x + '%;top:' + p.y + '%"><div class="av' + (mem ? '' : ' empty') + '" style="' + (mem ? 'background:' + (me ? P.avatarColor(P.getProfile().avatar) : seatColor(i)) : '') + ';width:40px;height:40px">' + esc(mem ? P.initial(mem.name) : '?') + '</div>' +
-      '<div class="nm">' + esc(mem ? (me ? tr('you') : mem.name) : tr('wait.free')) + '</div><div class="muted" style="font-size:12px">' + esc(mem && mem.uid === m.owner ? (me ? tr('you') + ' · ' + tr('wait.creator') : tr('wait.creator')) : (me ? tr('you') : '')) + '</div></div>');
+      '<div class="nm">' + esc(mem ? (me ? P.getProfile().name : mem.name) : tr('wait.free')) + '</div><div class="muted" style="font-size:12px">' + esc(mem && mem.uid === m.owner ? tr('wait.creator') : '') + '</div></div>');
   }
   var can = m.isOwner && m.members.length >= 2 && m.startIn === 0;
   var action = m.isOwner
     ? '<button class="btn primary" data-act="startGame" data-key="startGame"' + (can ? '' : ' disabled') + '>' + esc(m.members.length >= 2 && m.startIn > 0 ? tr('wait.in', { n: Math.ceil(m.startIn / 1000) }) : tr('wait.start')) + '</button>'
     : '<div class="muted" style="font-size:14px;text-align:right">' + esc(tr('wait.guest')) + '</div>';
-  return '<div class="bar" data-key="bar"><div class="title">' + esc(tr('wait.title')) + '</div><div class="right">' + chat.buttonHtml() + '</div></div>' + bannerHtml() +
-    '<div class="page tight" data-key="page"><div style="text-align:center"><div class="muted" style="font-size:12px">' + esc(tr('wait.code')) + '</div><div style="font-size:34px;font-weight:700;letter-spacing:6px;line-height:1.1" data-key="codeBig">' + esc(m.code) + '</div>' + (m.private ? '<div class="muted" style="font-size:13px;font-weight:700">' + esc(tr('wait.private')) + '</div>' : '') + '</div>' +
+  return '<div class="page tight" data-key="page">' + headHtml('leave', tr('wait.title'), tr('wait.leave')) + bannerHtml() +
+    '<div style="text-align:center"><div class="muted" style="font-size:12px">' + esc(tr('wait.code')) + '</div><div style="font-size:34px;font-weight:700;letter-spacing:6px;line-height:1.1" data-key="codeBig">' + esc(m.code) + '</div>' + (m.private ? '<div class="muted" style="font-size:13px;font-weight:700">' + esc(tr('wait.private')) + '</div>' : '') + '</div>' +
     '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><button class="btn" data-act="copyCode" data-key="copy">' + esc(tr(app.copied ? 'wait.copied' : 'wait.copy')) + '</button><button class="btn" data-act="shareLink" data-key="share">' + esc(tr('wait.share')) + '</button></div>' +
     '<div class="prev wait" data-key="wprev"><div class="felt"></div>' + seats.join('') + '</div>' +
     '<div class="muted" style="font-size:12px;text-align:center">' + esc(tr('wait.params', { a: m.ante, m: m.minBet })) + '</div>' + chat.panelHtml({ mode: 'lobby' }) +
@@ -262,8 +271,7 @@ function waitHtml(m) {
 }
 function errHtml() {
   var k = app.err ? app.err.k : 'other';
-  return '<div class="bar" data-key="bar"><div class="title">' + esc(tr('online.title')) + '</div></div>' +
-    '<div class="page center" data-key="page"><div class="note-card errcard"><div style="font-size:20px;font-weight:700">' + esc(tr('err.' + k)) + '</div><p>' + esc(tr('err.' + k + 'Text')) + '</p><button class="btn primary" data-act="toPick" data-key="errBtn">' + esc(tr('err.toPick')) + '</button></div></div>';
+  return '<div class="page center" data-key="page">' + headHtml('toPick', tr('online.title'), tr('back')) + '<div class="note-card errcard"><div style="font-size:20px;font-weight:700">' + esc(tr('err.' + k)) + '</div><p>' + esc(tr('err.' + k + 'Text')) + '</p><button class="btn primary" data-act="toPick" data-key="errBtn">' + esc(tr('err.toPick')) + '</button></div></div>';
 }
 
 // ===== Стол =====
@@ -272,7 +280,7 @@ function tableHtml(m) {
   var seatsHtml = '', betsHtml = '';
   opp.forEach(function (s, k) {
     var p = pos[k], av = avatarOf(s, k + 1), bx = 50 + (p.x - 50) * 0.62, by = p.y < 45 ? p.y + 17 : p.y - 2;
-    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
+    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.fold ? 'fold ' : '') + (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
     seatsHtml += '<div class="seat' + (s.folded || s.out ? ' folded' : '') + (s.turn ? ' active' : '') + '" data-key="o' + s.index + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<div class="status">' + esc(statusText(s.status)) + '</div><div class="box"><div class="ring' + (s.turn ? ' active' : '') + '"' + (s.turn ? ringStyle(s.timer) : '') + '><div class="av" style="background:' + av.bg + '">' + esc(av.letter) + '</div></div>' +
       '<div class="cards">' + cards + '</div><div class="nick">' + esc(s.name) + '</div></div></div>';
@@ -282,11 +290,11 @@ function tableHtml(m) {
   if (shown < app.bseen) { app.bseen = shown; app.bfrom = shown; } else if (shown > app.bseen) { app.bfrom = app.bseen; app.bseen = shown; }
   var board = m.board.map(function (c, b) { return cardHtml(c.code, 'board-card', c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))); }).join('');
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
-  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
+  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
-  var notice = m.notice ? tr(m.notice.k === 'capCut' ? 'cap.cut' : 'cap.reached', { n: fmt(m.notice.n) }) : '';
+  var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
-  var top = '<div class="bar" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
+  var top = '<div class="bar wide" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
   return top + (notice || toasts ? '<div class="toast" role="status" data-key="toast">' + (notice ? '<div>' + esc(notice) + '</div>' : '') + toasts + '</div>' : '') +
     '<div class="area" data-key="area"><div class="felt"></div><div class="center"><div class="round">' + esc(tr('round.' + m.roundKey)) + '</div><div class="board">' + board + '</div>' +
     '<div class="pot"><span class="pot-dot"></span>' + esc(tr('pot', { n: fmt(m.pot) })) + '</div>' + (cap ? '<div class="cap" role="status">' + esc(cap) + '</div>' : '') + '</div>' + seatsHtml + betsHtml + '</div>' +

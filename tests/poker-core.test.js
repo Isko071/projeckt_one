@@ -155,3 +155,19 @@ test('онлайн-стол до начала игры отдаёт модель
   assert.equal(m.members.length, 1);
   assert.ok(m.startIn > 0);
 });
+
+test('стол с ботами: при достигнутом дневном пределе играем без аконов — ничего не списывается и не начисляется', async () => {
+  const be = fakeBackend(), ctx = load(be), W = ctx.PlatformWallet;
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 3, ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
+  const key = Object.keys(be.data).filter((k) => /wallet/.test(k))[0];
+  const w = JSON.parse(be.data[key]); w.capUsed = 1e9; be.data[key] = JSON.stringify(w);
+  ctx.PlatformWallet.forget && ctx.PlatformWallet.forget();
+  const start = W.getBalance();
+  assert.equal(W.capStatus(Date.now()).left, 0);
+  t.begin();
+  assert.equal(t.model().notice.k, 'free');
+  assert.equal(W.getBalance(), start, 'ставка не списана');
+  await playHand(t, passive);
+  assert.equal(W.getBalance(), start, 'выигрыш не начислен, баланс прежний');
+  t.leave();
+});
