@@ -254,3 +254,18 @@ test('онлайн-предел: за день начисляется не бо�
   assert.equal(W.onlineStatus(d2).left, 5000);
   assert.equal(W.onlineWin('blackjack', 300, d2).granted, 300);
 });
+
+test('календарь серии: playedDays — записанные дни и дни текущей серии, пропуск виден', () => {
+  const W = load({ localStorage: fakeBackend() });
+  W.markPlayed(D(2026, 12, 30)); W.markPlayed(D(2026, 12, 31)); W.markPlayed(D(2027, 1, 1));   // серия 3
+  W.markPlayed(D(2027, 1, 4));                                                                    // 2 и 3 января пропущены
+  const days = Object.keys(W.playedDays()).sort();
+  assert.deepEqual(days, ['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-04']);
+});
+
+test('календарь серии: у старого кошелька без списка дней дни берутся из текущей серии', () => {
+  const backend = fakeBackend();
+  backend.data['platform:wallet'] = JSON.stringify({ balance: 6000, streak: 3, best: 3, playDay: '2026-10-09' });
+  const W = load({ localStorage: backend });
+  assert.deepEqual(Object.keys(W.playedDays()).sort(), ['2026-10-07', '2026-10-08', '2026-10-09']);
+});
