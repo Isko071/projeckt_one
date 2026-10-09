@@ -1,9 +1,9 @@
-// Русские тексты игры «Покер: просто». Ключи games.poker-simple.* (название и описание для каталога лежат в locales/ru.js).
+// Русские тексты игры «Покер: Чожук». Ключи games.poker-simple.* (название и описание для каталога лежат в locales/ru.js).
 (function (root) {
   root.LOCALES = root.LOCALES || {};
   var p = 'games.poker-simple.';
   var texts = {
-    'title': 'Покер: просто',
+    'title': 'Покер: Чожук',
     'sub': 'Холдем без обязательных ставок. Ставьте, если хочется.',
     'toCatalog': 'В каталог',
     'back': 'Назад',
