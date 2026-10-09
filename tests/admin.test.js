@@ -21,7 +21,7 @@ function doc(uid, o) {
 
 test('запись игрока разбирается: ник, баланс, партии, даты', () => {
   const r = L.parseQuery([doc('abc123', { name: 'Аня', balance: 7500, plays: { yahtzee: 3, blackjack: 4 }, createdAt: NOW - DAY, lastSeen: NOW - 1000 })])[0];
-  assert.deepEqual(plain(r), { uid: 'abc123', name: 'Аня', balance: 7500, streak: 0, createdAt: NOW - DAY, lastSeen: NOW - 1000, plays: { yahtzee: 3, minesweeper: 0, blackjack: 4 }, total: 7 });
+  assert.deepEqual(plain(r), { uid: 'abc123', name: 'Аня', balance: 7500, streak: 0, createdAt: NOW - DAY, lastSeen: NOW - 1000, plays: { yahtzee: 3, minesweeper: 0, blackjack: 4, 'poker-simple': 0 }, total: 7 });
 });
 
 test('старая запись без новых полей: визит берётся из updatedAt, регистрации нет', () => {
@@ -47,7 +47,7 @@ test('итоги: активные и новые за сутки и неделю
     doc('b', { name: 'Б', balance: 1, plays: { minesweeper: 5, blackjack: 1 }, createdAt: NOW - 3 * DAY, lastSeen: NOW - 3 * DAY }),
     doc('c', { name: 'В', balance: 1, plays: {}, createdAt: NOW - 30 * DAY, lastSeen: NOW - 30 * DAY })
   ]);
-  assert.deepEqual(plain(L.summary(rows, NOW)), { players: 3, activeToday: 1, active7: 2, newToday: 1, new7: 2, plays: { yahtzee: 2, minesweeper: 5, blackjack: 1 }, total: 8 });
+  assert.deepEqual(plain(L.summary(rows, NOW)), { players: 3, activeToday: 1, active7: 2, newToday: 1, new7: 2, plays: { yahtzee: 2, minesweeper: 5, blackjack: 1, 'poker-simple': 0 }, total: 8 });
 });
 
 test('поиск по нику и коду, сортировка по колонкам', () => {
@@ -75,4 +75,9 @@ test('withBalance меняет только баланс и отвергает �
   assert.equal(snap.data['platform:profile'].name, 'А');
   [-1, 1.5, NaN, 1e9, 'x'].forEach((v) => assert.equal(L.withBalance(src, v).ok, false));
   assert.equal(L.withBalance('не json', 5).ok, false);
+});
+
+test('игрок без записи кошелька (ничего не менял): показывается стартовый баланс, а не 0', () => {
+  const r = L.parseDoc({ name: 'projects/p/databases/(default)/documents/users/nowallet', fields: { data: { stringValue: JSON.stringify({ v: 1, data: { 'platform:profile': { name: 'Новый' } } }) }, createdAt: { integerValue: '1' }, lastSeen: { integerValue: '2' } } });
+  assert.equal(r.balance, 5000);
 });

@@ -83,7 +83,7 @@
     if (st.srvError === 'nourl') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.nourl')) + '</p>';
     if (st.srvError === 'denied') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.denied')) + '</p>';
     if (!st.srv) return st.srvError ? '<p class="msg bad" role="alert">' + esc(tr('admin.srv.error')) + '</p><button type="button" class="btn" data-act="reloadSrv">' + esc(tr('admin.reload')) + '</button>' : '<p class="msg" role="status">' + esc(tr('admin.srv.loading')) + '</p>';
-    var d = st.srv, c = d.counters, created = c.created.yahtzee + c.created.blackjack;
+    var d = st.srv, c = d.counters, created = Object.keys(c.created).reduce(function (a, k) { return a + c.created[k]; }, 0);
     var cards = [[d.conns, 'conns'], [d.rooms, 'rooms'], [created, 'created'], [c.joins, 'joins'], [c.starts, 'starts'], [c.errors + c.denied, 'errors']].map(function (x) {
       return '<div class="card"><b>' + fmt(x[0]) + '</b><span>' + esc(tr('admin.srv.' + x[1])) + '</span></div>';
     }).join('');
@@ -125,8 +125,8 @@
       (st.msg ? '<p class="msg' + (st.msg.bad ? ' bad' : '') + '" role="status">' + esc(tr(st.msg.key)) + '</p>' : '') +
       '<p class="note">' + esc(tr('admin.note', { time: fmtDate(st.loadedAt), shown: rows.length })) + '</p>' +
       '<div class="tbl"><table><thead><tr>' + head('name', tr('admin.col.name')) + head('createdAt', tr('admin.col.created')) + head('lastSeen', tr('admin.col.seen')) + head('balance', tr('admin.col.balance'), 'n') +
-      head('yahtzee', tr('admin.col.yahtzee'), 'n') + head('minesweeper', tr('admin.col.minesweeper'), 'n') + head('blackjack', tr('admin.col.blackjack'), 'n') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
-      (body || '<tr><td colspan="8" class="empty">' + esc(tr('admin.empty')) + '</td></tr>') + '</tbody></table></div>';
+      L.GAMES.map(function (g) { return head(g, tr('admin.col.' + g), 'n'); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
+      (body || '<tr><td colspan="' + (L.GAMES.length + 5) + '" class="empty">' + esc(tr('admin.empty')) + '</td></tr>') + '</tbody></table></div>';
   }
 
   function render() {

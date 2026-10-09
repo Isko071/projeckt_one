@@ -18,7 +18,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-
 .tools input { flex: 1; min-width: 0; min-height: var(--tap); padding: 0 12px; border-radius: var(--r-btn); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
 .note { color: var(--muted); font-size: 12px; margin: 8px 0; }
 .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 14px; }
 th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 tbody tr:last-child td { border-bottom: 0; }
 th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }

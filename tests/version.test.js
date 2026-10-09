@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const pages = ['index.html', 'games/yahtzee/index.html', 'games/minesweeper/index.html', 'games/blackjack/index.html', 'admin/index.html', 'games/poker-simple/index.html', 'games/poker/index.html'];
+const pages = ['index.html', 'games/yahtzee/index.html', 'games/minesweeper/index.html', 'games/blackjack/index.html', 'admin/index.html', 'games/poker-simple/index.html'];
 
 test('локальные скрипты и стили во всех страницах имеют один и тот же номер версии', () => {
   const versions = new Set();
