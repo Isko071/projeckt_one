@@ -106,9 +106,9 @@
     }).join('') + stats + '</div>';
   }
 
-  function head(key, label, cls) {
+  function head(key, label, cls, title) {
     var on = st.sort === key;
-    return '<th class="' + (cls || '') + '" aria-sort="' + (on ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"><button type="button" data-sort="' + key + '">' + esc(label) + (on ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</button></th>';
+    return '<th class="' + (cls || '') + '" aria-sort="' + (on ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"><button type="button" data-sort="' + key + '"' + (title ? ' title="' + esc(title) + '" aria-label="' + esc(title) + '"' : '') + '>' + esc(label) + (on ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</button></th>';
   }
 
   function tableHtml() {
@@ -125,7 +125,7 @@
       (st.msg ? '<p class="msg' + (st.msg.bad ? ' bad' : '') + '" role="status">' + esc(tr(st.msg.key)) + '</p>' : '') +
       '<p class="note">' + esc(tr('admin.note', { time: fmtDate(st.loadedAt), shown: rows.length })) + '</p>' +
       '<div class="tbl"><table><thead><tr>' + head('name', tr('admin.col.name')) + head('createdAt', tr('admin.col.created')) + head('lastSeen', tr('admin.col.seen')) + head('balance', tr('admin.col.balance'), 'n') +
-      L.GAMES.map(function (g) { return head(g, tr('admin.col.' + g), 'n'); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
+      L.GAMES.map(function (g, i) { return head(g, String(i + 1), 'n', tr('admin.col.' + g)); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
       (body || '<tr><td colspan="' + (L.GAMES.length + 5) + '" class="empty">' + esc(tr('admin.empty')) + '</td></tr>') + '</tbody></table></div>';
   }
 
