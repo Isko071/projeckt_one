@@ -218,8 +218,9 @@ function myOutcome(D) {
   var me = sumOf(h.cards), dl = sumOf(D.vs.dealer.cards), bet = h.bet, net = s.net;
   var free = D.mode === 'bot' && G && G.free;
   var sub = { win: tr('res.subWin', { bet: bet }), bj: tr('res.subBj'), push: tr('res.subPush', { bet: bet }), lose: tr('res.subLose', { a: me, b: dl }), bust: tr('res.subBust'), dealerBj: tr('res.subDealerBj') }[key];
-  if (free) { sub = key === 'win' || key === 'bj' || key === 'push' ? tr('res.subFree') : sub; net = 0; }
-  var delta = free ? tr('res.free') : net > 0 ? tr('res.delta.plus', { n: fmt(net), unit: unit(net) }) : (net < 0 ? tr('res.delta.minus', { n: fmt(-net), unit: unit(-net) }) : tr('res.delta.zero'));
+  var reward = free && G.limited && (key === 'win' || key === 'bj');
+  if (free) { sub = reward ? tr('res.subLimit', { n: FREE_WIN }) : (key === 'win' || key === 'bj' || key === 'push' ? tr('res.subFree') : sub); net = reward ? FREE_WIN : 0; }
+  var delta = reward ? tr('res.delta.plus', { n: fmt(FREE_WIN), unit: unit(FREE_WIN) }) : free ? tr('res.free') : net > 0 ? tr('res.delta.plus', { n: fmt(net), unit: unit(net) }) : (net < 0 ? tr('res.delta.minus', { n: fmt(-net), unit: unit(-net) }) : tr('res.delta.zero'));
   return { key: key, title: tr('res.' + key), sub: sub, delta: delta, tone: free ? (key === 'win' || key === 'bj' ? 'good' : (key === 'push' ? '' : 'bad')) : (net > 0 ? 'good' : (net < 0 ? 'bad' : '')), net: net, bet: bet };
 }
 function betBounds() {
@@ -252,6 +253,9 @@ function scheduleSeq(st) {
 }
 
 // ===== Сессия «С ботом» =====
+// Дневной предел выигрыша достигнут: ставок нет, раздача идёт сразу, за победу фиксированно FREE_WIN аконов
+var FREE_WIN = 250;
+function limitReached() { return W.capStatus(now()).left <= 0; }
 function startLocal() {
   gameToken++; chat.reset();
   stopOnline();
@@ -260,6 +264,7 @@ function startLocal() {
   app.chips = emptyBet();
   app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
   render();
+  if (limitReached()) localDeal(true, true);
 }
 function lDispatch(action) {
   var before = G.state.phase, r = BJ.reduce(G.state, action);
@@ -279,6 +284,8 @@ function lDispatch(action) {
       G.cap = cr;
       if (cr.capped) notify(tr(cr.left > 0 || cr.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(cr.granted) }), 6000);
       if (mine.outcome === 'win' || mine.outcome === 'blackjack') W.countWin('blackjack');
+    } else if (mine && G.limited && (mine.outcome === 'win' || mine.outcome === 'blackjack')) {
+      W.add(FREE_WIN, 'blackjack', now());
     }
     scheduleSeq(st);
    
@@ -296,10 +303,12 @@ function runBots() {
   })();
 }
 // Своя ставка, ставка бота и раздача
-function localDeal(free) {
+function localDeal(free, limited) {
   var total = free ? MIN_BET : chipsTotal(), st = G.state;
   if (!free && (total < MIN_BET || total > betBounds().max)) return;
   G.free = !!free;                               // без ставки: кошелёк не трогаем, выигрыша нет
+  G.limited = !!limited;                         // без ставки из-за дневного предела: за победу фиксированная награда
+  if (limited) notify(tr('cap.free', { n: FREE_WIN, unit: unit(FREE_WIN) }), 6000);
   st.seats[0].chips = free ? Math.max(MIN_BET, W.getBalance()) : W.getBalance();
   if (!free) W.capStart(now());
   if (!lDispatch({ type: 'bet', seat: 0, amount: total })) return;
@@ -313,10 +322,11 @@ function localDeal(free) {
 function localNext() {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
   G.state.seats[0].chips = W.getBalance();
-  G.free = false;
+  G.free = false; G.limited = false;
   app.seen = {}; app.resultAt = 0; app.seq = null;
   app.chips = emptyBet();
   render();
+  if (limitReached()) localDeal(true, true);
 }
 
 // ===== Сессия «Онлайн» =====
