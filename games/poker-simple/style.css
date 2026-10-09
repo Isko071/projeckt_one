@@ -197,3 +197,35 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
   .card.flip, .card.deal, .sheet { animation: none; }
   button { transition: none; }
 }
+
+/* Онлайн: список столов, код, создание, комната ожидания, вопросы */
+.page.tight { gap: 12px; }
+.page.center { flex: 1; justify-content: center; }
+.banner { margin: 0 12px; padding: 8px 12px; border-radius: 14px; font-size: 13px; font-weight: 600; text-align: center; border: 1px solid var(--warn); background: var(--warn-bg); }
+.banner.ok { border-color: var(--accent); background: var(--accent-soft); }
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.trow { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 8px 10px; }
+.trow .btn.sm { min-height: 40px; padding: 0 14px; }
+.av-sm { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+.skel { height: 56px; border-radius: 16px; background: var(--line); opacity: .5; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.emptybox { border: 1px dashed var(--line); border-radius: 16px; padding: 18px; text-align: center; color: var(--muted); font-size: 14px; }
+.codeline { display: flex; gap: 8px; }
+.code-input { flex: 1; min-width: 0; min-height: 46px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 12px; font: 700 18px/1 inherit; letter-spacing: 4px; text-transform: uppercase; }
+.code-input.bad { border-color: var(--danger); }
+.codehint { font-size: 12px; color: var(--muted); }
+.codehint.bad { color: var(--danger); font-weight: 600; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; color: var(--ink); font-size: 15px; cursor: pointer; }
+.knob { flex: none; width: 46px; height: 28px; border-radius: 14px; background: var(--line); position: relative; }
+.knob i { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); transition: left .2s ease; }
+.knob.on { background: var(--accent); }
+.knob.on i { left: 21px; }
+.prev.wait { height: 170px; }
+.wseat { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; text-align: center; }
+.wseat .nm { font-size: 12px; font-weight: 700; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av.empty { background: transparent; border: 1.5px dashed var(--muted); color: var(--muted); }
+.errcard { text-align: center; align-items: center; }
+.askrow { display: flex; align-items: center; gap: 12px; }
+.asknum { font-size: 28px; font-weight: 700; min-width: 32px; font-variant-numeric: tabular-nums; }
+.askbar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.askbar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }

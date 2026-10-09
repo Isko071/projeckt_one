@@ -220,7 +220,7 @@
       this.round = st.round; if (this.stage !== 'broke') this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.spent = 0;
       if (mine && mine.inHand) { this.W.markPlayed(); this.W.countPlay(this.source); }
     }
-    if (mine) this.spendSync(mine);
+    if (mine && !(st.phase === 'settled' && this.settledRound === st.round)) this.spendSync(mine);
     if (prev && prev.state && prev.state.round === st.round && st.board.length > prev.state.board.length && st.phase !== 'settled') {
       this.prevBoardLen = prev.state.board.length; this.holdUntil = now() + (reduced() ? 400 : HOLD_MS); this.caption = 'next';
       setTimeout(function () { if (!self.stopped) self.emit(); }, (reduced() ? 400 : HOLD_MS) + 20);
