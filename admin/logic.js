@@ -1,7 +1,7 @@
 // Личный кабинет владельца: чистая логика (разбор записей игроков, итоги, поиск, сортировка). Без обращений к window и document.
 (function (root) {
   // Новая игра: добавить её id сюда и ключ admin.col.<id> в locales/ru.js (счётчик партий появится в таблице сам)
-  var GAMES = ['yahtzee', 'minesweeper', 'blackjack', 'poker-simple', 'poker'];
+  var GAMES = ['yahtzee', 'minesweeper', 'blackjack', 'poker-simple'];
   var DAY = 24 * 3600 * 1000;
 
   function num(v) { var n = Number(v); return isFinite(n) && n >= 0 ? n : 0; }

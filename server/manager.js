@@ -29,7 +29,7 @@ class RoomManager {
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
-    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
+    this.counters = { created: { blackjack: 0, yahtzee: 0, 'poker-simple': 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
   event(type, o) {
