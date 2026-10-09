@@ -118,8 +118,8 @@ test('nextBotAction: только когда ходит бот', () => {
 });
 
 test('сила двух карт и учёт рук соперников: пара тузов сильнее мусора, против повышающего шанс ниже', () => {
-  assert.ok(B.holeScore(['AS', 'AH']) > B.holeScore(['7S', '2H']));
-  assert.ok(B.holeScore(['KS', 'QS']) > B.holeScore(['KS', 'QH']));
+  assert.ok(B.holeScore('AS', 'AH') > B.holeScore('7S', '2H'));
+  assert.ok(B.holeScore('KS', 'QS') > B.holeScore('KS', 'QH'));
   const rng = () => seededRng(7);
   const random = B.equity(['9S', '9H'], [], 1, rng(), 300);
   const vsRaiser = B.equity(['9S', '9H'], [], 1, rng(), 300, [0.5]);
