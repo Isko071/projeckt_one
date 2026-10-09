@@ -81,3 +81,8 @@ test('игрок без записи кошелька (ничего не мен�
   const r = L.parseDoc({ name: 'projects/p/databases/(default)/documents/users/nowallet', fields: { data: { stringValue: JSON.stringify({ v: 1, data: { 'platform:profile': { name: 'Новый' } } }) }, createdAt: { integerValue: '1' }, lastSeen: { integerValue: '2' } } });
   assert.equal(r.balance, 5000);
 });
+
+test('таблица игроков строится из списка игр, а не из жёстко прописанных колонок', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'admin', 'admin.js'), 'utf8');
+  assert.ok(!/r\.plays\.(yahtzee|minesweeper|blackjack)/.test(src), 'колонки партий должны браться из AdminLogic.GAMES');
+});
