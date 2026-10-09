@@ -222,25 +222,7 @@
 .wallet-balance b { font-size: 40px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .wallet-balance span { font-size: 18px; color: var(--muted); }
 .wallet-dialog h3 { margin: 0 0 8px; font-size: 17px; }
-.streak-card { border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); }
-.streak-top { display: flex; align-items: center; gap: 12px; }
-.streak-top h3 { margin: 0; color: var(--muted); font-size: 14px; font-weight: 600; }
 .flame { color: oklch(0.62 0.19 45); }
-.flame.big { width: 44px; height: 44px; flex: none; }
-.streak-card.cold .flame { color: var(--muted); }
-.streak-count { font-size: 24px; font-weight: 800; }
-.streak-best { color: var(--muted); font-size: 14px; }
-.ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-.step {
-  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px;
-  border: 1px solid var(--line); background: var(--surface); font-variant-numeric: tabular-nums; min-width: 0;
-}
-.step-day { font-weight: 800; font-size: 15px; }
-.step-amount { font-size: 11px; color: var(--muted); }
-.step.done { background: var(--accent-soft); border-color: var(--accent); }
-.step.now { box-shadow: 0 0 0 2px var(--accent); }
-.streak-hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
-.streak-hint:empty, .streak-hint[hidden] { display: none; }
 .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 220px; overflow: auto; }
 .log li { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
 .log-time { grid-column: 1; color: var(--muted); font-size: 12px; }
@@ -251,7 +233,7 @@
 .records dt { color: var(--muted); }
 .records dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .wallet-dialog .btn-primary, .wallet-dialog .btn-secondary { min-height: 48px; }
-@media (max-width: 380px) { .chip { padding: 0 12px; font-size: 15px; } .step-amount { font-size: 10px; } .wallet-balance b { font-size: 34px; } }
+@media (max-width: 380px) { .chip { padding: 0 12px; font-size: 15px; } .wallet-balance b { font-size: 34px; } }
 .wallet-dialog[open] { display: grid; gap: 16px; }
 
 /* Аккаунт: окно и меню */
