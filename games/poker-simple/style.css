@@ -263,3 +263,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
   .area { max-height: none; min-height: 430px; }
   .felt { inset: 3% 3% 2% 3%; }
 }
+
+/* Длинное название «Покер: Чожук» помещается в одну строку */
+.brand h1 { font-size: clamp(26px, 5vh, 34px); }

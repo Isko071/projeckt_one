@@ -105,7 +105,7 @@
     'online.login.domain': 'Адрес этого сайта не добавлен в разрешённые домены Firebase.',
     'online.login.popup': 'Браузер заблокировал окно входа. Разрешите всплывающие окна и попробуйте снова.',
     'online.tables.title': 'Онлайн-столы',
-    'online.tables.you': 'Вы: {name}',
+    'online.tables.you': '{name}',
     'online.tables.create': 'Создать стол',
     'online.tables.codeTitle': 'Войти по коду',
     'online.tables.codeLabel': 'Код стола',

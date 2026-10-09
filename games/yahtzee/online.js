@@ -263,7 +263,6 @@
     var members = v ? v.members : [], size = v ? v.size : on.size, mode = v ? v.mode : on.mode;
     var seats = members.map(function (m) {
       var tags = [];
-      if (m.uid === myUid) tags.push(tr('online.lobby.you'));
       if (m.seat === 0) tags.push(tr('online.lobby.creator'));
       return '<div class="o-seat" data-key="m-' + esc(m.uid) + '"><span class="av" style="background:' + P.avatarColor(m.avatar) + '">' + esc(P.initial(m.name)) + '</span><span class="nm">' + esc(m.name || tr('online.lobby.you')) + '</span><span class="tg">' + esc(tags.join(' · ')) + '</span></div>';
     });
@@ -271,7 +270,7 @@
     var startLeft = v && v.startIn >= 0 ? Math.max(0, v.startIn - (now() - (v.receivedAt || now()))) : -1;
     var canStart = members.length >= T.CONFIG.minSeats && startLeft === 0;   // 2 игрока и 20 секунд после последнего входа или выхода
     var autoHtml = startLeft > 0 ? '<div class="o-hint" role="status"><b>' + esc(tr('online.lobby.startIn', { n: Math.ceil(startLeft / 1000) })) + '</b></div>' : '';
-    return '<div class="o-page"><div class="o-head"><h2>' + esc(tr('online.lobby.title')) + '</h2>' + themeButtonHtml() + '</div>' +
+    return '<div class="o-page"><div class="o-head"><button class="theme-btn" data-act="' + (host ? 'closeTable' : 'leaveLobby') + '" data-key="exit" aria-label="' + esc(tr('online.lobby.leave')) + '">←</button><h2>' + esc(tr('online.lobby.title')) + '</h2>' + themeButtonHtml() + '</div>' +
       '<div class="card o-box o-center"><small>' + esc(tr('online.lobby.code')) + '</small><div class="o-bigcode" data-key="codeBig">' + esc(G ? G.code : '') + '</div>' +
         '<div class="o-mode-tag">' + esc(modeName(mode)) + ' · ' + esc(tr('online.lobby.seats', { n: size })) + '</div>' +
         (v && v.private ? '<div class="o-mode-tag"><b>' + esc(tr('online.lobby.private')) + '</b></div>' : '') +
