@@ -35,6 +35,31 @@
       function (e) { st.loading = false; st.error = e && e.message === 'denied' ? 'denied' : 'network'; render(); });
   }
 
+  // Временная правка баланса игрока: читаем запись, меняем только wallet.balance и пишем обратно (с проверкой, что запись не изменилась)
+  function docUrl(uid) { var cfg = window.FIREBASE_CONFIG; return 'https://firestore.googleapis.com/v1/projects/' + cfg.projectId + '/databases/' + window.FIREBASE_DATABASE + '/documents/users/' + encodeURIComponent(uid); }
+  function editBalance(uid) {
+    var row = st.rows.filter(function (r) { return r.uid === uid; })[0];
+    if (!row || st.saving) return;
+    var raw = window.prompt(tr('admin.edit.prompt', { name: row.name || row.uid.slice(0, 8), n: fmt(row.balance) }), String(Math.round(row.balance)));
+    if (raw === null) return;
+    var value = Number(String(raw).replace(/\s/g, ''));
+    if (!L.withBalance('{"data":{}}', value).ok) { st.msg = { bad: true, key: 'admin.edit.invalid' }; render(); return; }
+    st.saving = true; st.msg = null; render();
+    var token;
+    Cloud.getToken().then(function (tk) { token = tk; return window.fetch(docUrl(uid), { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
+      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
+      .then(function (doc) {
+        var cur = doc.fields && doc.fields.data && doc.fields.data.stringValue, out = L.withBalance(cur, value);
+        if (!out.ok) throw new Error('data');
+        return window.fetch(docUrl(uid) + '?updateMask.fieldPaths=data&updateMask.fieldPaths=updatedAt&currentDocument.updateTime=' + encodeURIComponent(doc.updateTime), {
+          method: 'PATCH', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { data: { stringValue: out.json }, updatedAt: { integerValue: String(Date.now()) } } })
+        });
+      })
+      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); },
+        function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
+  }
+
   // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------
   function serverUrl() { return String(window.GAME_SERVER_URL || '').replace(/^ws/, 'http').replace(/\/+$/, ''); }
   function loadServer(silent) {
@@ -93,10 +118,11 @@
     }).join('');
     var body = rows.map(function (r) {
       return '<tr><td class="nm">' + esc(r.name || tr('admin.noName')) + '<small>' + esc(r.uid.slice(0, 8)) + '</small></td><td>' + esc(fmtDate(r.createdAt)) + '</td><td>' + esc(fmtDate(r.lastSeen)) + '<small>' + esc(ago(r.lastSeen)) + '</small></td>' +
-        '<td class="n">' + fmt(r.balance) + '</td><td class="n">' + r.plays.yahtzee + '</td><td class="n">' + r.plays.minesweeper + '</td><td class="n">' + r.plays.blackjack + '</td><td class="n">' + r.total + '</td></tr>';
+        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td><td class="n">' + r.plays.yahtzee + '</td><td class="n">' + r.plays.minesweeper + '</td><td class="n">' + r.plays.blackjack + '</td><td class="n">' + r.total + '</td></tr>';
     }).join('');
     return '<div class="cards">' + cards + '</div>' +
       '<div class="tools"><input id="q" type="search" value="' + esc(st.query) + '" placeholder="' + esc(tr('admin.search')) + '" aria-label="' + esc(tr('admin.search')) + '"><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button></div>' +
+      (st.msg ? '<p class="msg' + (st.msg.bad ? ' bad' : '') + '" role="status">' + esc(tr(st.msg.key)) + '</p>' : '') +
       '<p class="note">' + esc(tr('admin.note', { time: fmtDate(st.loadedAt), shown: rows.length })) + '</p>' +
       '<div class="tbl"><table><thead><tr>' + head('name', tr('admin.col.name')) + head('createdAt', tr('admin.col.created')) + head('lastSeen', tr('admin.col.seen')) + head('balance', tr('admin.col.balance'), 'n') +
       head('yahtzee', tr('admin.col.yahtzee'), 'n') + head('minesweeper', tr('admin.col.minesweeper'), 'n') + head('blackjack', tr('admin.col.blackjack'), 'n') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
@@ -118,8 +144,9 @@
   }
 
   app.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-act], [data-sort], [data-tab]');
+    var b = e.target.closest('[data-act], [data-sort], [data-tab], [data-edit]');
     if (!b) return;
+    if (b.dataset.edit) { editBalance(b.dataset.edit); return; }
     if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server') loadServer(false); render(); return; }
     if (b.dataset.act === 'reloadSrv') { loadServer(false); return; }
     if (b.dataset.sort) { var k = b.dataset.sort; st.dir = st.sort === k ? (st.dir === 'asc' ? 'desc' : 'asc') : (k === 'name' ? 'asc' : 'desc'); st.sort = k; render(); return; }

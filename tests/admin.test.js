@@ -64,3 +64,15 @@ test('поиск по нику и коду, сортировка по колон
   assert.deepEqual(L.sortRows(rows, 'name', 'asc').map((r) => r.uid), ['u1', 'u3', 'u2']);
   assert.deepEqual(L.sortRows(rows, 'lastSeen', 'desc').map((r) => r.uid), ['u2', 'u1', 'u3']);
 });
+
+test('withBalance меняет только баланс и отвергает неверные значения', () => {
+  const src = JSON.stringify({ v: 1, data: { 'platform:wallet': { balance: 5, plays: { yahtzee: 2 } }, 'platform:profile': { name: 'А' } } });
+  const out = L.withBalance(src, 1234);
+  assert.equal(out.ok, true);
+  const snap = JSON.parse(out.json);
+  assert.equal(snap.data['platform:wallet'].balance, 1234);
+  assert.equal(snap.data['platform:wallet'].plays.yahtzee, 2);
+  assert.equal(snap.data['platform:profile'].name, 'А');
+  [-1, 1.5, NaN, 1e9, 'x'].forEach((v) => assert.equal(L.withBalance(src, v).ok, false));
+  assert.equal(L.withBalance('не json', 5).ok, false);
+});

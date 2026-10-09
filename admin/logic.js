@@ -60,5 +60,19 @@
     });
   }
 
-  root.AdminLogic = { GAMES: GAMES, parseDoc: parseDoc, parseQuery: parseQuery, summary: summary, filterRows: filterRows, sortRows: sortRows };
+  // Временная правка баланса: в JSON снимка прогресса (поле data записи users/<uid>) меняется только wallet.balance
+  // → { ok, json } или { ok: false }. Целое число от 0 до 10 000 000
+  function withBalance(dataJson, value) {
+    var n = Number(value);
+    if (!isFinite(n) || n < 0 || n > 10000000 || Math.floor(n) !== n) return { ok: false };
+    var snap;
+    try { snap = JSON.parse(dataJson || '{}'); } catch (e) { return { ok: false }; }
+    if (!snap || typeof snap !== 'object' || !snap.data || typeof snap.data !== 'object') return { ok: false };
+    var w = snap.data['platform:wallet'];
+    if (!w || typeof w !== 'object') w = snap.data['platform:wallet'] = {};
+    w.balance = n;
+    return { ok: true, json: JSON.stringify(snap) };
+  }
+
+  root.AdminLogic = { GAMES: GAMES, withBalance: withBalance, parseDoc: parseDoc, parseQuery: parseQuery, summary: summary, filterRows: filterRows, sortRows: sortRows };
 })(typeof window !== 'undefined' ? window : globalThis);
