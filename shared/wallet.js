@@ -27,6 +27,7 @@
     rewards: { minesweeper: { novice: 100, amateur: 250, expert: 400 }, yahtzee: { easy: 100, hard: 250 } }, // награды за победу в одиночных играх
     onlineCap: 5000,    // в онлайн-блэкджеке за день можно выиграть (чистыми) не больше этой суммы
     capShare: 0.5,      // в игре с ботом за день можно выиграть не больше этой доли баланса (на начало дня)
+    rewardCaps: { blackjack: 3000 }, // игры без ставок: сколько наград можно получить за день (по играм)
     earnDailyCap: 1500, // сколько можно заработать в одиночных играх за день
     milestones: { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 }, // разовые бонусы за длину серии
     logSize: 20
@@ -41,7 +42,7 @@
   function day(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
 
   function fresh() {
-    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, plays: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [], days: [] };
+    return { balance: CONFIG.start, streak: 0, best: 0, playDay: null, pending: null, earnDay: null, earned: 0, peak: CONFIG.start, wins: {}, plays: {}, capDay: null, capBase: 0, capUsed: 0, onDay: null, onUsed: 0, log: [], days: [], rw: { day: null, used: {} } };
   }
 
   // Приводит произвольные данные к корректному состоянию
@@ -72,7 +73,7 @@
     return {
       balance: balance, streak: streak, best: Math.max(streak, Math.min(num(raw.best, 0), 100000)),
       playDay: day(raw.playDay), pending: pending, earnDay: day(raw.earnDay), earned: num(raw.earned, 0),
-      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, plays: plays, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log, days: cleanDays(raw.days)
+      peak: Math.max(balance, num(raw.peak, 0)), wins: wins, plays: plays, capDay: day(raw.capDay), capBase: num(raw.capBase, 0), capUsed: num(raw.capUsed, 0), onDay: day(raw.onDay), onUsed: num(raw.onUsed, 0), log: log, days: cleanDays(raw.days), rw: cleanRw(raw.rw)
     };
   }
 
@@ -82,6 +83,15 @@
     (Array.isArray(v) ? v : []).forEach(function (d) { var x = day(d); if (x && out.indexOf(x) < 0) out.push(x); });
     out.sort();
     return out.slice(-92);
+  }
+
+  function cleanRw(v) {
+    var out = { day: null, used: {} };
+    if (v && typeof v === 'object') {
+      out.day = day(v.day);
+      if (v.used && typeof v.used === 'object' && !Array.isArray(v.used)) Object.keys(v.used).slice(0, 20).forEach(function (k) { out.used[String(k).slice(0, 40)] = num(v.used[k], 0); });
+    }
+    return out;
   }
 
   function load() {
@@ -248,6 +258,20 @@
     return set;
   }
 
+  // Награды в играх без ставок (блэкджек): за день не больше CONFIG.rewardCaps[источник]
+  function rewardStatus(source, now) {
+    var s = load(), today = dayOf(now), cap = CONFIG.rewardCaps[source] || 0, used = s.rw.day === today ? num(s.rw.used[source], 0) : 0;
+    return { limit: cap, used: used, left: Math.max(0, cap - used) };
+  }
+  function reward(source, amount, now) {
+    var s = load(), today = dayOf(now), cap = CONFIG.rewardCaps[source] || 0;
+    if (s.rw.day !== today) s.rw = { day: today, used: {} };
+    var used = num(s.rw.used[source], 0), amt = Math.max(0, Math.floor(amount)), granted = Math.min(amt, Math.max(0, cap - used));
+    if (granted > 0) { s.rw.used[source] = used + granted; s.balance += granted; record(s, source, granted, now); }
+    save(s);
+    return { granted: granted, capped: granted < amt, left: Math.max(0, cap - used - granted) };
+  }
+
   function dailyStatus(now) {
     var s = load(), today = dayOf(now);
     var streak = liveStreak(s, today), playedToday = s.playDay === today;
@@ -290,7 +314,7 @@
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
     getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
-    markPlayed: markPlayed, playedDays: playedDays, dailyStatus: dailyStatus, claimDaily: claimDaily,
+    markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget
   };
 })(typeof window !== 'undefined' ? window : globalThis);
