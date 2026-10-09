@@ -386,3 +386,24 @@ test('простой: фишки сохраняются в случайных п
     }
   }
 });
+
+test('суммы любые целые (132, 549), ставка 10000 против олл-ина на 1000: победитель берёт основной банк, остальное возвращается', () => {
+  let st = deal(P.init(seats(1000, 20000, 5000), {}, null));      // кнопка 0 (1000), малый 1, большой 2; блайнды 25/50
+  st = rig(st, { 0: 'AS AH', 1: 'KS KH', 2: '7D 2C' }, '3C 8D 9H JS 4C');
+  st = act(st, 'allin', 0);                                         // игрок 0: 1000
+  assert.equal(P.legalActions(st, 1).raise.min, 1000 + 950, 'минимальное повышение считается от суммы олл-ина, поэтому оно «нечётное»');
+  st = act(st, 'raise', 1, { amount: 10000 });                      // ставка 10000, выше 1000 никто не уравняет
+  st = act(st, 'fold', 2);
+  assert.equal(st.phase, 'settled');
+  assert.deepEqual(plain(st.pots.map((p) => p.amount)), [150, 1900, 9000]);   // начальные взносы, основной банк и непокрытые 9000
+  assert.deepEqual(plain(st.pots[0].winners.concat(st.pots[1].winners)), [0, 0], 'тузы берут основной банк');
+  assert.deepEqual(plain(st.pots[2].winners), [1], 'непокрытая часть возвращается тому, кто поставил 10000');
+  assert.deepEqual(plain(chips(st)), [2050, 19000, 4950]);
+  assert.equal(chips(st).reduce((a, b) => a + b), 26000);
+  // любые суммы допустимы, не только кратные блайнду
+  let s2 = deal(P.init(seats(1000, 1000), {}, null));
+  s2 = act(s2, 'raise', 0, { amount: 132 });
+  s2 = act(s2, 'raise', 1, { amount: 549 });
+  assert.equal(s2.currentBet, 549);
+  assert.equal(s2.seats[1].chips, 451);
+});
