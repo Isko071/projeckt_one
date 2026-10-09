@@ -242,13 +242,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .askbar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .askbar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
 
-/* Веер: две карты расходятся наклоном. У соперников карты свисают от аватара (точка поворота сверху), у вас лежат снизу (точка поворота внизу) */
-.seat .cards .card:first-child { rotate: -9deg; transform-origin: 50% 0; }
-.seat .cards .card:last-child { rotate: 9deg; transform-origin: 50% 0; }
-.me-cards { gap: 0; }
-.me-cards .card { transform-origin: 50% 100%; }
-.me-cards .card:first-child { rotate: -7deg; margin-right: -10px; }
-.me-cards .card:last-child { rotate: 7deg; }
+/* Веер у соперников: карты стоят над аватаром, точка поворота внизу, верхние края расходятся. Ваши карты без наклона */
+.seat .cards .card { transform-origin: 50% 100%; }
+.seat .cards .card:first-child { rotate: -10deg; }
+.seat .cards .card:last-child { rotate: 10deg; }
 /* Пас: карты остаются на столе и переворачиваются рубашкой вверх */
 .card.fold { animation: flipx .6s ease-in-out both; }
 .card.fold .tl, .card.fold .mid, .card.fold .br { opacity: 0; animation: faceoff .6s step-end both; }
@@ -257,3 +254,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 @keyframes faceoff { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
 @keyframes foldback { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card.fold, .card.fold .tl, .card.fold .mid, .card.fold .br, .card.fold::before { animation: none; } }
+
+/* Шапка экранов выбора и настройки стоит в одной колонке с содержимым; на столе шапка во всю ширину */
+.bar { width: 100%; max-width: 560px; margin: 0 auto; }
+.bar.wide { max-width: none; }
+/* Телефон: стол вытянут вниз и занимает всё свободное место между шапкой и кнопками, как в макете */
+@media (max-width: 599px) {
+  .area { max-height: none; min-height: 430px; }
+  .felt { inset: 3% 3% 2% 3%; }
+}

@@ -106,7 +106,7 @@ function ringStyle(timer) {
 // ===== Партия =====
 function sitDown() {
   var ante = app.prefs.ante;
-  if (W.getBalance() < ante) return;
+  if (W.getBalance() < ante && W.capStatus(now()).left > 0) return;
   var prof = P.getProfile();
   T = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
   bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = [];
@@ -195,7 +195,7 @@ function consumeInvite() {
 function startHtml() {
   var online = app.mode === 'online', avail = net.available(), needAuth = online && !signedIn();
   var seg = avail ? '<div class="seg" data-key="modes"><button data-act="mode" data-v="bots" data-key="mbots" aria-pressed="' + !online + '">' + esc(tr('mode.bots')) + '</button><button data-act="mode" data-v="online" data-key="monline" aria-pressed="' + online + '">' + esc(tr('mode.online')) + '</button></div>' : '';
-  return '<div class="bar" data-key="bar">' + catalogLinkHtml() + '<div class="title">' + esc(tr('title')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
+  return '<div class="bar" data-key="bar">' + catalogLinkHtml() + '<div class="title"></div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
     '<div class="page" data-key="page"><div><div class="h1">' + esc(tr('title')) + '</div><div class="muted" style="font-size:14px;line-height:1.4">' + esc(tr('sub')) + '</div></div>' + seg +
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
     '<div style="display:flex;flex-direction:column;gap:12px"><button class="btn primary full" data-act="play" data-key="play"' + (needAuth ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
@@ -205,7 +205,7 @@ function segHtml(items, sel, act) {
   return '<div class="seg">' + items.map(function (it) { return '<button data-act="' + act + '" data-v="' + it.v + '" data-key="' + act + it.v + '" aria-pressed="' + (it.v === sel) + '">' + esc(it.t) + '</button>'; }).join('') + '</div>';
 }
 function setupHtml() {
-  var pr = app.prefs, bal = W.getBalance(), broke = bal < pr.ante, cap = W.capStatus(now());
+  var pr = app.prefs, bal = W.getBalance(), cap = W.capStatus(now()), broke = bal < pr.ante && cap.left > 0;
   var dots = ring(pr.n - 1).concat([{ x: 50, y: 88 }]).map(function (p, i, a) { return '<div class="dot' + (i === a.length - 1 ? ' me' : '') + '" data-key="d' + i + '" style="left:' + p.x + '%;top:' + p.y + '%"></div>'; }).join('');
   return '<div class="bar" data-key="bar"><button class="icon-btn" data-act="toStart" data-key="back" aria-label="' + esc(tr('back')) + '">←</button><div class="title">' + esc(tr('modeBots')) + '</div><div class="right">' + themeButtonHtml() + balHtml() + '</div></div>' +
     '<div class="page" data-key="page">' +
@@ -285,9 +285,9 @@ function tableHtml(m) {
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
   var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
-  var notice = m.notice ? tr(m.notice.k === 'capCut' ? 'cap.cut' : 'cap.reached', { n: fmt(m.notice.n) }) : '';
+  var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
-  var top = '<div class="bar" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
+  var top = '<div class="bar wide" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
   return top + (notice || toasts ? '<div class="toast" role="status" data-key="toast">' + (notice ? '<div>' + esc(notice) + '</div>' : '') + toasts + '</div>' : '') +
     '<div class="area" data-key="area"><div class="felt"></div><div class="center"><div class="round">' + esc(tr('round.' + m.roundKey)) + '</div><div class="board">' + board + '</div>' +
     '<div class="pot"><span class="pot-dot"></span>' + esc(tr('pot', { n: fmt(m.pot) })) + '</div>' + (cap ? '<div class="cap" role="status">' + esc(cap) + '</div>' : '') + '</div>' + seatsHtml + betsHtml + '</div>' +

@@ -130,18 +130,21 @@
   Solo.prototype.begin = function () { this.startHand(); };
   Solo.prototype.startHand = function () {
     var st = this.st, W = this.W, self = this;
-    if (W.getBalance() < this.minToPlay()) { this.stage = 'broke'; this.emit(); return; }
-    st.seats[0].chips = W.getBalance();
+    // Достигнут дневной предел выигрыша против ботов: играем без аконов (ничего не списывается и не начисляется)
+    this.free = W.capStatus(now()).left <= 0;
+    if (!this.free && W.getBalance() < this.minToPlay()) { this.stage = 'broke'; this.emit(); return; }
+    st.seats[0].chips = this.free ? Math.max(W.getBalance(), this.minToPlay() * 20) : W.getBalance();
     st.seats.forEach(function (s, i) { if (i > 0) { s.chips = self.botStack; s.sitOut = false; } });
     var r = PK.reduce(st, { type: 'deal', seat: 0 }, Math.random);
     if (!r.ok) { this.stage = 'broke'; this.emit(); return; }
     this.st = r.state; this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = '';
+    if (this.free) this.notice = { k: 'free', until: now() + 6000 };
     W.markPlayed(); W.countPlay(this.source);
     this.spendSync(); this.emit(); this.pump();
   };
   Solo.prototype.spendSync = function () {
     var total = this.st.seats[0].total;
-    if (total > this.spent) { this.W.spend(total - this.spent, this.source, now()); this.spent = total; }
+    if (total > this.spent) { if (!this.free) this.W.spend(total - this.spent, this.source, now()); this.spent = total; }
   };
   Solo.prototype.apply = function (action) {
     var before = this.st, r = PK.reduce(before, action, Math.random), self = this;
@@ -168,11 +171,11 @@
   };
   Solo.prototype.onSettled = function () {
     var st = this.st, me = st.seats[0], payout = me.total + me.net, self = this;
-    if (payout > 0) {
+    if (payout > 0 && !this.free) {
       var cr = this.W.capPayout(this.source, payout, this.spent, now());
       if (cr.capped) this.notice = { k: cr.granted > 0 ? 'capCut' : 'capReached', n: cr.granted, until: now() + 6000 };
     }
-    if (me.net > 0) this.W.countWin(this.source);
+    if (me.net > 0 && !this.free) this.W.countWin(this.source);
     this.spent = 0; this.caption = '';
     if (st.result && st.result.showdown) {
       this.stage = 'flip'; this.emit();
@@ -189,7 +192,7 @@
   Solo.prototype.tick = function () { if (this.notice && now() > this.notice.until) { this.notice = null; this.emit(); } };
   Solo.prototype.model = function () {
     var me = this.st.seats[0];
-    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
+    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: this.free ? me.chips : this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
   };
 
   // ===== Онлайн-стол =====
@@ -245,13 +248,8 @@
   Online.prototype.onSettled = function (st, mine) {
     var self = this;
     if (mine && mine.inHand) {
-      var payout = mine.total + mine.net;
-      var back = Math.min(payout, this.spent);
-      if (back > 0) this.W.add(back, this.source, now());
-      if (payout > this.spent) {
-        var cr = this.W.onlineWin(this.source, payout - this.spent, now());
-        if (cr.capped) this.notice = { k: cr.granted > 0 ? 'capCut' : 'capReached', n: cr.granted, until: now() + 6000 };
-      }
+      var payout = mine.total + mine.net;                  // онлайн дневного предела выигрыша нет
+      if (payout > 0) this.W.add(payout, this.source, now());
       if (mine.net > 0) this.W.countWin(this.source);
     }
     this.spent = 0; this.caption = '';
