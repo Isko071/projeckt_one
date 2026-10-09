@@ -73,8 +73,9 @@
     var seats = order.map(function (i) {
       var s = st.seats[i], isMe = i === me, cards = [];
       if (s.inHand && s.cards.length) {
-        if (isMe) cards = s.cards.map(function (c) { return { code: c, dim: s.folded || (showdown && !wc.win[i]), hl: showdown && !!wc.win[i], flip: false }; });
-        else if (!s.folded) cards = showdown && s.shown ? s.cards.map(function (c) { return { code: c, dim: !wc.win[i], hl: !!wc.win[i], flip: ctx.stage === 'flip' }; }) : [{ code: null }, { code: null }];
+        if (isMe) cards = s.cards.map(function (c) { return { code: c, dim: s.folded || (showdown && !wc.win[i]), hl: showdown && !!wc.win[i], flip: false, fold: s.folded }; });
+        else if (s.folded) cards = [{ code: null, fold: true }, { code: null, fold: true }];     // карты спасовавшего остаются на столе рубашкой вверх
+        else cards = showdown && s.shown ? s.cards.map(function (c) { return { code: c, dim: !wc.win[i], hl: !!wc.win[i], flip: ctx.stage === 'flip' }; }) : [{ code: null }, { code: null }];
       }
       return {
         index: i, isMe: isMe, id: s.id, name: s.name, kind: s.kind, chips: s.chips, bet: st.phase === 'settled' ? 0 : s.bet, total: s.total, folded: s.folded, allIn: s.allIn, inHand: s.inHand, out: !s.active,

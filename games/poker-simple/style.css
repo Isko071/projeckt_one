@@ -241,3 +241,19 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .asknum { font-size: 28px; font-weight: 700; min-width: 32px; font-variant-numeric: tabular-nums; }
 .askbar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .askbar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+
+/* Веер: две карты расходятся наклоном. У соперников карты свисают от аватара (точка поворота сверху), у вас лежат снизу (точка поворота внизу) */
+.seat .cards .card:first-child { rotate: -9deg; transform-origin: 50% 0; }
+.seat .cards .card:last-child { rotate: 9deg; transform-origin: 50% 0; }
+.me-cards { gap: 0; }
+.me-cards .card { transform-origin: 50% 100%; }
+.me-cards .card:first-child { rotate: -7deg; margin-right: -10px; }
+.me-cards .card:last-child { rotate: 7deg; }
+/* Пас: карты остаются на столе и переворачиваются рубашкой вверх */
+.card.fold { animation: flipx .6s ease-in-out both; }
+.card.fold .tl, .card.fold .mid, .card.fold .br { opacity: 0; animation: faceoff .6s step-end both; }
+.card.fold::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 1; opacity: 1; background: repeating-linear-gradient(45deg, transparent 0 4px, oklch(0.9 0.05 25 / .5) 4px 5px), repeating-linear-gradient(-45deg, transparent 0 4px, oklch(0.9 0.05 25 / .5) 4px 5px), var(--back-red); box-shadow: inset 0 0 0 1.5px var(--back-red), inset 0 0 0 2.5px oklch(0.9 0.05 25 / .6); animation: foldback .6s step-end both; }
+.mine-card.fold { opacity: .6; }
+@keyframes faceoff { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes foldback { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card.fold, .card.fold .tl, .card.fold .mid, .card.fold .br, .card.fold::before { animation: none; } }

@@ -86,9 +86,10 @@ function handName(key) { return tr('hand.' + key); }
 
 // ===== Размещение мест за столом =====
 function ring(n) {
-  var small = (document.documentElement.clientWidth || window.innerWidth) < 360;
-  var a = { 1: [270], 2: [235, 305], 3: [150, 270, 30], 4: [150, 240, 300, 30], 5: [150, 228, 270, 312, 30] }[n] || [];
-  return a.map(function (deg) { var r = deg * Math.PI / 180; return { x: 50 + (small ? 37 : 40) * Math.cos(r), y: 55 + 40 * Math.sin(r) }; });
+  // Места соперников в процентах стола: боковые стоят выше, по бокам от общих карт; ближе к краю на узком экране
+  var w = document.documentElement.clientWidth || window.innerWidth, k = w < 360 ? 0.86 : w < 500 ? 0.9 : 1;
+  var t = { 1: [[50, 14]], 2: [[27, 20], [73, 20]], 3: [[12, 50], [50, 14], [88, 50]], 4: [[12, 52], [34, 17], [66, 17], [88, 52]], 5: [[11, 58], [24, 25], [50, 13], [76, 25], [89, 58]] }[n] || [];
+  return t.map(function (p) { return { x: 50 + (p[0] - 50) * k, y: p[1] + (w < 500 && Math.abs(p[0] - 50) > 35 ? 18 : 0) }; });
 }
 function seatColor(i) { return 'oklch(' + (window.PlatformTheme.isDark() ? 0.42 : 0.86) + ' 0.07 ' + (i * 70 + 20) + ')'; }
 function statusText(s) { return s.k ? ICON[s.k] + tr('st.' + s.k, { n: fmt(s.n || 0) }) : ''; }
@@ -272,7 +273,7 @@ function tableHtml(m) {
   var seatsHtml = '', betsHtml = '';
   opp.forEach(function (s, k) {
     var p = pos[k], av = avatarOf(s, k + 1), bx = 50 + (p.x - 50) * 0.62, by = p.y < 45 ? p.y + 17 : p.y - 2;
-    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
+    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.fold ? 'fold ' : '') + (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
     seatsHtml += '<div class="seat' + (s.folded || s.out ? ' folded' : '') + (s.turn ? ' active' : '') + '" data-key="o' + s.index + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<div class="status">' + esc(statusText(s.status)) + '</div><div class="box"><div class="ring' + (s.turn ? ' active' : '') + '"' + (s.turn ? ringStyle(s.timer) : '') + '><div class="av" style="background:' + av.bg + '">' + esc(av.letter) + '</div></div>' +
       '<div class="cards">' + cards + '</div><div class="nick">' + esc(s.name) + '</div></div></div>';
@@ -282,7 +283,7 @@ function tableHtml(m) {
   if (shown < app.bseen) { app.bseen = shown; app.bfrom = shown; } else if (shown > app.bseen) { app.bfrom = app.bseen; app.bseen = shown; }
   var board = m.board.map(function (c, b) { return cardHtml(c.code, 'board-card', c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))); }).join('');
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
-  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
+  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
   var notice = m.notice ? tr(m.notice.k === 'capCut' ? 'cap.cut' : 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
