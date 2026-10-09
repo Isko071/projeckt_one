@@ -106,9 +106,9 @@
     }).join('') + stats + '</div>';
   }
 
-  function head(key, label, cls) {
+  function head(key, label, cls, title) {
     var on = st.sort === key;
-    return '<th class="' + (cls || '') + '" aria-sort="' + (on ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"><button type="button" data-sort="' + key + '">' + esc(label) + (on ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</button></th>';
+    return '<th class="' + (cls || '') + '" aria-sort="' + (on ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"><button type="button" data-sort="' + key + '"' + (title ? ' title="' + esc(title) + '" aria-label="' + esc(title) + '"' : '') + '>' + esc(label) + (on ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</button></th>';
   }
 
   function tableHtml() {
@@ -118,14 +118,14 @@
     }).join('');
     var body = rows.map(function (r) {
       return '<tr><td class="nm">' + esc(r.name || tr('admin.noName')) + '<small>' + esc(r.uid.slice(0, 8)) + '</small></td><td>' + esc(fmtDate(r.createdAt)) + '</td><td>' + esc(fmtDate(r.lastSeen)) + '<small>' + esc(ago(r.lastSeen)) + '</small></td>' +
-        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td><td class="n">' + r.plays.yahtzee + '</td><td class="n">' + r.plays.minesweeper + '</td><td class="n">' + r.plays.blackjack + '</td><td class="n">' + r.total + '</td></tr>';
+        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
     }).join('');
     return '<div class="cards">' + cards + '</div>' +
       '<div class="tools"><input id="q" type="search" value="' + esc(st.query) + '" placeholder="' + esc(tr('admin.search')) + '" aria-label="' + esc(tr('admin.search')) + '"><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button></div>' +
       (st.msg ? '<p class="msg' + (st.msg.bad ? ' bad' : '') + '" role="status">' + esc(tr(st.msg.key)) + '</p>' : '') +
       '<p class="note">' + esc(tr('admin.note', { time: fmtDate(st.loadedAt), shown: rows.length })) + '</p>' +
       '<div class="tbl"><table><thead><tr>' + head('name', tr('admin.col.name')) + head('createdAt', tr('admin.col.created')) + head('lastSeen', tr('admin.col.seen')) + head('balance', tr('admin.col.balance'), 'n') +
-      L.GAMES.map(function (g) { return head(g, tr('admin.col.' + g), 'n'); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
+      L.GAMES.map(function (g, i) { return head(g, String(i + 1), 'n', tr('admin.col.' + g)); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
       (body || '<tr><td colspan="' + (L.GAMES.length + 5) + '" class="empty">' + esc(tr('admin.empty')) + '</td></tr>') + '</tbody></table></div>';
   }
 
