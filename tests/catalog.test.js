@@ -97,3 +97,12 @@ test('findGame ищет по id', () => {
   assert.equal(L.findGame(GAMES, 'poker').id, 'poker');
   assert.equal(L.findGame(GAMES, 'нет'), null);
 });
+
+test('каждая доступная игра есть в личном кабинете (колонка партий) и в списке источников кошелька', () => {
+  const admin = load(['admin/logic.js']).AdminLogic;
+  GAMES.filter((g) => g.status === 'available').forEach((g) => {
+    assert.ok(admin.GAMES.indexOf(g.id) >= 0, 'игра ' + g.id + ' не добавлена в AdminLogic.GAMES (admin/logic.js)');
+    assert.ok(DICT['admin.col.' + g.id], 'нет admin.col.' + g.id + ' в locales/ru.js');
+    assert.ok(DICT['wallet.src.' + g.id], 'нет wallet.src.' + g.id + ' в locales/ru.js');
+  });
+});

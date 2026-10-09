@@ -275,7 +275,7 @@ function tableHtml(m) {
     var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
     seatsHtml += '<div class="seat' + (s.folded || s.out ? ' folded' : '') + (s.turn ? ' active' : '') + '" data-key="o' + s.index + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<div class="status">' + esc(statusText(s.status)) + '</div><div class="box"><div class="ring' + (s.turn ? ' active' : '') + '"' + (s.turn ? ringStyle(s.timer) : '') + '><div class="av" style="background:' + av.bg + '">' + esc(av.letter) + '</div></div>' +
-      '<div class="cards">' + cards + '</div><div class="nick">' + esc(s.name) + '</div>' + tagHtml(s) + '</div></div>';
+      '<div class="cards">' + cards + '</div><div class="nick">' + plateHtml(s, s.name) + '</div>' + dealerHtml(s) + '</div></div>';
     if (s.bet > 0) betsHtml += '<div class="bet-pill" data-key="b' + s.index + '" style="left:' + bx + '%;top:' + by + '%"><span class="pot-dot"></span>' + fmt(s.bet) + '</div>';
   });
   var shown = m.board.filter(function (c) { return c.code; }).length;
@@ -288,15 +288,19 @@ function tableHtml(m) {
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
   var top = '<div class="bar" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
   return top + (notice || toasts ? '<div class="toast" role="status" data-key="toast">' + (notice ? '<div>' + esc(notice) + '</div>' : '') + toasts + '</div>' : '') +
-    '<div class="area" data-key="area"><div class="felt"></div><div class="center"><div class="round">' + esc(tr('round.' + m.roundKey)) + '</div><div class="board">' + board + '</div>' +
+    '<div class="area" data-key="area"><div class="felt"></div><div class="center"><div class="round">' + esc(tr('round.' + m.roundKey)) + '</div><div class="blinds">' + esc(tr('blinds', { s: fmt(m.smallBlind), b: fmt(m.bigBlind) })) + '</div><div class="board">' + board + '</div>' +
     '<div class="pot"><span class="pot-dot"></span>' + esc(tr('pot', { n: fmt(m.pot) })) + '</div>' + (cap ? '<div class="cap" role="status">' + esc(cap) + '</div>' : '') + '</div>' + seatsHtml + betsHtml + '</div>' +
-    '<div class="me-row' + (covered ? ' hidden' : '') + '" data-key="me"><div class="me-box"><div class="me-status' + (me.turn ? ' active' : '') + '">' + esc(statusText(me.status)) + '</div><div class="ring' + (me.turn ? ' active' : '') + '"' + (me.turn ? ringStyle(me.timer) : '') + '><div class="av" style="background:' + myAv.bg + ';width:calc(var(--avs) + 4px);height:calc(var(--avs) + 4px)">' + esc(myAv.letter) + '</div></div><div class="nm">' + esc(tr('you')) + '</div>' + tagHtml(me) + '</div>' +
+    '<div class="me-row' + (covered ? ' hidden' : '') + '" data-key="me"><div class="me-box"><div class="me-status' + (me.turn ? ' active' : '') + '">' + esc(statusText(me.status)) + '</div><div class="ring' + (me.turn ? ' active' : '') + '"' + (me.turn ? ringStyle(me.timer) : '') + '><div class="av" style="background:' + myAv.bg + ';width:calc(var(--avs) + 4px);height:calc(var(--avs) + 4px)">' + esc(myAv.letter) + '</div></div><div class="plate">' + plateHtml(me, tr('you')) + '</div>' + dealerHtml(me) + '</div>' +
     '<div class="me-cards">' + mine + '</div><div class="me-bet">' + (me.bet > 0 ? '<div class="bet-pill" style="position:static;transform:none"><span class="pot-dot"></span>' + fmt(me.bet) + '</div>' : '') + '</div></div>' +
     actionsHtml(m) + sheetHtml(m);
 }
-function tagHtml(s) {
-  var t = s.dealer ? 'D' : s.sb ? 'SB' : s.bb ? 'BB' : '';
-  return t ? '<span class="tag" data-key="tg">' + t + '</span>' : '';
+function rolesText(s) {
+  return [s.dealer ? tr('role.d') : '', s.sb ? tr('role.sb') : '', s.bb ? tr('role.bb') : ''].filter(Boolean).join(', ');
+}
+function dealerHtml(s) { return s.dealer ? '<span class="dbtn" data-key="db" title="' + esc(tr('role.d')) + '">D</span>' : ''; }
+function plateHtml(s, name) {
+  var roles = rolesText(s);
+  return '<span class="pn">' + esc(name) + '</span><small class="stk">' + esc(fmt(s.chips)) + (roles ? ' · ' + esc(roles) : '') + '</small>';
 }
 function actionsHtml(m) {
   if (m.stage || m.phase === 'waiting' || m.phase === 'settled' || m.ask) return '';

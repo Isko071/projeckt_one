@@ -38,6 +38,8 @@ root.LOCALES.ru = {
   'admin.col.yahtzee': 'Ятзи',
   'admin.col.minesweeper': 'Сапёр',
   'admin.col.blackjack': 'Блэкджек',
+  'admin.col.poker-simple': 'Покер: Чожук',
+  'admin.col.poker': 'Покер: стандарт',
   'admin.col.total': 'Всего партий',
   'admin.tab.players': 'Игроки',
   'admin.tab.server': 'Сервер',

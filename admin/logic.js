@@ -1,6 +1,7 @@
 // Личный кабинет владельца: чистая логика (разбор записей игроков, итоги, поиск, сортировка). Без обращений к window и document.
 (function (root) {
-  var GAMES = ['yahtzee', 'minesweeper', 'blackjack'];
+  // Новая игра: добавить её id сюда и ключ admin.col.<id> в locales/ru.js (счётчик партий появится в таблице сам)
+  var GAMES = ['yahtzee', 'minesweeper', 'blackjack', 'poker-simple', 'poker'];
   var DAY = 24 * 3600 * 1000;
 
   function num(v) { var n = Number(v); return isFinite(n) && n >= 0 ? n : 0; }
@@ -30,7 +31,8 @@
   }
 
   function summary(rows, now) {
-    var s = { players: rows.length, activeToday: 0, active7: 0, newToday: 0, new7: 0, plays: { yahtzee: 0, minesweeper: 0, blackjack: 0 }, total: 0 };
+    var s = { players: rows.length, activeToday: 0, active7: 0, newToday: 0, new7: 0, plays: {}, total: 0 };
+    GAMES.forEach(function (g) { s.plays[g] = 0; });
     rows.forEach(function (r) {
       if (r.lastSeen && now - r.lastSeen < DAY) s.activeToday++;
       if (r.lastSeen && now - r.lastSeen < 7 * DAY) s.active7++;
@@ -48,7 +50,7 @@
     return rows.filter(function (r) { return r.name.toLowerCase().indexOf(q) >= 0 || r.uid.toLowerCase().indexOf(q) >= 0; });
   }
 
-  // key: name | createdAt | lastSeen | balance | total | yahtzee | minesweeper | blackjack; dir: 'asc' | 'desc'
+  // key: name | createdAt | lastSeen | balance | total | id игры из GAMES; dir: 'asc' | 'desc'
   function sortRows(rows, key, dir) {
     var k = key || 'lastSeen', sign = dir === 'asc' ? 1 : -1;
     function val(r) { return GAMES.indexOf(k) >= 0 ? r.plays[k] : (k === 'name' ? r.name.toLowerCase() : r[k]); }
