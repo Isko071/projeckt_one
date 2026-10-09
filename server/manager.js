@@ -4,8 +4,9 @@
 // Сокеты сюда не заходят: подключение — любой объект { uid, send(obj) }, поэтому менеджер проверяется тестами без сети.
 const { MemStore, decodeFields } = require('./memstore');
 
-const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score'];
-const GAMES = ['blackjack', 'yahtzee'];
+const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready'];
+const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple'];
+const POKER = ['poker', 'poker-simple'];
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
 
@@ -22,6 +23,8 @@ class RoomManager {
     const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, options: this.cfg.engineOptions };
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
+    this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
+    this.apis['poker-simple'] = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker-simple', gameOptions: { variant: 'simple' } }));
     this.timer = null;
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
@@ -56,8 +59,16 @@ class RoomManager {
   onDoc(code, fields) {
     const room = this.rooms.get(code);
     const doc = decodeFields(fields);
-    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc })); }
+    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc: this.docFor(doc, c.uid) })); }
     else this.pendingDoc = { code, doc };            // документ пришёл раньше, чем комната записана (при создании)
+  }
+  // Скрытые карты покера: поле `hole` (карты всех игроков) никому не уходит, каждому клиенту кладутся только его карты (`mine`)
+  docFor(doc, uid) {
+    if (!doc || typeof doc.hole !== 'string') return doc;
+    const out = Object.assign({}, doc);
+    delete out.hole;
+    try { const mine = JSON.parse(doc.hole)[uid]; if (mine) out.mine = JSON.stringify(mine); } catch (e) { /* без своих карт */ }
+    return out;
   }
   members(room) { try { return JSON.parse(room.fields.meta).members || []; } catch (e) { return []; } }
   isMember(room, uid) { return this.members(room).some((m) => m.uid === uid); }
@@ -79,7 +90,7 @@ class RoomManager {
     o = o || {};
     this.pendingDoc = null;
     const res = await this.apis[game].createRoom({
-      size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private,
+      size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
       owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: o.chips }
     });
     const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0 };
@@ -101,6 +112,8 @@ class RoomManager {
     const member = this.isMember(room, conn.uid);
     if (!member) {
       if (game === 'yahtzee' && d.status !== 'lobby') throw fail('started');
+      if (POKER.indexOf(game) >= 0 && d.status !== 'lobby' && d.phase !== 'settled' && d.phase !== 'waiting') throw fail('started');
+      if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
       hello = hello || {};
       this.store.addAction(code, conn.uid, JSON.stringify({ type: 'hello', name: hello.name, avatar: hello.avatar, chips: hello.chips }), this.now());
@@ -155,7 +168,7 @@ class RoomManager {
   subscribe(room, code, conn) {
     room.subs.add(conn); conn.rooms = conn.rooms || new Set(); conn.rooms.add(code); this.conns.add(conn);
     this.counters.peakConns = Math.max(this.counters.peakConns, this.conns.size);
-    if (room.fields) conn.send({ t: 'doc', code, doc: room.fields });
+    if (room.fields) conn.send({ t: 'doc', code, doc: this.docFor(room.fields, conn.uid) });
   }
 
   // ---------- Ход времени ----------

@@ -20,7 +20,11 @@
       titleKey: 'games.blackjack.title', descriptionKey: 'games.blackjack.description'
     },
     {
-      id: 'poker', status: 'soon', path: 'games/poker/', cover: 'games/poker/cover.svg',
+      id: 'poker-simple', status: 'available', path: 'games/poker-simple/', cover: 'games/poker-simple/cover.svg',
+      titleKey: 'games.poker-simple.title', descriptionKey: 'games.poker-simple.description'
+    },
+    {
+      id: 'poker', status: 'available', path: 'games/poker/', cover: 'games/poker/cover.svg',
       titleKey: 'games.poker.title', descriptionKey: 'games.poker.description'
     },
     {

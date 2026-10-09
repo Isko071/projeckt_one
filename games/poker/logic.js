@@ -122,7 +122,7 @@
     var minBet = simple ? Math.max(1, Math.floor(options.minBet) || ante * 2) : bb;
     var mandatory = simple ? (Array.isArray(options.mandatory) ? options.mandatory.filter(function (x) { return STREETS.indexOf(x) >= 0; }) : ['preflop', 'turn']) : [];
     var st = { round: 0, variant: simple ? 'simple' : 'classic', phase: 'waiting', smallBlind: sb, bigBlind: bb, ante: ante, minBet: minBet, mandatory: mandatory,
-      button: -1, current: -1, currentBet: 0, minRaise: minBet, board: [], deck: [], pot: 0, pots: [], result: null, seats: [] };
+      button: -1, sbSeat: -1, bbSeat: -1, current: -1, currentBet: 0, minRaise: minBet, board: [], deck: [], pot: 0, pots: [], result: null, seats: [] };
     for (var i = 0; i < size; i++) st.seats.push(blankSeat(i));
     seats.slice(0, size).forEach(function (s, i) { occupy(st.seats[i], s); });
     return st;
@@ -157,6 +157,7 @@
     });
     st.button = nextSeat(st, st.button, function (s) { return s.inHand; });
     var lastPosted;
+    st.sbSeat = -1; st.bbSeat = -1;
     if (st.variant === 'simple') {
       st.seats.forEach(function (s) {                    // анте: общий вклад в банк, на ставку круга не влияет
         if (!s.inHand) return;
@@ -171,7 +172,7 @@
       var bbSeat = nextSeat(st, sbSeat, function (s) { return s.inHand; });
       post(st.seats[sbSeat], st.smallBlind); post(st.seats[bbSeat], st.bigBlind);
       st.currentBet = Math.max(st.seats[sbSeat].bet, st.seats[bbSeat].bet);
-      lastPosted = bbSeat;
+      lastPosted = bbSeat; st.sbSeat = sbSeat; st.bbSeat = bbSeat;     // для подписей «Малая» и «Большая» на столе
     }
     st.minRaise = st.minBet;
     st.seats.forEach(function (s) { if (s.inHand) s.cards = [st.deck.pop(), st.deck.pop()]; });

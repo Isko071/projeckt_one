@@ -10,8 +10,10 @@ const FILES = [
   'games/blackjack/logic.js',
   'games/yahtzee/logic.js',
   'games/yahtzee/table.js',
+  'games/poker/logic.js',
   'shared/rooms.js',
-  'shared/rooms-turns.js'
+  'shared/rooms-turns.js',
+  'shared/rooms-poker.js'
 ];
 
 function loadEngine() {
@@ -21,7 +23,9 @@ function loadEngine() {
     Blackjack: vm.runInContext('Blackjack', ctx),
     YahtzeeTable: ctx.YahtzeeTable,
     PlatformRooms: ctx.PlatformRooms,
+    Poker: ctx.Poker,
     PlatformTurnRooms: ctx.PlatformTurnRooms,
+    PlatformPokerRooms: ctx.PlatformPokerRooms,
     PlatformChat: ctx.PlatformChat
   };
 }
