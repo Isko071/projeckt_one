@@ -105,11 +105,11 @@
   // ===== Состояние =====
   function blankSeat(i) {
     return { index: i, active: false, id: null, name: '', kind: 'human', chips: 0, sitOut: false, inHand: false, folded: false, allIn: false,
-      bet: 0, total: 0, cards: [], acted: false, locked: false, net: 0, shown: false, hand: null, last: null };
+      bet: 0, total: 0, cards: [], acted: false, locked: false, net: 0, shown: false, hand: null, last: null, style: null };
   }
   function occupy(seat, s) {
     seat.active = true; seat.id = s.id; seat.name = s.name || ''; seat.kind = s.kind === 'bot' ? 'bot' : 'human';
-    seat.chips = Math.max(0, Math.floor(Number(s.chips) || 0)); seat.sitOut = false;
+    seat.chips = Math.max(0, Math.floor(Number(s.chips) || 0)); seat.sitOut = false; seat.style = s.kind === 'bot' ? (s.style || 'average') : null;
   }
 
   // seats: [{ id, name, chips, kind }]; options: { tableSize, smallBlind, bigBlind }
