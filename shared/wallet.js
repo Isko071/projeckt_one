@@ -76,12 +76,12 @@
     };
   }
 
-  // Дни, когда играли (для календаря серии): последние 120, без повторов
+  // Дни, когда играли (для календаря серии): последние 92 (около трёх месяцев), без повторов
   function cleanDays(v) {
     var out = [];
     (Array.isArray(v) ? v : []).forEach(function (d) { var x = day(d); if (x && out.indexOf(x) < 0) out.push(x); });
     out.sort();
-    return out.slice(-120);
+    return out.slice(-92);
   }
 
   function load() {

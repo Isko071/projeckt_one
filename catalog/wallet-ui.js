@@ -48,6 +48,11 @@
     var now = new Date(), y = now.getFullYear(), m = now.getMonth(), played = W.playedDays();
     var title = new Date(y, m, 1).toLocaleDateString(I.locale(), { month: 'long', year: 'numeric' });
     $('cal-title').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+    var st = W.dailyStatus();
+    $('cal-count').textContent = st.streak ? t('cal.count', { n: st.streak, days: days(st.streak) }) : t('cal.none');
+    $('cal-best').textContent = st.best ? t('cal.best', { n: st.best, days: days(st.best) }) : '';
+    $('cal-best').hidden = !st.best;
+    pop.classList.toggle('cold', st.streak === 0);
     var grid = $('cal-grid'), first = (new Date(y, m, 1).getDay() + 6) % 7, count = new Date(y, m + 1, 0).getDate();
     grid.textContent = '';
     for (var w = 1; w <= 7; w++) {
