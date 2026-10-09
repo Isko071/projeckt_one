@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const pages = ['index.html', 'games/yahtzee/index.html', 'games/minesweeper/index.html', 'games/blackjack/index.html', 'admin/index.html'];
+const pages = ['index.html', 'games/yahtzee/index.html', 'games/minesweeper/index.html', 'games/blackjack/index.html', 'admin/index.html', 'games/poker-simple/index.html'];
 const version = process.argv[2];
 if (!/^\d+$/.test(version || '')) { console.error('Использование: node tools/set-version.js <номер>'); process.exit(1); }
 
