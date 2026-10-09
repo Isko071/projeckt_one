@@ -198,6 +198,7 @@ root.LOCALES.ru = {
   'wallet.src.yahtzee': 'Ятзи',
   'wallet.src.blackjack': 'Блэкджек',
   'wallet.src.poker-simple': 'Покер: просто',
+  'wallet.src.poker': 'Покер',
   'wallet.src.bet': 'Ставка',
   'wallet.src.win': 'Выигрыш',
   'wallet.src.other': 'Операция',
