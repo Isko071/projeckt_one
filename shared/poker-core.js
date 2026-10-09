@@ -6,7 +6,7 @@
 // model() — всё, что нужно нарисовать: места, карты, банк, статусы, панели итога, вопросы, готовность, баннеры.
 (function (root) {
   var PK = root.Poker, Bots = root.PokerBots;
-  var HOLD_MS = 1000, FLIP_MS = 1100;    // пауза перед открытием карты и время переворота при вскрытии (в тестах сокращаются: cfg.holdMs, cfg.flipMs, cfg.botMs)
+  var HOLD_MS = 1600, FLIP_MS = 2800;    // пауза перед открытием карты и время переворота при вскрытии (в тестах сокращаются: cfg.holdMs, cfg.flipMs, cfg.botMs)
 
   function now() { return Date.now(); }
   function reduced() { try { return root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
@@ -85,7 +85,7 @@
     var shown = holding ? ctx.prevBoardLen : st.board.length, board = [];
     for (var b = 0; b < 5; b++) {
       if (b < shown) board.push({ code: st.board[b], hl: showdown && !!wc.codes[st.board[b]], dim: showdown && !wc.codes[st.board[b]] });
-      else board.push({ code: '' });
+      else board.push({ code: null });
     }
     var la = (!ctx.stage && !holding && !ctx.pending && st.phase !== 'settled' && st.current === me) ? PK.legalActions(st, me) : null;
     var roundKey = (ctx.stage === 'flip' || ctx.stage === 'summary' || showdown) ? 'show' : ({ preflop: 'pre', flop: 'flop', turn: 'turn', river: 'river' }[st.phase] || 'wait');
@@ -158,7 +158,7 @@
     clearTimeout(this.timer);
     var st = this.st, self = this;
     if (this.stage || this.stopped || st.phase === 'waiting' || st.phase === 'settled' || st.current <= 0) return;
-    var wait = Math.max(0, this.holdUntil - now()) + (this.cfg.botMs !== undefined ? this.cfg.botMs : (reduced() ? 200 : 800 + Math.random() * 400));
+    var wait = Math.max(0, this.holdUntil - now()) + (this.cfg.botMs !== undefined ? this.cfg.botMs : (reduced() ? 200 : 1300 + Math.random() * 700));
     this.timer = setTimeout(function () {
       if (self.stopped || self.stage || self.st.current <= 0) return;
       var a = Bots.nextBotAction(self.st, Math.random), cur = self.st.current;

@@ -112,8 +112,18 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .card.hl { box-shadow: 0 0 0 3px var(--accent); transform: translateY(-4px); }
 .card.tiny .tl { left: 0; right: 0; top: 3px; font-size: 11px; }
 .card.tiny .mid, .card.tiny .br { display: none; }
-.card.flip { animation: flip .5s ease-out both; }
-@keyframes flip { from { transform: scaleX(.1); } to { transform: scaleX(1); } }
+/* Переворот: сначала рубашка, на середине карта сужается в линию, потом открывается лицо. Задержка d0…d5 переворачивает карты по очереди */
+.card.flip { animation: flipx .8s ease-in-out both; }
+.card.flip .tl, .card.flip .mid, .card.flip .br { animation: faceon .8s step-end both; }
+.card.flip::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 1; background: repeating-linear-gradient(45deg, var(--accent-soft) 0 4px, var(--accent) 4px 5px); animation: backoff .8s step-end both; }
+.card.d1, .card.d1 .tl, .card.d1 .mid, .card.d1 .br, .card.d1::before { animation-delay: .5s; }
+.card.d2, .card.d2 .tl, .card.d2 .mid, .card.d2 .br, .card.d2::before { animation-delay: 1s; }
+.card.d3, .card.d3 .tl, .card.d3 .mid, .card.d3 .br, .card.d3::before { animation-delay: 1.5s; }
+.card.d4, .card.d4 .tl, .card.d4 .mid, .card.d4 .br, .card.d4::before { animation-delay: 2s; }
+.card.d5, .card.d5 .tl, .card.d5 .mid, .card.d5 .br, .card.d5::before { animation-delay: 2.5s; }
+@keyframes flipx { 0% { transform: scaleX(1); } 50% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes faceon { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 1; } }
+@keyframes backoff { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
 .card.deal { animation: deal .25s ease-out both; }
 @keyframes deal { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
 .board-card { --cw: var(--bw); --ch: var(--bh); }
@@ -194,7 +204,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .toast div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 14px oklch(0.2 0.02 260 / 0.15); }
 
 @media (prefers-reduced-motion: reduce) {
-  .card.flip, .card.deal, .sheet { animation: none; }
+  .card.flip, .card.flip .tl, .card.flip .mid, .card.flip .br, .card.deal, .sheet { animation: none; }
+  .card.flip::before { display: none; }
   button { transition: none; }
 }
 

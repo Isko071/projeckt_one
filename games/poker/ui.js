@@ -16,7 +16,7 @@ var IDLE_MS = 30000, ASK_MS = 7000;
 
 var app = {
   screen: 'start', mode: 'bots', rules: false, menu: false, combos: false, modal: null, prefs: loadPrefs(), bet: [], sheet: null,
-  code: '', codeBad: false, rooms: null, banner: null, err: null, busy: false, copied: false, invite: null
+  code: '', codeBad: false, bseen: 0, bfrom: 0, rooms: null, banner: null, err: null, busy: false, copied: false, invite: null
 };
 var T = null;            // стол: PokerCore (против ботов или онлайн)
 var chat = window.PlatformChatUI.create({
@@ -272,13 +272,15 @@ function tableHtml(m) {
   var seatsHtml = '', betsHtml = '';
   opp.forEach(function (s, k) {
     var p = pos[k], av = avatarOf(s, k + 1), bx = 50 + (p.x - 50) * 0.62, by = p.y < 45 ? p.y + 17 : p.y - 2;
-    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.flip ? 'flip ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
+    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
     seatsHtml += '<div class="seat' + (s.folded || s.out ? ' folded' : '') + (s.turn ? ' active' : '') + '" data-key="o' + s.index + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<div class="status">' + esc(statusText(s.status)) + '</div><div class="box"><div class="ring' + (s.turn ? ' active' : '') + '"' + (s.turn ? ringStyle(s.timer) : '') + '><div class="av" style="background:' + av.bg + '">' + esc(av.letter) + '</div></div>' +
       '<div class="cards">' + cards + '</div><div class="nick">' + esc(s.name) + '</div>' + tagHtml(s) + '</div></div>';
     if (s.bet > 0) betsHtml += '<div class="bet-pill" data-key="b' + s.index + '" style="left:' + bx + '%;top:' + by + '%"><span class="pot-dot"></span>' + fmt(s.bet) + '</div>';
   });
-  var board = m.board.map(function (c) { return cardHtml(c.code, 'board-card', c.hl ? 'hl' : (c.dim ? 'dim' : '')); }).join('');
+  var shown = m.board.filter(function (c) { return c.code; }).length;
+  if (shown < app.bseen) { app.bseen = shown; app.bfrom = shown; } else if (shown > app.bseen) { app.bfrom = app.bseen; app.bseen = shown; }
+  var board = m.board.map(function (c, b) { return cardHtml(c.code, 'board-card', c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))); }).join('');
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
   var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
