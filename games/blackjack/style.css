@@ -3,6 +3,7 @@
 :root {
   --felt: oklch(0.9 0.04 175);
   --felt-line: oklch(0.8 0.05 175);
+  --felt-a: oklch(0.74 0.09 158); --felt-b: oklch(0.64 0.09 160); --felt-edge: oklch(0.5 0.08 160); --felt-ring: oklch(0.85 0.06 158 / 0.6); --felt-ink: oklch(0.2 0.03 160); --felt-dash: oklch(0.98 0.01 90 / 0.7);
   --card-bg: oklch(0.995 0.003 90);
   --card-line: oklch(0.7 0.01 260);
   --suit-red: oklch(0.5 0.19 27);
@@ -17,6 +18,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --felt: oklch(0.3 0.05 175); --felt-line: oklch(0.4 0.05 175);
+    --felt-a: oklch(0.42 0.075 158); --felt-b: oklch(0.32 0.065 160); --felt-edge: oklch(0.27 0.05 160); --felt-ring: oklch(0.5 0.07 160 / 0.5); --felt-ink: oklch(0.97 0.01 90); --felt-dash: oklch(0.85 0.03 160 / 0.6);
     --card-bg: oklch(0.93 0.008 90); --card-line: oklch(0.55 0.01 260);
     --back: oklch(0.45 0.09 175);
     --danger: oklch(0.78 0.12 27); --danger-soft: oklch(0.32 0.06 27);
@@ -25,6 +27,7 @@
 }
 :root[data-theme="dark"] {
   --felt: oklch(0.3 0.05 175); --felt-line: oklch(0.4 0.05 175);
+  --felt-a: oklch(0.42 0.075 158); --felt-b: oklch(0.32 0.065 160); --felt-edge: oklch(0.27 0.05 160); --felt-ring: oklch(0.5 0.07 160 / 0.5); --felt-ink: oklch(0.97 0.01 90); --felt-dash: oklch(0.85 0.03 160 / 0.6);
   --card-bg: oklch(0.93 0.008 90); --card-line: oklch(0.55 0.01 260);
   --back: oklch(0.45 0.09 175);
   --danger: oklch(0.78 0.12 27); --danger-soft: oklch(0.32 0.06 27);
@@ -150,20 +153,21 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 
 /* Игровой стол */
 .game { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 10px 10px; width: 100%; max-width: 780px; margin: 0 auto; }
-.felt { position: relative; flex: none; align-self: center; background: var(--felt); border: 5px solid var(--felt-line); }
+.felt { position: relative; flex: none; align-self: center; background: radial-gradient(ellipse at 50% 45%, var(--felt-a), var(--felt-b)); border: 5px solid var(--felt-edge); box-shadow: inset 0 0 0 2px var(--felt-ring), inset 0 6px 18px oklch(0.2 0.05 160 / 0.25); color: var(--felt-ink); }
 .dealer-box { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.dealer-box .lbl { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.dealer-box .lbl { color: var(--felt-ink); display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
 .pill { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 2px 8px; font-size: 14px; font-weight: 700; }
 .row-cards { display: flex; }
-.dealer-slot { width: 70px; height: 98px; border: 2px dashed var(--felt-line); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--muted); font-weight: 700; }
-.plate { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--surface); border-radius: 14px; padding: 5px; border: 1px solid var(--line); }
-.plate.active { border: 2px solid var(--accent); }
+.dealer-slot { width: 70px; height: 98px; border: 2px dashed var(--felt-dash); color: var(--felt-ink); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--muted); font-weight: 700; }
+.plate { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 3px; background: transparent; padding: 2px; border: 0; color: var(--ink); }
+.plate.active .stt { border-color: var(--accent); color: var(--accent); }
 .plate .ring { padding: 3px; border-radius: 50%; }
-.plate .av { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--ink); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-.plate .nm { font-size: 13px; font-weight: 700; white-space: nowrap; width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; }
-.plate .sm { font-size: 14px; font-weight: 700; }
-.plate .stt { font-size: 12px; font-weight: 700; text-align: center; color: var(--muted); }
-.plate .stt.good { color: var(--accent); }
+.plate .ring[style*="conic"] { box-shadow: 0 0 0 3px var(--accent-soft); }
+.plate .av { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--ink); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; border: 1px solid var(--line); }
+.plate .nm { font-size: 12px; font-weight: 600; white-space: nowrap; max-width: 96px; text-align: center; overflow: hidden; text-overflow: ellipsis; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px 7px; line-height: 1.1; }
+.plate .sm { font-size: 13px; font-weight: 700; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; }
+.plate .stt { font-size: 11px; font-weight: 700; text-align: center; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 6px; line-height: 1.1; max-width: 110px; }
+.plate .stt.good { color: var(--accent); border-color: var(--accent); }
 .plate .stt.bad { color: var(--danger); }
 .me-box { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: flex-end; justify-content: center; gap: 12px; }
 .me-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -186,7 +190,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .bet-zone { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .bet-circle { width: 124px; height: 124px; border-radius: 50%; border: 3px dashed var(--accent); background: oklch(1 0 0 / .25); display: flex; flex-direction: column-reverse; align-items: center; justify-content: center; padding-top: 6px; }
 .bet-title { font-size: 24px; font-weight: 700; }
-.bet-note { font-size: 13px; color: var(--muted); text-align: center; max-width: 220px; }
+.bet-note { font-size: 13px; color: var(--felt-ink); opacity: .85; text-align: center; max-width: 220px; }
 .you-line { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap; font-weight: 700; }
 .you-line .av { width: 30px; height: 30px; font-size: 13px; }
 .chip-row { display: flex; justify-content: center; flex-wrap: wrap; }
@@ -200,7 +204,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .act:disabled { border: 2px dashed var(--line); background: var(--surface); color: var(--muted); cursor: default; }
 .act.hl { outline: 4px solid var(--ink); outline-offset: 3px; }
 .act small { display: none; font-size: 12px; font-weight: 400; opacity: .85; }
-.wait-text { text-align: center; font-size: 15px; font-weight: 700; color: var(--muted); }
+.wait-text { text-align: center; font-size: 15px; font-weight: 700; color: var(--felt-ink); opacity: .85; }
 .hint-box { display: flex; gap: 10px; align-items: center; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 14px; padding: 10px 12px; font-size: 15px; line-height: 1.35; animation: slide-down .25s ease both; }
 .hint-box i { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 700; font-style: normal; }
 .notice { background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 14px; padding: 10px 14px; font-size: 15px; font-weight: 700; animation: slide-down .25s ease both; }
@@ -257,7 +261,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .row.skel .who i { display: block; height: 12px; width: 50%; border-radius: 6px; }
 .row.skel .who i.s { height: 10px; width: 30%; margin-top: 8px; }
 .preview { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.pv-table { position: relative; width: 170px; height: 150px; border-radius: 75px; background: var(--felt); border: 4px solid var(--felt-line); box-sizing: border-box; }
+.pv-table { position: relative; width: 170px; height: 150px; border-radius: 75px; background: radial-gradient(ellipse at 50% 45%, var(--felt-a), var(--felt-b)); border: 4px solid var(--felt-edge); box-sizing: border-box; }
 .pv-dealer { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 700; color: var(--muted); }
 .pv-seat { position: absolute; width: 34px; height: 34px; border-radius: 50%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--surface); color: var(--ink); border: 2px dashed var(--muted); }
 .pv-seat.me { background: var(--accent); color: var(--accent-ink); border: 0; }
