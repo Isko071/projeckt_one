@@ -76,3 +76,8 @@ test('withBalance меняет только баланс и отвергает �
   [-1, 1.5, NaN, 1e9, 'x'].forEach((v) => assert.equal(L.withBalance(src, v).ok, false));
   assert.equal(L.withBalance('не json', 5).ok, false);
 });
+
+test('игрок без записи кошелька (ничего не менял): показывается стартовый баланс, а не 0', () => {
+  const r = L.parseDoc({ name: 'projects/p/databases/(default)/documents/users/nowallet', fields: { data: { stringValue: JSON.stringify({ v: 1, data: { 'platform:profile': { name: 'Новый' } } }) }, createdAt: { integerValue: '1' }, lastSeen: { integerValue: '2' } } });
+  assert.equal(r.balance, 5000);
+});

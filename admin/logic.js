@@ -3,6 +3,7 @@
   // Новая игра: добавить её id сюда и ключ admin.col.<id> в locales/ru.js (счётчик партий появится в таблице сам)
   var GAMES = ['yahtzee', 'minesweeper', 'blackjack', 'poker-simple'];
   var DAY = 24 * 3600 * 1000;
+  var START_BALANCE = 5000;   // как в shared/wallet.js: пока игрок не менял кошелёк, в облаке записи кошелька нет, а баланс стартовый
 
   function num(v) { var n = Number(v); return isFinite(n) && n >= 0 ? n : 0; }
   function field(f, k) {
@@ -21,7 +22,7 @@
     GAMES.forEach(function (g) { var n = num(wallet.plays && wallet.plays[g]); plays[g] = n; total += n; });
     var updatedAt = num(field(f, 'updatedAt')), lastSeen = num(field(f, 'lastSeen')) || updatedAt;
     return {
-      uid: uid, name: String(prof.name || '').slice(0, 40), balance: num(wallet.balance), streak: num(wallet.streak),
+      uid: uid, name: String(prof.name || '').slice(0, 40), balance: typeof wallet.balance === 'number' ? num(wallet.balance) : START_BALANCE, streak: num(wallet.streak),
       createdAt: num(field(f, 'createdAt')), lastSeen: lastSeen, plays: plays, total: total
     };
   }
