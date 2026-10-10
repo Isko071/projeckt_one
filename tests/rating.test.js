@@ -52,3 +52,23 @@ test('нет доступа: ошибка denied; другая ошибка се
   await assert.rejects(mk(401).publish('t', 'u', {}, 1), (e) => e.code === 'denied');
   await assert.rejects(mk(500).top('t', 10), (e) => e.code === 'http-500');
 });
+
+test('победа онлайн: запись одним commit с прибавкой на единицу; топ игры по победам', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init) => {
+    calls.push({ url, init });
+    if (/runQuery/.test(url)) return { ok: true, status: 200, json: async () => [{ document: { name: 'projects/p/databases/d/documents/ratings_wins/yahtzee/rows/u1', fields: { name: { stringValue: 'Аня' }, avatar: { integerValue: '2' }, icon: { stringValue: '' }, wins: { integerValue: '7' } } } }] };
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  const api = R.create({ fetch: fakeFetch, projectId: 'p', db: 'd' });
+  await api.recordWin('tok', 'u1', { name: 'Аня', avatar: 2 }, 'yahtzee');
+  assert.match(calls[0].url, /documents:commit$/);
+  const w = JSON.parse(calls[0].init.body).writes;
+  assert.equal(w[0].update.name, 'projects/p/databases/d/documents/ratings_wins/yahtzee/rows/u1');
+  assert.deepEqual(plain(w[1].transform.fieldTransforms), [{ fieldPath: 'wins', increment: { integerValue: '1' } }]);
+  const top = await api.topWins('tok', 'yahtzee', 5);
+  assert.match(calls[1].url, /documents\/ratings_wins\/yahtzee:runQuery$/);
+  assert.deepEqual(plain(top), [{ uid: 'u1', name: 'Аня', avatar: 2, icon: '', wins: 7 }]);
+  assert.equal(JSON.parse(calls[1].init.body).structuredQuery.orderBy[0].field.fieldPath, 'wins');
+  assert.deepEqual(plain(R.WIN_GAMES), ['yahtzee', 'blackjack', 'poker-simple', 'battleship']);
+});

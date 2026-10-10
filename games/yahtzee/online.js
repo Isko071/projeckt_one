@@ -108,7 +108,11 @@
           else if (spin.waiting) { spin.waiting = false; spin.active = false; spin.token++; spin.display = null; }
           G.lastRolls = p.rollsUsed;
         }
-        if (v.state.gameOver && !G.counted) { G.counted = true; app.modal = null; }
+        if (v.state.gameOver && !G.counted) {
+          G.counted = true; app.modal = null;
+          // победа онлайн в рейтинг: партия доиграна (не «остальные вышли») и среди победителей вы
+          if (v.state.reason !== 'alone' && window.PlatformRating && T.standings(v.state).some(function (r) { return r.seat === me && r.winner; })) window.PlatformRating.reportWin('yahtzee');
+        }
         // одновременный режим: все сделали ходы, показываем, кто куда записал
         var rc = v.state.recap;
         if (rc && rc.id > (G.recapSeen || 0)) {

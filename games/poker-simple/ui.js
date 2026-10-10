@@ -166,7 +166,7 @@ function enterTable(promise) {
   promise.then(function (res) {
     app.busy = false;
     var ctrl = res.host || res;
-    T = Core.createOnline({ ctrl: ctrl, wallet: W, source: SOURCE, uid: user().uid, variant: 'simple' });
+    T = Core.createOnline({ ctrl: ctrl, wallet: W, source: SOURCE, uid: user().uid, variant: 'simple', onWin: function () { if (window.PlatformRating) window.PlatformRating.reportWin('poker-simple'); } });
     T.ctrl = ctrl; bindTable();
     var m = T.model();
     app.screen = m && !m.lobby && !m.loading ? 'game' : 'wait'; app.err = null; app.copied = false;

@@ -191,6 +191,8 @@ root.LOCALES.ru = {
   'rating.error': 'Не удалось загрузить рейтинг. Проверьте соединение.',
   'rating.empty': 'В рейтинге пока никого нет.',
   'rating.retry': 'Обновить',
+  'rating.wins': 'Победы онлайн',
+  'rating.wins.empty': 'Станьте первым',
   'cal.title': 'Серия',
   'cal.count': '{n} {days} подряд',
   'cal.none': 'Серии пока нет',

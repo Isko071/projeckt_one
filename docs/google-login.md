@@ -50,6 +50,14 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() <= 20;
     }
 
+    // Победы онлайн по играм (docs/rating.md)
+    match /ratings_wins/{game}/rows/{uid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == uid && request.resource.data.wins == 1;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.wins == resource.data.wins + 1;
+    }
+
     // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md
     match /rooms/{code} {
       allow read: if request.auth != null;

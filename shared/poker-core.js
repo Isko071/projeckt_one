@@ -261,6 +261,7 @@
       var payout = mine.total + mine.net;                  // онлайн дневного предела выигрыша нет
       if (payout > 0) this.W.add(payout, this.source, now());
       if (mine.net > 0) this.W.countWin(this.source);
+      if (mine.net > 0 && st.result && st.result.showdown && this.cfg.onWin) { try { this.cfg.onWin(); } catch (e) { /* рейтинг не должен ломать стол */ } }   // победа онлайн только на вскрытии
     }
     this.spent = 0; this.caption = '';
     if (st.result && st.result.showdown) {

@@ -49,8 +49,43 @@
         return out;
       });
     }
-    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top };
+    // ----- Победы онлайн: ratings_wins/<игра>/rows/<uid>, победа прибавляется на единицу (правила базы не дают прибавить больше) -----
+    function recordWin(token, uid, profile, game) {
+      var r = rowFields(profile, 0), name = 'projects/' + env.projectId + '/databases/' + env.db + '/documents/ratings_wins/' + game + '/rows/' + encodeURIComponent(uid);
+      var body = { writes: [
+        { update: { name: name, fields: { name: { stringValue: r.name }, avatar: { integerValue: String(r.avatar) }, icon: { stringValue: r.icon } } }, updateMask: { fieldPaths: ['name', 'avatar', 'icon'] } },
+        { transform: { document: name, fieldTransforms: [{ fieldPath: 'wins', increment: { integerValue: '1' } }] } }
+      ] };
+      return req('POST', base + ':commit', token, body).then(check).then(function () { return true; });
+    }
+    function topWins(token, game, limit) {
+      var body = { structuredQuery: { from: [{ collectionId: 'rows' }], orderBy: [{ field: { fieldPath: 'wins' }, direction: 'DESCENDING' }], limit: Math.max(1, Math.min(100, limit || 5)) } };
+      return req('POST', base + '/ratings_wins/' + encodeURIComponent(game) + ':runQuery', token, body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
+        var out = [];
+        (Array.isArray(rows) ? rows : []).forEach(function (r) {
+          if (!r || !r.document) return;
+          var f = r.document.fields || {}, uid = String(r.document.name || '').split('/').pop();
+          var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, 0);
+          out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, wins: cleanInt(field(f, 'wins'), MAX_BALANCE) });
+        });
+        return out;
+      });
+    }
+    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top, recordWin: recordWin, topWins: topWins };
   }
 
-  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, MAX_NAME: MAX_NAME };
+  // Игры, где считаются победы онлайн
+  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
+
+  // Для браузера: засчитать победу онлайн этому игроку (один вызов на выигранную партию); без входа и без правил базы ничего не делает
+  function reportWin(game) {
+    var C = root.PlatformCloud, P = root.PlatformProfile;
+    if (WIN_GAMES.indexOf(game) < 0 || !C || !P || !C.getState().user || !root.FIREBASE_CONFIG || typeof root.fetch !== 'function') return Promise.resolve(false);
+    return C.getToken().then(function (tk) {
+      var api = create({ fetch: function (u, i) { return root.fetch(u, i); }, projectId: root.FIREBASE_CONFIG.projectId, db: root.FIREBASE_DATABASE });
+      return api.recordWin(tk, C.getState().user.uid, P.getProfile(), game);
+    }).then(function () { return true; }, function () { return false; });
+  }
+
+  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, reportWin: reportWin, WIN_GAMES: WIN_GAMES, MAX_NAME: MAX_NAME };
 })(typeof window !== 'undefined' ? window : globalThis);

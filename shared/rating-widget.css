@@ -1,0 +1,19 @@
+/* Плашка «Победы онлайн» в меню игры: внизу на телефоне, в правом нижнем углу на компьютере */
+.rw { position: fixed; z-index: 5; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--surface); border-top: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+.rw[hidden] { display: none; }
+.rw-title { flex: none; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.rw-empty { color: var(--muted); }
+.rw-list { flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none; display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; }
+.rw-row { flex: none; display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 3px 8px 3px 4px; border-radius: 999px; border: 1px solid transparent; }
+.rw-row.me { border-color: var(--accent); background: var(--accent-soft); }
+.rw-row .rk { width: 14px; text-align: center; color: var(--muted); font-weight: 700; }
+.rw-row .av { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: oklch(0.2 0.03 260); }
+.rw-row .nm { max-width: 90px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+body.rw-on { padding-bottom: 52px; }
+@media (min-width: 700px) {
+  .rw { left: auto; right: 16px; bottom: 16px; width: 270px; flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 6px 18px oklch(0.3 0.03 260 / .12); }
+  .rw-list { flex-direction: column; gap: 2px; overflow: visible; }
+  .rw-row { padding: 4px 6px; border-radius: 10px; }
+  .rw-row .nm { flex: 1; max-width: none; }
+  body.rw-on { padding-bottom: 0; }
+}
