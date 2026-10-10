@@ -9,7 +9,7 @@ var appEl = document.getElementById('app');
 var N = B.CONFIG.size, C = 100, OFF = C;            // клетка 100 единиц, поле смещено на ширину подписей
 var DEV = /[?&]dev\b/.test(location.search) || location.hash === '#dev';
 
-var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', place: null, msg: '' };
+var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null, msg: '' };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function cellLabel(idx) { return tr('letters').charAt(Math.floor(idx / N)) + (idx % N + 1); }
@@ -136,10 +136,11 @@ function impactFx(cx, cy, kind, t) {
 }
 // Самолёт пролетает слева направо на высоте cy; возвращает время, когда он над столбцом cx
 function planeFx(cx, cy) {
-  var W = (N + 1) * C, from = -170, to = W + 170, dur = 1.4, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
-  var body = '<path d="M0 0 L26 -10 L84 -10 L106 0 L84 10 L26 10Z M44 -10 L64 -52 L76 -52 L70 -10Z M44 10 L64 52 L76 52 L70 10Z M6 -5 L4 -24 L16 -24 L22 -5Z M6 5 L4 24 L16 24 L22 5Z" class="plane-body"/>' +
-    '<circle cx="88" cy="0" r="5" class="deck"/>';
-  return { tAt: tAt, svg: '<g class="plane" opacity="0" transform="translate(' + from + ',' + cy + ')">' + appear(0) + '<animateTransform attributeName="transform" type="translate" from="' + from + ' ' + cy + '" to="' + to + ' ' + cy + '" begin="0s" dur="' + dur + 's" fill="freeze"/>' + body + '</g>' };
+  var W = (N + 1) * C, from = -300, to = W + 300, dur = 1.5, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
+  var body = '<g transform="scale(1.7) translate(0,0)"><path d="M0 0 L34 -13 L110 -13 L138 0 L110 13 L34 13Z M58 -13 L84 -70 L102 -70 L92 -13Z M58 13 L84 70 L102 70 L92 13Z M6 -6 L2 -32 L20 -32 L30 -6Z M6 6 L2 32 L20 32 L30 6Z" class="plane-body"/>' +
+    '<ellipse cx="82" cy="-34" rx="9" ry="12" class="deck pf"/><ellipse cx="82" cy="34" rx="9" ry="12" class="deck pf"/><circle cx="118" cy="0" r="6" class="deck"/></g>';
+  function path(dx, dy, cls) { return '<g class="' + cls + '" opacity="0" transform="translate(' + from + ',' + cy + ')">' + appear(0) + '<animateTransform attributeName="transform" type="translate" from="' + (from + dx) + ' ' + (cy + dy) + '" to="' + (to + dx) + ' ' + (cy + dy) + '" begin="0s" dur="' + dur + 's" fill="freeze"/>' + body + '</g>'; }
+  return { tAt: tAt, svg: path(48, 60, 'plane shadow') + path(0, 0, 'plane') };
 }
 // Подлодка в точке удара: капсула с рубкой и перископом, появляется и уходит под воду
 function subBodyFx(cx, cy) {
@@ -182,21 +183,28 @@ function fxPlan(fx) {
   }
   return { svg: svg ? '<g class="fx" pointer-events="none">' + svg + '</g>' : '', delays: delays };
 }
-// Выбранная цель: прицел (выстрел), квадрат 3×3 (радар, бомбардировщик) или подлодка с линией торпед
+// Выбранная цель: красные угловые скобки (клетка или область 3×3), для подлодки зелёные клетки под лодкой и линия торпед
+function brackets(x, y, w, h) {
+  var L = 30, r = '';
+  [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]].forEach(function (c) {
+    r += 'M' + (c[0] + c[2] * L) + ' ' + c[1] + 'L' + c[0] + ' ' + c[1] + 'L' + c[0] + ' ' + (c[1] + c[3] * L);
+  });
+  return '<path class="brk" d="' + r + '"/>';
+}
 function selSvg(sel, weapon, key) {
-  var sx = OFF + (sel % N) * C + C / 2, sy = OFF + Math.floor(sel / N) * C + C / 2, s = '';
+  var sx = OFF + (sel % N) * C + C / 2, sy = OFF + Math.floor(sel / N) * C + C / 2, s = '', cx = sel % N, cy = Math.floor(sel / N);
   if (weapon === 'radar' || weapon === 'bomber') {
-    var x0 = Math.max(0, sel % N - 1), x1 = Math.min(N - 1, sel % N + 1), y0 = Math.max(0, Math.floor(sel / N) - 1), y1 = Math.min(N - 1, Math.floor(sel / N) + 1);
-    return '<rect class="selarea ' + weapon + '" x="' + (OFF + x0 * C + 5) + '" y="' + (OFF + y0 * C + 5) + '" width="' + ((x1 - x0 + 1) * C - 10) + '" height="' + ((y1 - y0 + 1) * C - 10) + '" rx="12"/>';
+    var x0 = Math.max(0, cx - 1), x1 = Math.min(N - 1, cx + 1), y0 = Math.max(0, cy - 1), y1 = Math.min(N - 1, cy + 1);
+    return '<rect x="' + (OFF + x0 * C + 6) + '" y="' + (OFF + y0 * C + 6) + '" width="' + ((x1 - x0 + 1) * C - 12) + '" height="' + ((y1 - y0 + 1) * C - 12) + '" fill="url(#hatchr-' + key + ')" opacity=".35"/>' +
+      brackets(OFF + x0 * C + 4, OFF + y0 * C + 4, (x1 - x0 + 1) * C - 8, (y1 - y0 + 1) * C - 8);
   }
   if (weapon === 'sub') {
     s += '<line class="selline" x1="' + sx + '" y1="' + OFF + '" x2="' + sx + '" y2="' + (OFF + N * C) + '"/>';
-    s += '<path class="selarrow" d="M' + (sx - 16) + ' ' + (OFF + 26) + 'L' + sx + ' ' + (OFF + 4) + 'L' + (sx + 16) + ' ' + (OFF + 26) + 'M' + (sx - 16) + ' ' + (OFF + N * C - 26) + 'L' + sx + ' ' + (OFF + N * C - 4) + 'L' + (sx + 16) + ' ' + (OFF + N * C - 26) + '"/>';
-    s += '<g class="ship ghost" transform="translate(' + (sx - 150) + ',' + (sy - 35) + ')"><path d="M20 35 Q20 5 70 5 L230 5 Q280 5 280 35 Q280 65 230 65 L70 65 Q20 65 20 35Z" class="hull"/><path d="M118 5 L130 -18 L172 -18 L184 5" class="hull"/></g>';
+    for (var gx = Math.max(0, cx - 1); gx <= Math.min(N - 1, cx + 1); gx++) s += '<rect class="greencell" x="' + (OFF + gx * C + 6) + '" y="' + (OFF + cy * C + 6) + '" width="' + (C - 12) + '" height="' + (C - 12) + '"/>';
+    s += '<g class="ship ghost" transform="translate(' + (sx - 150) + ',' + (sy - 35) + ')"><path d="M20 35 Q20 5 70 5 L230 5 Q280 5 280 35 Q280 65 230 65 L70 65 Q20 65 20 35Z" class="hull"/><path d="M118 5 L130 -18 L172 -18 L184 5" class="hull"/><path d="M150 -18 L150 -36 L172 -36" class="deck"/></g>';
     return s;
   }
-  return '<rect x="' + (sx - C / 2 + 4) + '" y="' + (sy - C / 2 + 4) + '" width="' + (C - 8) + '" height="' + (C - 8) + '" fill="url(#hatchr-' + key + ')"/>' +
-    '<g class="aim"><circle cx="' + sx + '" cy="' + sy + '" r="70"/><path d="M' + sx + ' ' + (sy - 110) + 'V' + (sy - 42) + 'M' + sx + ' ' + (sy + 42) + 'V' + (sy + 110) + 'M' + (sx - 110) + ' ' + sy + 'H' + (sx - 42) + 'M' + (sx + 42) + ' ' + sy + 'H' + (sx + 110) + '"/></g>';
+  return '<rect x="' + (sx - C / 2 + 8) + '" y="' + (sy - C / 2 + 8) + '" width="' + (C - 16) + '" height="' + (C - 16) + '" fill="url(#hatchr-' + key + ')" opacity=".5"/>' + brackets(sx - C / 2 + 4, sy - C / 2 + 4, C - 8, C - 8);
 }
 // o: { key, label, marks, ships (свои корабли для показа), sunkShips, interactive, sel, weapon, ghost: { ship, ok }, fx, small }
 function boardSvg(o) {
@@ -248,6 +256,29 @@ function boardSvg(o) {
   return s + '</svg>';
 }
 
+// Иконки оружия, нарисованные чернилами: радар, подлодка, бомбардировщик
+function weaponIcon(kind) {
+  if (kind === 'radar') {
+    return '<svg class="wicon" viewBox="0 0 100 100" aria-hidden="true"><rect x="6" y="6" width="88" height="88" rx="12" class="deck pf"/><rect x="14" y="14" width="72" height="72" rx="8" class="deck"/>' +
+      '<circle cx="50" cy="50" r="31" class="deck pf"/><circle cx="50" cy="50" r="21" class="deck"/><circle cx="50" cy="50" r="10" class="deck"/><path d="M50 50 L50 19 A31 31 0 0 1 77 34Z" class="wi-green"/>' +
+      '<path d="M19 50H81M50 19V81" class="deck thin"/><circle cx="64" cy="38" r="3.5" class="wi-dot"/></svg>';
+  }
+  if (kind === 'sub') {
+    return '<svg class="wicon" viewBox="0 0 160 80" aria-hidden="true"><path d="M0 70 q10 -7 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" class="deck thin"/>' +
+      '<path d="M12 44 Q12 27 42 27 L118 27 Q150 27 150 44 Q150 61 118 61 L42 61 Q12 61 12 44Z" class="hull"/><path d="M62 27 L69 10 L99 10 L106 27" class="hull"/><path d="M84 10 L84 3 L97 3" class="deck"/>' +
+      '<circle cx="48" cy="44" r="6" class="deck pf"/><circle cx="76" cy="44" r="6" class="deck pf"/><circle cx="104" cy="44" r="6" class="deck pf"/><path d="M12 44 L2 36 M12 44 L2 52 M12 44 L0 44" class="deck"/>' +
+      '<path d="M30 56 L52 52 M90 56 L116 52" class="shade"/></svg>';
+  }
+  return '<svg class="wicon" viewBox="0 0 160 100" aria-hidden="true"><path d="M8 50 Q8 43 20 43 L118 43 Q152 50 118 57 L20 57 Q8 57 8 50Z" class="hull"/>' +
+    '<path d="M62 43 L50 5 L76 5 L88 43Z" class="hull"/><path d="M62 57 L50 95 L76 95 L88 57Z" class="hull"/>' +
+    '<ellipse cx="60" cy="22" rx="7" ry="9" class="deck pf"/><ellipse cx="60" cy="78" rx="7" ry="9" class="deck pf"/><ellipse cx="74" cy="12" rx="6" ry="8" class="deck pf"/><ellipse cx="74" cy="88" rx="6" ry="8" class="deck pf"/>' +
+    '<path d="M16 44 L8 26 L24 26 L30 44Z" class="hull"/><path d="M16 56 L8 74 L24 74 L30 56Z" class="hull"/><circle cx="116" cy="50" r="5" class="deck"/><path d="M94 47 L108 47 M94 53 L108 53" class="shade"/></svg>';
+}
+// Вымпел «Арсенал»: щит с красной штриховкой снизу
+function pennantSvg() {
+  return '<svg class="pennant" viewBox="0 0 150 80" aria-hidden="true"><path d="M5 5 H145 V38 Q145 62 75 76 Q5 62 5 38Z" class="pen-body"/><path d="M26 48 H124 Q112 58 75 68 Q38 58 26 48Z" class="pen-red"/><path d="M34 50 L48 60 M50 50 L64 62 M66 50 L80 64 M82 50 L96 62 M98 50 L110 58" class="pen-hatch"/></svg>';
+}
+
 // Значки игроков над полями: вы (зелёный), соперник (серый), бот (монитор AI)
 function whoIcon(kind) {
   if (kind === 'ai') return '<svg class="who ai" viewBox="0 0 40 34" aria-hidden="true"><rect x="3" y="2" width="34" height="23" rx="3"/><path d="M14 31h12M20 25v6"/><text x="20" y="18" text-anchor="middle">AI</text></svg>';
@@ -285,7 +316,7 @@ function arsenalHtml() {
   return '<div class="arsenal"><div class="cap"><span>' + esc(tr('arsenal.title')) + '</span><span class="cnt' + (total === cap ? ' ok' : '') + '">' + esc(tr('arsenal.count', { n: total, m: cap })) + '</span></div>' +
     B.WEAPONS.map(function (w) {
       var max = B.CONFIG.arsenal.max[w];
-      return '<div class="arow"><div class="ainfo"><b>' + esc(tr('w.' + w)) + '</b><span>' + esc(tr('w.' + w + '.d')) + '</span></div>' +
+      return '<div class="arow"><span class="aicon">' + weaponIcon(w) + '</span><div class="ainfo"><b>' + esc(tr('w.' + w)) + '</b><span>' + esc(tr('w.' + w + '.d')) + '</span></div>' +
         '<div class="step"><button class="stepbtn" data-act="arsenal" data-w="' + w + '" data-d="-1" aria-label="' + esc(tr('arsenal.minus', { w: tr('w.' + w) })) + '"' + (a[w] > 0 ? '' : ' disabled') + '>−</button>' +
         '<span class="num" role="status">' + a[w] + '</span>' +
         '<button class="stepbtn" data-act="arsenal" data-w="' + w + '" data-d="1" aria-label="' + esc(tr('arsenal.plus', { w: tr('w.' + w) })) + '"' + (a[w] < max && total < cap ? '' : ' disabled') + '>+</button></div></div>';
@@ -338,31 +369,42 @@ function fxOf(v, defSeat) {
   else fx.torpedoes = L.torpedoes;
   return fx;
 }
-function weaponBarHtml(v) {
-  var me = app.ctrl.seat, arm = v.seats[me].arsenal || { radar: 0, sub: 0, bomber: 0 };
-  var btns = '<button class="wbtn" data-act="weapon" data-w="shoot" aria-pressed="' + (app.weapon === 'shoot') + '">' + esc(tr('w.shoot')) + '</button>' +
-    B.WEAPONS.map(function (w) {
-      return '<button class="wbtn" data-act="weapon" data-w="' + w + '" aria-pressed="' + (app.weapon === w) + '"' + (arm[w] > 0 ? '' : ' disabled') + '>' + esc(tr('w.' + w)) + '<small>×' + arm[w] + '</small></button>';
-    }).join('');
-  return '<div class="wbar" role="group" aria-label="' + esc(tr('w.title')) + '">' + btns + '</div>';
+// Лист арсенала: иконки оружия со счётчиками; выбранное отмечено красными скобками, повторное нажатие снимает выбор
+function arsenalSheetHtml(v) {
+  var arm = v.seats[app.ctrl.seat].arsenal || { radar: 0, sub: 0, bomber: 0 };
+  return '<div class="asheet" role="group" aria-label="' + esc(tr('w.title')) + '">' + B.WEAPONS.map(function (w) {
+    var on = app.weapon === w;
+    return '<button class="aitem' + (on ? ' on' : '') + '" data-act="weapon" data-w="' + w + '" aria-pressed="' + on + '" aria-label="' + esc(tr('w.' + w) + ' ×' + arm[w]) + '"' + (arm[w] > 0 ? '' : ' disabled') + '>' +
+      weaponIcon(w) + '<span class="x">×' + arm[w] + '</span><em>' + esc(tr('w.' + w)) + '</em></button>';
+  }).join('') + '</div>';
+}
+var ARROW_SVG = '<svg viewBox="0 0 70 90" aria-hidden="true"><path d="M8 6 L64 45 L8 84Z" class="arrow-body"/><path d="M16 22 L44 42 M16 34 L50 46 M16 46 L48 56 M16 58 L40 64 M16 70 L30 74" class="arrow-hatch"/></svg>';
+function nameBadge(kind) {
+  if (kind === 'me') { var pr = P.getProfile(); return '<span class="avs" style="background:' + P.avatarColor(pr.avatar) + '">' + esc(P.initial(pr.name)) + '</span>'; }
+  return whoIcon(kind);
 }
 function battleHtml(v) {
   var me = app.ctrl.seat, foe = 1 - me, mine = v.seats[me], other = v.seats[foe], myTurn = v.current === me && !v.gameOver;
   var arm = mine.arsenal || { radar: 0, sub: 0, bomber: 0 };
   if (app.weapon !== 'shoot' && !(arm[app.weapon] > 0)) app.weapon = 'shoot';
+  if (!myTurn) app.arsenalOpen = false;
   var foeBoard = boardSvg({ key: 'f', label: tr('board.foe'), marks: other.marks, sunkShips: other.ships.length ? [] : sunkShips(other.marks), ships: other.ships.length ? other.ships : [], interactive: myTurn, sel: myTurn ? app.sel : -1, weapon: app.weapon, fx: fxOf(v, foe) });
   var myBoard = boardSvg({ key: 'm', label: tr('board.mine'), marks: mine.marks, ships: mine.ships, small: true, fx: fxOf(v, me) });
   var leftRow = other.left ? Object.keys(other.left).sort(function (a, b) { return b - a; }).map(function (len) {
     return '<span class="lw">' + miniShip(Number(len)) + '×' + other.left[len] + '</span>';
   }).join('') : '';
   var fire = myTurn
-    ? weaponBarHtml(v) + '<button class="btn primary full" data-act="fire"' + (app.sel >= 0 ? '' : ' disabled') + '>' + esc(app.sel >= 0 ? tr('fire.' + app.weapon) + ' ' + cellLabel(app.sel) : tr('fire.pick')) + '</button>'
+    ? '<button class="btn primary full" data-act="fire"' + (app.sel >= 0 ? '' : ' disabled') + '>' + esc(app.sel >= 0 ? tr('fire.' + app.weapon) + ' ' + cellLabel(app.sel) : tr('fire.pick')) + '</button>'
     : '';
-  var foeIcon = app.ctrl.local ? 'ai' : 'foe';
-  return '<div class="page wide">' + headHtml('exit', tr('battle.title'), tr('exit.aria')) +
+  var foeIcon = app.ctrl.local ? 'ai' : 'foe', myName = P.getProfile().name || tr('you'), foeName = other.name || tr('foe');
+  var chip = app.weapon !== 'shoot' ? '<button class="wchip" data-act="weapon" data-w="' + app.weapon + '" aria-label="' + esc(tr('w.cancel', { w: tr('w.' + app.weapon) })) + '">' + weaponIcon(app.weapon) + '<span>' + esc(tr('w.' + app.weapon)) + '</span><b>✕</b></button>' : '';
+  return '<div class="page wide">' + headHtml('exit', tr('battle.title'), tr('exit.aria')) + '<div class="redline" aria-hidden="true"></div>' +
+    '<div class="topline"><button class="pennantbtn" data-act="arsenalToggle" aria-expanded="' + !!app.arsenalOpen + '"' + (myTurn ? '' : ' disabled') + '>' + pennantSvg() + '<span>' + esc(tr('w.arsenal')) + '</span></button>' + chip +
     '<div class="status"><span class="turn' + (myTurn ? ' mine' : '') + '" role="status">' + esc(tr(myTurn ? 'turn.you' : 'turn.foe')) + '</span><span class="lastshot" role="status">' + esc(lastShotText(v)) + '</span></div>' +
-    '<div class="boards"><div class="sheet foe"><div class="cap">' + whoIcon(foeIcon) + '<span>' + esc(tr('board.foe')) + '</span></div>' + foeBoard + '</div>' +
-    '<div class="sheet mine"><div class="cap">' + whoIcon('me') + '<span>' + esc(tr('board.mine')) + '</span></div>' + myBoard + '</div></div>' +
+    (app.arsenalOpen && myTurn ? arsenalSheetHtml(v) : '') + '</div>' +
+    '<div class="boards"><div class="sheet foe"><div class="cap">' + nameBadge(foeIcon) + '<span>' + esc(foeName) + '</span></div>' + foeBoard + '</div>' +
+    '<div class="turnarrow ' + (myTurn ? 'mt' : 'ft') + '" aria-hidden="true">' + ARROW_SVG + '</div>' +
+    '<div class="sheet mine"><div class="cap">' + nameBadge('me') + '<span>' + esc(myName) + '</span></div>' + myBoard + '</div></div>' +
     (leftRow ? '<div class="leftrow"><span>' + esc(tr('left.foe')) + '</span>' + leftRow + '</div>' : '') + fire + '</div>';
 }
 
@@ -441,7 +483,7 @@ function render() {
   appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml();
 }
 function startGame(ctrl) {
-  app.ctrl = ctrl; app.screen = 'game'; app.place = newPlace(); app.weapon = 'shoot'; app.sel = -1; app.hover = -1; app.confirm = false; app.animTurns = -1;
+  app.ctrl = ctrl; app.screen = 'game'; app.place = newPlace(); app.weapon = 'shoot'; app.arsenalOpen = false; app.sel = -1; app.hover = -1; app.confirm = false; app.animTurns = -1;
   ctrl.subscribe(function () { if (app.ctrl === ctrl) render(); });
   render();
 }
@@ -472,7 +514,7 @@ appEl.addEventListener('click', function (e) {
     case 'stay': app.confirm = false; render(); break;
     case 'concede': app.confirm = false; ctrl.send({ type: 'concede', seat: ctrl.seat }); render(); break;
     case 'menu': toMenu(); break;
-    case 'again': ctrl.restart(); app.place = newPlace(); app.weapon = 'shoot'; app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
+    case 'again': ctrl.restart(); app.place = newPlace(); app.weapon = 'shoot'; app.arsenalOpen = false; app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
     case 'pick': app.place.pick = Number(el.getAttribute('data-len')); app.place.msg = ''; render(); break;
     case 'rotate': app.place.dir = app.place.dir === 'h' ? 'v' : 'h'; render(); break;
     case 'random': app.place.ships = B.randomLayout(); app.place.pick = null; app.place.msg = ''; render(); break;
@@ -484,7 +526,8 @@ appEl.addEventListener('click', function (e) {
       if (nv >= 0 && nv <= B.CONFIG.arsenal.max[w] && arsenalTotal(a2) + d2 <= B.CONFIG.arsenal.total) { a2[w] = nv; render(); }
       break;
     }
-    case 'weapon': app.weapon = el.getAttribute('data-w'); render(); break;
+    case 'arsenalToggle': app.arsenalOpen = !app.arsenalOpen; render(); break;
+    case 'weapon': { var wn = el.getAttribute('data-w'); app.weapon = app.weapon === wn ? 'shoot' : wn; app.arsenalOpen = false; render(); break; }
     case 'fire': if (app.sel >= 0) { var i2 = app.sel, wp = app.weapon; app.sel = -1; app.weapon = 'shoot'; ctrl.send({ type: wp, seat: ctrl.seat, x: i2 % N, y: Math.floor(i2 / N) }); } break;
   }
 });
