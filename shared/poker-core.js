@@ -10,7 +10,7 @@
 
   function now() { return Date.now(); }
   // Раздача карт в начале руки: карты по очереди летят каждому игроку, пока идёт раздача, ходить нельзя (cfg.dealMs переопределяет время, в тестах 0)
-  function dealTime(cfg, n) { return cfg.dealMs !== undefined ? cfg.dealMs : (reduced() ? 0 : 400 * n + 600); }
+  function dealTime(cfg, n) { return cfg.dealMs !== undefined ? cfg.dealMs : (reduced() ? 0 : 400 * n + 1400); }
   function countInHand(st) { return st.seats.filter(function (s) { return s.inHand; }).length; }
   function reduced() { try { return root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 

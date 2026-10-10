@@ -90,10 +90,10 @@ function handName(key) { return tr('hand.' + key); }
 
 // ===== Размещение мест за столом =====
 function ring(n) {
-  // Места соперников в процентах стола: боковые стоят выше, по бокам от общих карт; ближе к краю на узком экране
+  // Места соперников в процентах стола: боковые стоят выше, по бокам от общих карт; на узком экране ещё выше (над рядом общих карт) и ближе к краю
   var w = document.documentElement.clientWidth || window.innerWidth, k = w < 360 ? 0.86 : w < 500 ? 0.9 : 1;
   var t = { 1: [[50, 14]], 2: [[27, 20], [73, 20]], 3: [[12, 50], [50, 14], [88, 50]], 4: [[12, 52], [34, 17], [66, 17], [88, 52]], 5: [[11, 58], [24, 25], [50, 13], [76, 25], [89, 58]] }[n] || [];
-  return t.map(function (p) { return { x: 50 + (p[0] - 50) * k, y: p[1] + (w < 500 && Math.abs(p[0] - 50) > 35 ? 18 : 0) }; });
+  return t.map(function (p) { return { x: 50 + (p[0] - 50) * k, y: p[1] + (w < 500 && Math.abs(p[0] - 50) > 35 ? -14 : 0) }; });
 }
 function seatColor(i) { return 'oklch(' + (window.PlatformTheme.isDark() ? 0.42 : 0.86) + ' 0.07 ' + (i * 70 + 20) + ')'; }
 function statusText(s) { return s.k ? ICON[s.k] + tr('st.' + s.k, { n: fmt(s.n || 0) }) : ''; }
@@ -288,7 +288,7 @@ function launchDeal() {
   var o = origin.getBoundingClientRect(), cx = o.left + o.width / 2, cy = o.top + o.height / 2;
   Array.prototype.forEach.call(appEl.querySelectorAll('.card.dealfly[data-fly]'), function (c) {
     var key = c.getAttribute('data-fly');
-    if (app.deal.fx[key]) return;
+    if (app.deal.fx[key] || key.charAt(0) === 'b') return;                  // общие карты летят с фиксированного места
     var anim = c.style.animation;
     c.style.animation = 'none';                                           // замер без учёта самой анимации
     var r = c.getBoundingClientRect();
@@ -325,7 +325,11 @@ function tableHtml(m) {
   });
   var shown = m.board.filter(function (c) { return c.code; }).length;
   if (shown < app.bseen) { app.bseen = shown; app.bfrom = shown; } else if (shown > app.bseen) { app.bfrom = app.bseen; app.bseen = shown; }
-  var board = m.board.map(function (c, b) { return cardHtml(c.code, 'board-card', c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))); }).join('');
+  var board = m.board.map(function (c, b) {
+    // общие карты тоже раздаются: после карт игрокам по очереди выезжают пять рубашек
+    var bf = deal && dealOrder.n ? { cls: 'dealfly ', attrs: ' data-fly="b' + b + '" style="animation-delay:' + (150 + 2 * dealOrder.n * 180 + b * 140) + 'ms;--sx:0px;--sy:-70px"' } : { cls: '', attrs: '' };
+    return cardHtml(c.code, 'board-card', bf.cls + (c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))), bf.attrs);
+  }).join('');
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
   var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c, ci) { var f = fly(0, ci, 'me:' + ci); return cardHtml(c.code, 'mine-card', f.cls + (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : ''), f.attrs); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
