@@ -129,7 +129,7 @@
     selectedId = L.idFromHash(location.hash, games);
     render();
     // После закрытия возвращаем фокус на карточку, чтобы не потерять место при работе с клавиатуры
-    if (wasOpen && selectedId === null && lastCard) lastCard.focus();
+    if (wasOpen && selectedId === null && lastCard) lastCard.focus({ preventScroll: true });
   }
 
   window.addEventListener('hashchange', syncFromHash);
