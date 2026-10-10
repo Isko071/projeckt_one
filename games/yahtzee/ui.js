@@ -9,7 +9,7 @@ var PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8
 
 var game = null;
 var app = {
-  screen: 'start', mode: 'cpu', level: 'hard', n1: window.PlatformProfile.getProfile().name, n2: tr('player2'),
+  screen: 'start', mode: 'cpu', level: 'hard',
   thinking: false, rolling: false, display: null, modal: null
 };
 var gameToken = 0; // увеличивается при выходе из партии, чтобы остановить ход компьютера и анимацию
@@ -45,8 +45,8 @@ function sleep(ms) {
 }
 
 function startGame() {
-  var first = app.n1.trim() || tr('player1');
-  var second = app.mode === 'cpu' ? tr('computer') : (app.n2.trim() || tr('player2'));
+  var first = (window.PlatformProfile.getProfile().name || '').trim() || tr('player1');       // ник берётся из профиля
+  var second = app.mode === 'cpu' ? tr('computer') : tr('player2');
   gameToken++;
   app.thinking = false;
   app.rolling = false;
@@ -308,11 +308,7 @@ function startHtml() {
       '<button class="mode-btn" data-key="level-easy" data-level="easy" aria-pressed="' + (app.level === 'easy') + '">' + esc(tr('start.levelEasy')) + '</button>' +
       '<button class="mode-btn" data-key="level-hard" data-level="hard" aria-pressed="' + (app.level === 'hard') + '">' + esc(tr('start.levelHard')) + '</button>' +
     '</div></div>' : '') +
-    (online ? '<div class="muted-text">' + esc(tr('start.onlineSub')) + '</div>' : '<div class="field players"><div class="field-title">' + esc(tr('start.players')) + '</div>' +
-      '<input class="name-input" data-name="n1" value="' + esc(app.n1) + '" maxlength="20" aria-label="' + esc(tr('start.name1')) + '">' +
-      (cpu ? '<div class="name-fixed">' + esc(tr('computer')) + '</div>'
-           : '<input class="name-input" data-name="n2" value="' + esc(app.n2) + '" maxlength="20" aria-label="' + esc(tr('start.name2')) + '">') +
-    '</div>') +
+    (online ? '<div class="muted-text">' + esc(tr('start.onlineSub')) + '</div>' : '') +
     '<div class="start-actions"><button class="btn-play" id="play" data-key="play">' + esc(tr('start.play')) + '</button>' +
       '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
@@ -402,11 +398,6 @@ function closeModal() {
   overlay.classList.add('closing');
   setTimeout(function () { app.modal = null; render(); }, 180);
 }
-
-appEl.addEventListener('input', function (e) {
-  var name = e.target.getAttribute('data-name');
-  if (name) app[name] = e.target.value;
-});
 
 appEl.addEventListener('click', function (e) {
   var btn = e.target.closest('button');
