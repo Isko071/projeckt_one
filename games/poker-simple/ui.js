@@ -15,7 +15,7 @@ var ICON = { win: '★ ', fold: '✕ ', allin: '▲ ', turn: '● ', check: '✓
 var IDLE_MS = 30000, ASK_MS = 7000;
 
 var app = {
-  screen: 'start', mode: 'bots', rules: false, menu: false, combos: false, modal: null, prefs: loadPrefs(), bet: [], sheet: null,
+  deal: null, screen: 'start', mode: 'bots', rules: false, menu: false, combos: false, modal: null, prefs: loadPrefs(), bet: [], sheet: null,
   code: '', codeBad: false, bseen: 0, bfrom: 0, rooms: null, banner: null, err: null, busy: false, copied: false, invite: null
 };
 var T = null;            // стол: PokerCore (против ботов или онлайн)
@@ -74,13 +74,13 @@ function bannerHtml() {
 }
 
 // ===== Карты =====
-function cardHtml(code, size, extra) {
-  var cls = 'card ' + size + (extra ? ' ' + extra : '');
-  if (code === null) return '<div class="' + cls + ' back"></div>';
-  if (code === '') return '<div class="' + cls + ' empty"></div>';
+function cardHtml(code, size, extra, attrs) {
+  var cls = 'card ' + size + (extra ? ' ' + extra : ''), at = attrs || '';
+  if (code === null) return '<div class="' + cls + ' back"' + at + '></div>';
+  if (code === '') return '<div class="' + cls + ' empty"' + at + '></div>';
   var rank = code.charAt(0) === 'T' ? '10' : code.charAt(0), suit = code.charAt(1), sym = tr('suit.' + suit);
   var red = suit === 'H' || suit === 'D';
-  return '<div class="' + cls + (red ? ' red' : '') + '"><div class="tl">' + rank + '<br>' + sym + '</div><div class="mid">' + sym + '</div><div class="br">' + rank + '<br>' + sym + '</div></div>';
+  return '<div class="' + cls + (red ? ' red' : '') + '"' + at + '><div class="tl">' + rank + '<br>' + sym + '</div><div class="mid">' + sym + '</div><div class="br">' + rank + '<br>' + sym + '</div></div>';
 }
 function miniHtml(code) {
   var rank = code.charAt(0) === 'T' ? '10' : code.charAt(0), suit = code.charAt(1);
@@ -274,13 +274,50 @@ function errHtml() {
   return '<div class="page center" data-key="page">' + headHtml('toPick', tr('online.title'), tr('back')) + '<div class="note-card errcard"><div style="font-size:20px;font-weight:700">' + esc(tr('err.' + k)) + '</div><p>' + esc(tr('err.' + k + 'Text')) + '</p><button class="btn primary" data-act="toPick" data-key="errBtn">' + esc(tr('err.toPick')) + '</button></div></div>';
 }
 
+// ===== Раздача в начале руки =====
+// Пока m.dealMs > 0, карты вылетают из центра стола к местам; смещение каждой карты считается один раз и запоминается в app.deal.fx
+function dealState(m) {
+  if (!(m.dealMs > 0)) { app.deal = null; return null; }
+  if (!app.deal || app.deal.round !== m.round) app.deal = { round: m.round, fx: {} };
+  return app.deal;
+}
+function launchDeal() {
+  if (!app.deal) return;
+  var origin = appEl.querySelector('.area .center');
+  if (!origin) return;
+  var o = origin.getBoundingClientRect(), cx = o.left + o.width / 2, cy = o.top + o.height / 2;
+  Array.prototype.forEach.call(appEl.querySelectorAll('.card.dealfly[data-fly]'), function (c) {
+    var key = c.getAttribute('data-fly');
+    if (app.deal.fx[key]) return;
+    var anim = c.style.animation;
+    c.style.animation = 'none';                                           // замер без учёта самой анимации
+    var r = c.getBoundingClientRect();
+    c.style.animation = anim;
+    var fx = app.deal.fx[key] = { sx: Math.round(cx - (r.left + r.width / 2)), sy: Math.round(cy - (r.top + r.height / 2)) };
+    c.style.setProperty('--sx', fx.sx + 'px'); c.style.setProperty('--sy', fx.sy + 'px');
+  });
+}
+
 // ===== Стол =====
 function tableHtml(m) {
   var me = m.seats[0], opp = m.seats.slice(1), pos = ring(opp.length);
   var seatsHtml = '', betsHtml = '';
+  var deal = dealState(m), dealOrder = {};
+  if (deal) {                                           // порядок раздачи: по кругу от места после кнопки, сначала по первой карте, потом по второй
+    var ns = m.seats.length, di = 0, withCards = [];
+    m.seats.forEach(function (x, i) { if (x.dealer) di = i; });
+    for (var q = 1; q <= ns; q++) { var si = (di + q) % ns; if (m.seats[si].cards.length) withCards.push(si); }
+    withCards.forEach(function (si, r) { dealOrder[si] = r; });
+    dealOrder.n = withCards.length;
+  }
+  var fly = function (seatPos, ci, key) {
+    if (!deal || dealOrder[seatPos] === undefined) return { cls: '', attrs: '' };
+    var fx = deal.fx[key], d = 150 + (ci * dealOrder.n + dealOrder[seatPos]) * 180;
+    return { cls: 'dealfly ', attrs: ' data-fly="' + key + '" style="animation-delay:' + d + 'ms' + (fx ? ';--sx:' + fx.sx + 'px;--sy:' + fx.sy + 'px' : '') + '"' };
+  };
   opp.forEach(function (s, k) {
     var p = pos[k], av = avatarOf(s, k + 1), bx = 50 + (p.x - 50) * 0.62, by = p.y < 45 ? p.y + 17 : p.y - 2;
-    var cards = s.cards.map(function (c) { return cardHtml(c.code, 'opp-card', (c.fold ? 'fold ' : '') + (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('');
+    var cards = s.cards.map(function (c, ci) { var f = fly(k + 1, ci, 'o' + s.index + ':' + ci); return cardHtml(c.code, 'opp-card', f.cls + (c.fold ? 'fold ' : '') + (c.flip ? 'flip d' + k + ' ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : ''), f.attrs); }).join('');
     seatsHtml += '<div class="seat' + (s.folded || s.out ? ' folded' : '') + (s.turn ? ' active' : '') + '" data-key="o' + s.index + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<div class="status">' + esc(statusText(s.status)) + '</div><div class="box"><div class="ring' + (s.turn ? ' active' : '') + '"' + (s.turn ? ringStyle(s.timer) : '') + '><div class="av" style="background:' + av.bg + '">' + esc(av.letter) + '</div></div>' +
       '<div class="cards">' + cards + '</div><div class="nick">' + esc(s.name) + '</div></div></div>';
@@ -290,7 +327,7 @@ function tableHtml(m) {
   if (shown < app.bseen) { app.bseen = shown; app.bfrom = shown; } else if (shown > app.bseen) { app.bfrom = app.bseen; app.bseen = shown; }
   var board = m.board.map(function (c, b) { return cardHtml(c.code, 'board-card', c.code && b >= app.bfrom ? 'flip d' + (b - app.bfrom) : (c.hl ? 'hl' : (c.dim ? 'dim' : ''))); }).join('');
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
-  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c) { return cardHtml(c.code, 'mine-card', (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : '')); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
+  var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c, ci) { var f = fly(0, ci, 'me:' + ci); return cardHtml(c.code, 'mine-card', f.cls + (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : ''), f.attrs); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
   var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
@@ -306,6 +343,7 @@ function actionsHtml(m) {
   if (m.stage || m.phase === 'waiting' || m.phase === 'settled' || m.ask) return '';
   var wait = function (t) { return '<div class="actions" data-key="actions"><div class="btn-row"><button class="btn wait" disabled>' + esc(t) + '</button></div></div>'; };
   var la = m.me.la;
+  if (m.dealMs > 0) return wait(tr('act.dealing'));
   if (m.pending) return wait(tr('act.sent'));
   if (m.me.holding) return wait(tr('act.waitCard'));
   if (!la) return wait(m.me.waitingFor ? tr('act.waitFor', { name: m.me.waitingFor }) : tr('act.waitBot'));
@@ -432,10 +470,14 @@ function screenHtml() {
   return startHtml();
 }
 function render() {
+  // чат узнаёт о новых сообщениях из вида стола: без этого отправленные сообщения остаются «Не отправлено» и показываются дважды
+  var cv = T && T.ctrl && T.ctrl.getView ? T.ctrl.getView() : null;
+  if (cv) chat.update(cv, cv.status === 'playing' ? 'game' : 'lobby');
   var tpl = document.createElement('template');
   tpl.innerHTML = '<div class="screen" data-key="' + (T && app.screen === 'wait' ? 'wait' : app.screen) + '">' + screenHtml() + '</div>' + (app.screen === 'game' ? chat.panelHtml({ mode: 'game', myTurn: !!(T && T.model().me && T.model().me.la) }) + chat.extraHtml() : '') + modalHtml();
   var focus = document.activeElement && document.activeElement.id === 'code' ? document.activeElement.selectionStart : -1;
   morph(appEl, tpl.content);
+  launchDeal();
   chat.afterRender();
   var auto = appEl.querySelector('[data-autofocus]');
   if (auto && !auto.closest('.scrim').contains(document.activeElement)) auto.focus();

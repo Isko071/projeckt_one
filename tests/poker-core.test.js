@@ -17,7 +17,7 @@ function fakeBackend() {
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const FAST = { botMs: 1, holdMs: 1, flipMs: 5 };
+const FAST = { botMs: 1, holdMs: 1, flipMs: 5, dealMs: 0 };
 
 async function playHand(t, pick) {
   for (let i = 0; i < 400; i++) {
@@ -112,7 +112,7 @@ test('онлайн-стол: свои действия уходят на сер�
   const seats = [{ id: 'me', name: 'Аня', kind: 'human', chips: 4000 }, { id: 'u2', name: 'Борис', kind: 'human', chips: 4000 }];
   let st = P.reduce(P.init(seats, { variant: 'simple', ante: 50, tableSize: 4 }, null), { type: 'deal', seat: 0 }, () => 0.5).state;
   const ctrl = fakeCtrl('me');
-  const t = ctx.PokerCore.createOnline({ ctrl, wallet: W, source: 'poker-simple', uid: 'me', variant: 'simple' });
+  const t = ctx.PokerCore.createOnline({ ctrl, wallet: W, source: 'poker-simple', uid: 'me', variant: 'simple', dealMs: 0 });
   const before = W.getBalance();
   ctrl.push(view(ctx, st));
   assert.ok(W.getBalance() < before, 'начальная ставка списана при получении раздачи');
@@ -147,7 +147,7 @@ test('онлайн-стол: свои действия уходят на сер�
 test('онлайн-стол до начала игры отдаёт модель комнаты ожидания', () => {
   const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
   const ctrl = fakeCtrl('me');
-  const t = ctx.PokerCore.createOnline({ ctrl, wallet: W, source: 'poker-simple', uid: 'me', variant: 'simple' });
+  const t = ctx.PokerCore.createOnline({ ctrl, wallet: W, source: 'poker-simple', uid: 'me', variant: 'simple', dealMs: 0 });
   ctrl.push({ code: 'K7QX2', status: 'lobby', size: 4, variant: 'simple', ante: 50, minBet: 100, members: [{ uid: 'me', name: 'Аня', avatar: 0, seat: 0 }], state: null, timers: [], startIn: 14000, owner: 'me', receivedAt: Date.now(), chat: [], seat: 0, joined: true, closed: false, private: false });
   const m = t.model();
   assert.equal(m.lobby, true);
@@ -169,5 +169,19 @@ test('стол с ботами: при достигнутом дневном п�
   assert.equal(W.getBalance(), start, 'ставка не списана');
   await playHand(t, passive);
   assert.equal(W.getBalance(), start, 'выигрыш не начислен, баланс прежний');
+  t.leave();
+});
+
+test('раздача в начале руки: пока карты раздаются, ходить нельзя и ход не подсвечен, потом всё доступно', async () => {
+  const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 3, ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST, { dealMs: 150, botMs: 1 }));
+  t.begin();
+  const m = t.model();
+  assert.ok(m.dealMs > 0, 'идёт раздача');
+  assert.equal(m.me.la, null, 'ходить нельзя');
+  assert.ok(m.seats.every((s) => !s.turn), 'никто не подсвечен');
+  assert.equal(t.act('check'), false);
+  await wait(260);
+  assert.equal(t.model().dealMs, 0, 'раздача закончилась');
   t.leave();
 });

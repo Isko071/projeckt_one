@@ -9,6 +9,9 @@
   var HOLD_MS = 1600, FLIP_MS = 2800;    // пауза перед открытием карты и время переворота при вскрытии (в тестах сокращаются: cfg.holdMs, cfg.flipMs, cfg.botMs)
 
   function now() { return Date.now(); }
+  // Раздача карт в начале руки: карты по очереди летят каждому игроку, пока идёт раздача, ходить нельзя (cfg.dealMs переопределяет время, в тестах 0)
+  function dealTime(cfg, n) { return cfg.dealMs !== undefined ? cfg.dealMs : (reduced() ? 0 : 400 * n + 600); }
+  function countInHand(st) { return st.seats.filter(function (s) { return s.inHand; }).length; }
   function reduced() { try { return root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
   // ===== Модель экрана из состояния партии =====
@@ -27,7 +30,7 @@
     if (!s.inHand) return { k: s.sitOut ? 'skip' : '' };
     if (s.folded) return { k: 'fold' };
     if (s.allIn) return { k: 'allin' };
-    if (st.current === s.index && !ctx.holding && !ctx.stage) return { k: isMe ? 'yourTurn' : 'turn' };
+    if (st.current === s.index && !ctx.holding && !ctx.stage && !ctx.dealMs) return { k: isMe ? 'yourTurn' : 'turn' };
     if (s.acted) {
       if (s.last === 'check') return { k: 'check' };
       if (s.last === 'call') return { k: 'call' };
@@ -79,7 +82,7 @@
       }
       return {
         index: i, isMe: isMe, id: s.id, name: s.name, kind: s.kind, chips: s.chips, bet: st.phase === 'settled' ? 0 : s.bet, total: s.total, folded: s.folded, allIn: s.allIn, inHand: s.inHand, out: !s.active,
-        turn: st.current === i && !holding && !ctx.stage && st.phase !== 'settled', timer: ctx.timerOf ? ctx.timerOf(i) : null, status: seatStatus(ctx, s), cards: cards, winner: !!wc.win[i],
+        turn: st.current === i && !holding && !ctx.dealMs && !ctx.stage && st.phase !== 'settled', timer: ctx.timerOf ? ctx.timerOf(i) : null, status: seatStatus(ctx, s), cards: cards, winner: !!wc.win[i],
         dealer: st.button === i, sb: st.sbSeat === i, bb: st.bbSeat === i
       };
     });
@@ -88,11 +91,11 @@
       if (b < shown) board.push({ code: st.board[b], hl: showdown && !!wc.codes[st.board[b]], dim: showdown && !wc.codes[st.board[b]] });
       else board.push({ code: null });
     }
-    var la = (!ctx.stage && !holding && !ctx.pending && st.phase !== 'settled' && st.current === me) ? PK.legalActions(st, me) : null;
+    var la = (!ctx.stage && !holding && !ctx.dealMs && !ctx.pending && st.phase !== 'settled' && st.current === me) ? PK.legalActions(st, me) : null;
     var roundKey = (ctx.stage === 'flip' || ctx.stage === 'summary' || showdown) ? 'show' : ({ preflop: 'pre', flop: 'flop', turn: 'turn', river: 'river' }[st.phase] || 'wait');
     var meSeat = st.seats[me];
     return {
-      variant: st.variant, phase: st.phase, stage: ctx.stage, round: st.round, roundKey: roundKey, pot: st.pot, currentBet: st.currentBet, minBet: st.minBet, ante: st.ante, smallBlind: st.smallBlind, bigBlind: st.bigBlind, mandatory: st.mandatory,
+      variant: st.variant, phase: st.phase, stage: ctx.stage, round: st.round, dealMs: ctx.dealMs || 0, roundKey: roundKey, pot: st.pot, currentBet: st.currentBet, minBet: st.minBet, ante: st.ante, smallBlind: st.smallBlind, bigBlind: st.bigBlind, mandatory: st.mandatory,
       board: board, seats: seats, me: { index: me, stack: ctx.stack, chips: meSeat.chips, bet: meSeat.bet, folded: meSeat.folded, la: la, holding: holding, waiting: !la && !ctx.stage && !holding && st.phase !== 'settled' && st.phase !== 'waiting', waitingFor: st.current >= 0 && st.current !== me ? st.seats[st.current].name : '' },
       caption: holding ? ctx.caption : '', pending: !!ctx.pending, summary: ctx.stage === 'summary' || ctx.stage === 'short' ? summaryOf(st, me) : null,
       notice: ctx.notice || null, toasts: ctx.toasts || [], ask: ctx.ask || null, ready: null, banner: ctx.banner || null
@@ -114,7 +117,7 @@
   function Solo(cfg) {
     this.cfg = cfg; this.W = cfg.wallet; this.source = cfg.source || 'poker';
     this.holdMs = cfg.holdMs !== undefined ? cfg.holdMs : (reduced() ? 400 : HOLD_MS); this.flipMs = cfg.flipMs !== undefined ? cfg.flipMs : (reduced() ? 600 : FLIP_MS);
-    this.listeners = []; this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.timer = null; this.spent = 0; this.stopped = false;
+    this.listeners = []; this.stage = null; this.holdUntil = 0; this.dealUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.timer = null; this.spent = 0; this.stopped = false;
     var balance = this.W.getBalance(), n = cfg.size;
     this.W.capStart(now());
     var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n).map(function (b) { return Object.assign(b, { chips: balance }); }));
@@ -126,6 +129,7 @@
   Solo.prototype.subscribe = function (fn) { this.listeners.push(fn); };
   Solo.prototype.emit = function () { var m = this; this.listeners.forEach(function (fn) { try { fn(m); } catch (e) { /* подписчик не должен ломать стол */ } }); };
   Solo.prototype.holding = function () { return now() < this.holdUntil; };
+  Solo.prototype.dealLeft = function () { return Math.max(0, this.dealUntil - now()); };
   Solo.prototype.minToPlay = function () { return this.st.variant === 'simple' ? this.st.ante : this.st.bigBlind; };
   Solo.prototype.begin = function () { this.startHand(); };
   Solo.prototype.startHand = function () {
@@ -138,6 +142,8 @@
     var r = PK.reduce(st, { type: 'deal', seat: 0 }, Math.random);
     if (!r.ok) { this.stage = 'broke'; this.emit(); return; }
     this.st = r.state; this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = '';
+    var dm = dealTime(this.cfg, countInHand(this.st)); this.dealUntil = now() + dm;
+    if (dm > 0) setTimeout(function () { if (!self.stopped) self.emit(); }, dm + 30);
     if (this.free) this.notice = { k: 'free', until: now() + 6000 };
     W.markPlayed(); W.countPlay(this.source);
     this.spendSync(); this.emit(); this.pump();
@@ -162,7 +168,7 @@
     clearTimeout(this.timer);
     var st = this.st, self = this;
     if (this.stage || this.stopped || st.phase === 'waiting' || st.phase === 'settled' || st.current <= 0) return;
-    var wait = Math.max(0, this.holdUntil - now()) + (this.cfg.botMs !== undefined ? this.cfg.botMs : (reduced() ? 200 : 1300 + Math.random() * 700));
+    var wait = Math.max(0, this.holdUntil - now(), this.dealLeft()) + (this.cfg.botMs !== undefined ? this.cfg.botMs : (reduced() ? 200 : 1300 + Math.random() * 700));
     this.timer = setTimeout(function () {
       if (self.stopped || self.stage || self.st.current <= 0) return;
       var a = Bots.nextBotAction(self.st, Math.random), cur = self.st.current;
@@ -183,7 +189,7 @@
     } else { this.stage = 'short'; this.emit(); }
   };
   Solo.prototype.act = function (type, extra) {
-    if (this.stopped || this.stage || this.st.current !== 0 || this.holding()) return false;
+    if (this.stopped || this.stage || this.st.current !== 0 || this.holding() || this.dealLeft() > 0) return false;
     return this.apply(Object.assign({ type: type, seat: 0 }, extra || {}));
   };
   Solo.prototype.back = function () { this.stage = null; this.startHand(); };
@@ -192,13 +198,13 @@
   Solo.prototype.tick = function () { if (this.notice && now() > this.notice.until) { this.notice = null; this.emit(); } };
   Solo.prototype.model = function () {
     var me = this.st.seats[0];
-    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: this.free ? me.chips : this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
+    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), dealMs: this.dealLeft(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: this.free ? me.chips : this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
   };
 
   // ===== Онлайн-стол =====
   function Online(cfg) {
     this.cfg = cfg; this.W = cfg.wallet; this.source = cfg.source || 'poker'; this.ctrl = cfg.ctrl; this.uid = cfg.uid;
-    this.listeners = []; this.v = null; this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.spent = 0; this.pending = false;
+    this.listeners = []; this.v = null; this.stage = null; this.holdUntil = 0; this.dealUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.spent = 0; this.pending = false;
     this.round = -1; this.settledRound = -1; this.strikes = 0; this.toasts = []; this.askAt = 0; this.joined = false; this.stopped = false; this.members = null; this.autoAck = true;
     var self = this;
     this.ctrl.onChange(function (v) { self.onView(v); });
@@ -207,6 +213,7 @@
   Online.prototype.subscribe = function (fn) { this.listeners.push(fn); };
   Online.prototype.emit = function () { var m = this; this.listeners.forEach(function (fn) { try { fn(m); } catch (e) { /* подписчик не должен ломать стол */ } }); };
   Online.prototype.holding = function () { return now() < this.holdUntil; };
+  Online.prototype.dealLeft = function () { return Math.max(0, this.dealUntil - now()); };
   Online.prototype.toast = function (k, name) { this.toasts.push({ k: k, name: name, until: now() + 4000 }); };
   Online.prototype.onView = function (v) {
     if (this.stopped) return;
@@ -224,6 +231,8 @@
     var mine = v.seat === null ? null : st.seats[v.seat];
     if (st.round !== this.round) {                      // началась новая раздача
       this.round = st.round; if (this.stage !== 'broke') this.stage = null; this.holdUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.spent = 0;
+      var dm = st.phase === 'preflop' ? dealTime(this.cfg, countInHand(st)) : 0; this.dealUntil = now() + dm;
+      if (dm > 0) setTimeout(function () { if (!self.stopped) self.emit(); }, dm + 30);
       if (mine && mine.inHand) { this.W.markPlayed(); this.W.countPlay(this.source); }
     }
     if (mine && !(st.phase === 'settled' && this.settledRound === st.round)) this.spendSync(mine);
@@ -262,7 +271,7 @@
   Online.prototype.send = function (action) { var self = this; this.pending = true; this.emit(); return Promise.resolve(this.ctrl.send(action)).then(null, function () { self.pending = false; self.emit(); }); };
   Online.prototype.act = function (type, extra) {
     var v = this.v;
-    if (this.stopped || !v || !v.state || this.stage || this.holding() || v.state.current !== v.seat) return false;
+    if (this.stopped || !v || !v.state || this.stage || this.holding() || this.dealLeft() > 0 || v.state.current !== v.seat) return false;
     this.send(Object.assign({ type: type }, extra || {}));
     return true;
   };
@@ -300,7 +309,7 @@
     var mineSeat = v.seat === null ? 0 : v.seat, readyMap = {};
     (v.ready || []).forEach(function (u) { readyMap[u] = true; });
     var stage = this.stage;
-    var model = buildModel({ mode: 'online', st: v.state, me: mineSeat, stage: stage, holding: this.holding(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: v.state.seats[mineSeat] ? v.state.seats[mineSeat].chips : 0, pending: this.pending,
+    var model = buildModel({ mode: 'online', st: v.state, me: mineSeat, stage: stage, holding: this.holding(), dealMs: this.dealLeft(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: v.state.seats[mineSeat] ? v.state.seats[mineSeat].chips : 0, pending: this.pending,
       notice: this.notice, toasts: this.toasts.slice(), ready: stage === 'ready' || v.state.phase === 'settled' ? readyMap : null,
       timerOf: function (i) { var t = v.timers.filter(function (x) { return x.seat === i; })[0]; return t ? { stage: t.stage, ms: Math.max(0, t.ms - (now() - v.receivedAt)) } : null; },
       ask: this.askInfo() });
