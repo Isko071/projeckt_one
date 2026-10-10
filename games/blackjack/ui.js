@@ -221,13 +221,15 @@ function activeNotice() {
 // ===== Плавное вскрытие =====
 // Раздача заканчивается мгновенно (перебор, 21), но на экране всё идёт по шагам: пауза, чтобы осмыслить свою руку,
 // переворот закрытой карты дилера, карты дилера по одной и только потом итог.
-var SEQ = { pause: 1100, flip: 550, gap: 850, after: 900 };
+var SEQ = { pause: 1100, gap: 850, look: 700, flip: 550, flipStep: 400, after: 900 };
+// Дилер сначала добирает карты (рубашкой вверх, по одной), и только когда закончил, вскрывает ВСЕ свои карты разом
 function scheduleSeq(st) {
-  var r = reduced(), t0 = now();
-  var seq = { round: st.round, revealAt: t0 + (r ? 0 : SEQ.pause), times: {}, end: 0 };
-  var t = seq.revealAt + (r ? 0 : SEQ.flip);
-  for (var i = 2; i < st.dealer.cards.length; i++) { t += r ? 0 : SEQ.gap; seq.times[i] = t; }
-  seq.end = t + (r ? 0 : SEQ.after);
+  var r = reduced(), t0 = now(), n = st.dealer.cards.length;
+  var seq = { round: st.round, revealAt: 0, times: {}, end: 0 };
+  var t = t0 + (r ? 0 : SEQ.pause);
+  for (var i = 2; i < n; i++) { t += r ? 0 : SEQ.gap; seq.times[i] = t; }
+  seq.revealAt = t + (r ? 0 : SEQ.look);
+  seq.end = seq.revealAt + (r ? 0 : SEQ.flip + SEQ.flipStep * Math.max(0, n - 2) + SEQ.after);
   app.seq = seq; app.resultAt = seq.end;
   if (!r) [seq.revealAt].concat(Object.keys(seq.times).map(function (k) { return seq.times[k]; }), [seq.end]).forEach(function (ts) { setTimeout(render, Math.max(0, ts - now()) + 20); });
 }
@@ -252,7 +254,12 @@ function startLocal() {
   G = { mode: 'bot', state: st, settledRound: -1 };
   app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.fx = {}; app.pending = false;
   render();
-  localDeal();
+  later(localDeal, 900);                              // сначала стол появляется, потом раздают
+}
+function later(fn, ms) {
+  var token = gameToken;
+  if (reduced() || !ms) { fn(); return; }
+  setTimeout(function () { if (token === gameToken && G && G.mode === 'bot') fn(); }, ms);
 }
 function lDispatch(action) {
   var before = G.state.phase, r = BJ.reduce(G.state, action);
@@ -294,7 +301,7 @@ function localNext() {
   G.state.seats.forEach(function (x) { if (x.active) x.chips = VIRTUAL_CHIPS; });
   app.seen = {}; app.fx = {}; app.resultAt = 0; app.seq = null;
   render();
-  localDeal();
+  later(localDeal, 450);
 }
 
 // ===== Сессия «Онлайн» =====
@@ -592,7 +599,7 @@ function plateHtml(D, L, idx, pos, n, withCards) {
   var deg = tm && active ? Math.round(360 * tm.left / tm.total) : 360;
   var ring = active ? 'background:conic-gradient(var(--accent) ' + deg + 'deg, var(--line) 0)' : '';
   var h = seatHand(s), cards = '';
-  if (withCards && h && h.cards.length) cards = '<div class="row-cards" style="padding-top:2px">' + cardsRow('p' + idx, h.cards, L.desk ? 40 : 26, 200, L.desk ? 20 : 12) + '</div>';
+  if (withCards && h && h.cards.length) cards = '<div class="row-cards" style="padding-top:2px">' + cardsRow('p' + idx, h.cards, L.desk ? 52 : 34, 200, L.desk ? 26 : 16) + '</div>';
   var sm = withCards ? seatSumText(s, false) : '';
   return '<div class="plate' + (active ? ' active' : '') + '" style="' + platePos(L, pos, n) + '" data-key="pl' + idx + '"><div class="ring" style="' + ring + '"><div class="av" style="background:' + bg + '">' + esc(P.initial(s.name)) + '</div></div>' +
     '<div class="nm">' + esc(s.name || tr('st.bot')) + '</div>' + cards + (sm ? '<div class="sm">' + esc(sm) + '</div>' : '') +
@@ -618,7 +625,7 @@ function playHtml(D) {
   if (seq) {
     dl = dl.filter(function (c, i) { return i < 2 || now() >= seq.times[i]; });
     hidden = now() < seq.revealAt;
-    if (hidden) dl = [dl[0], '??'];
+    if (hidden) dl = dl.map(function (c, i) { return i === 0 ? c : '??'; });       // открыта только первая карта, добранные лежат рубашкой вверх
   }
   var dw = L.desk ? 76 : (L.narrow ? 50 : 58);
   var dsum = hidden ? String(BJ.cardValue(dl[0]) === 11 ? 11 : BJ.cardValue(dl[0])) : (dl.length === 2 && BJ.handValue(dl).total === 21 ? tr('sum.bj') : (BJ.handValue(dl).total > 21 ? tr('st.bust') + ' ' + BJ.handValue(dl).total : String(BJ.handValue(dl).total)));
@@ -643,8 +650,8 @@ function playHtml(D) {
       '<div class="pop-btns">' + '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>' +
       '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
   }
-  var shoeW = L.desk ? 46 : 36;
-  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i></div>';
+  var shoeW = L.desk ? 84 : (L.narrow ? 58 : 68);
+  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>';
   var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + center + meBox + pop + '</div>';
 
   var notice = activeNotice();
