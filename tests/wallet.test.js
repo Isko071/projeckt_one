@@ -152,13 +152,23 @@ test('подписчики получают новый баланс; слома�
 test('награды: настроены для сапёра и ятзи и укладываются в дневной лимит', () => {
   const W = load({ localStorage: fakeBackend() });
   const r = plain(W.CONFIG.rewards);
-  assert.deepEqual(r, { minesweeper: { novice: 100, amateur: 250, expert: 400 }, yahtzee: { easy: 100, hard: 250 } });
+  assert.deepEqual(r, { minesweeper: { novice: 100, amateur: 250, expert: 300 }, yahtzee: { easy: 100, hard: 250 } });
   const now = D(2026, 8, 1);
-  // 3 победы эксперта и новичок: 400*3 = 1200, затем 100 влезает, ещё 400 упирается в лимит 1500
-  for (let i = 0; i < 3; i++) assert.equal(W.earn('minesweeper', r.minesweeper.expert, now).granted, 400);
+  // 3 победы любителя и новичок: 250*3 = 750, затем 100, ещё 3 победы любителя упираются в лимит 1500
+  for (let i = 0; i < 3; i++) assert.equal(W.earn('minesweeper', r.minesweeper.amateur, now).granted, 250);
   assert.equal(W.earn('yahtzee', r.yahtzee.easy, now).granted, 100);
-  const last = W.earn('minesweeper', r.minesweeper.expert, now);
-  assert.deepEqual(plain(last), { granted: 200, capped: true });
+  assert.equal(W.earn('yahtzee', r.yahtzee.hard, now).granted, 250);
+  assert.equal(W.earn('minesweeper', r.minesweeper.amateur, now).granted, 250);
+  assert.equal(W.earn('minesweeper', r.minesweeper.amateur, now).granted, 150);
+  assert.deepEqual(plain(W.earn('minesweeper', r.minesweeper.amateur, now)), { granted: 0, capped: true });
+});
+
+test('награда эксперта сапёра без дневного предела и не расходует предел остальных', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const now = D(2026, 8, 1);
+  for (let i = 0; i < 10; i++) assert.deepEqual(plain(W.earn('minesweeper', 300, now, true)), { granted: 300, capped: false });
+  assert.equal(W.getBalance(), 5000 + 3000);
+  assert.equal(W.earn('minesweeper', 250, now).granted, 250, 'предел остальных одиночных игр не тронут');
 });
 
 test('рекорды: максимум аконов за всё время не падает при тратах; победы и лучшая серия', () => {
