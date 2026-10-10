@@ -7,9 +7,10 @@ var tr = function (key, params) { return window.I18n.t('games.battleship.' + key
 var B = window.Battleship, P = window.PlatformProfile;
 var appEl = document.getElementById('app');
 var N = B.CONFIG.size, C = 100, OFF = C;            // клетка 100 единиц, поле смещено на ширину подписей
-var DEV = /[?&]dev\b/.test(location.search) || location.hash === '#dev';
+var WIN_REWARD = 500;                       // награда за победу над ботом (потоплен весь флот); за день не больше PlatformWallet.CONFIG.rewardCaps.battleship
+var W = window.PlatformWallet;
 
-var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null };
+var app = { screen: 'start', mode: 'bot', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function cellLabel(idx) { return tr('letters').charAt(Math.floor(idx / N)) + (idx % N + 1); }
@@ -395,7 +396,7 @@ function battleHtml(v) {
 // ===== Окна =====
 function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 function rewardHtml() {
-  var r = app.ctrl && app.ctrl.online && app.ctrl.reward();
+  var r = app.ctrl && app.ctrl.reward && app.ctrl.reward();
   if (!r) return '';
   var p = { n: fmt(r.granted), unit: window.I18n.plural(r.granted, 'wallet.unit') };
   return '<p class="reward" role="status">' + esc(r.granted <= 0 ? tr('over.cap.reached') : (r.capped ? tr('over.cap.cut', p) : tr('over.reward', p))) + '</p>';
@@ -426,15 +427,24 @@ function startHtml() {
   return '<div class="start"><div class="brand-row"><div class="brand"><div class="logo-ship">' + LOGO + '</div><h1>' + esc(tr('title')) + '</h1></div>' +
     '<div class="top-actions">' + catalogLinkHtml() + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
-    '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes"><button class="mode-btn" aria-pressed="true">' + esc(tr('start.online')) + '<small>' + esc(tr('start.onlineSub')) + '</small></button></div></div>' +
-    '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button>' + (DEV ? '<button class="btn-secondary wide" data-act="dev">' + esc(tr('start.dev')) + '</button>' : '') + '<button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
+    '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
+      ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
+    '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button>' + '<button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
-// ===== Локальная партия против случайного бота (для проверки экранов: ?dev) =====
-function devController() {
-  var st, listeners = [], seat = 0, timer = null;
+// ===== Партия против бота: награда за победу, партия идёт в браузере =====
+function botController() {
+  var st, listeners = [], seat = 0, timer = null, reward = null, paid = false;
   function emit() { listeners.forEach(function (fn) { fn(); }); }
+  // Награда за победу над ботом: только когда потоплен весь флот; за день не больше предела кошелька
+  function settle() {
+    if (!st.gameOver || paid) return;
+    paid = true;
+    if (st.winner === seat && st.reason === 'fleet' && W) { var r = W.reward('battleship', WIN_REWARD, Date.now()); W.countWin('battleship'); reward = { granted: r.granted, capped: r.capped }; }
+  }
   function reset() {
+    reward = null; paid = false;
+    if (W) { W.markPlayed(); W.countPlay('battleship'); }
     st = B.init([{ id: 'me', name: P.getProfile().name }, { id: 'bot', name: tr('foe') }], {});
     st = B.reduce(st, { type: 'place', seat: 1, ships: B.randomLayout(), arsenal: { radar: 1, sub: 1, bomber: 2 } }).state;
   }
@@ -449,14 +459,15 @@ function devController() {
       var pool = near.length ? near : free, pick = pool[Math.floor(Math.random() * pool.length)], type = 'shoot';
       if (avail.length && !near.length && Math.random() < 0.3) type = avail[Math.floor(Math.random() * avail.length)];   // бот иногда применяет оружие
       var r = B.reduce(st, { type: type, seat: 1, x: pick % N, y: Math.floor(pick / N) });
-      if (r.ok) { st = r.state; emit(); botMove(); }
+      if (r.ok) { st = r.state; settle(); emit(); botMove(); }
     }, 1700);
   }
   reset();
   return {
     local: true, seat: seat,
     view: function () { return B.view(st, seat); },
-    send: function (a) { var r = B.reduce(st, a); if (!r.ok) return false; st = r.state; emit(); botMove(); return true; },
+    send: function (a) { var r = B.reduce(st, a); if (!r.ok) return false; st = r.state; settle(); emit(); botMove(); return true; },
+    reward: function () { return reward; },
     subscribe: function (fn) { listeners.push(fn); },
     restart: function () { clearTimeout(timer); reset(); emit(); },
     leave: function () { clearTimeout(timer); }
@@ -504,7 +515,8 @@ appEl.addEventListener('click', function (e) {
     case 'theme': window.PlatformTheme.toggle(); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
-    case 'dev': startGame(devController()); break;
+    case 'play': startGame(botController()); break;
+    case 'mode': app.mode = el.getAttribute('data-v') === 'online' ? 'online' : 'bot'; render(); break;
     case 'exit': { var v2 = ctrl.view(); if (v2.phase === 'playing' && !v2.gameOver) { app.confirm = true; render(); } else toMenu(); break; }
     case 'stay': app.confirm = false; render(); break;
     case 'concede': app.confirm = false; ctrl.send({ type: 'concede', seat: ctrl.seat }); render(); break;
