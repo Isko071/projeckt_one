@@ -429,7 +429,7 @@ function startHtml() {
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
       ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
-    (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div><div class="modes">' + ['easy', 'expert'].map(function (l) { return '<button class="mode-btn" data-act="level" data-v="' + l + '" aria-pressed="' + (app.level === l) + '">' + esc(tr('start.level.' + l)) + '<small>' + esc(tr('start.level.' + l + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' : '') +
+    (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div><div class="modes">' + ['easy', 'expert'].map(function (l) { return '<button class="mode-btn" data-act="level" data-v="' + l + '" aria-pressed="' + (app.level === l) + '">' + esc(tr('start.level.' + l)) + '</button>'; }).join('') + '</div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button>' + '<button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 

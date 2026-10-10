@@ -55,6 +55,6 @@ test('словарь онлайна: ключи с динамическим ок
 });
 
 test('словарь: уровни бота', () => {
-  ['easy', 'expert'].forEach((l) => assert.ok(dict[PREFIX + 'start.level.' + l] && dict[PREFIX + 'start.level.' + l + 'Sub'], l));
+  ['easy', 'expert'].forEach((l) => assert.ok(dict[PREFIX + 'start.level.' + l], l));
   ['battleship-easy', 'battleship-expert'].forEach((k) => assert.ok(load(['locales/ru.js']).LOCALES.ru['wallet.src.' + k], k));
 });

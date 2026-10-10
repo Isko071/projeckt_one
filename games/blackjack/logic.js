@@ -497,6 +497,6 @@
     rankOf: rankOf, suitOf: suitOf, cardValue: cardValue, handValue: handValue, isNatural: isNatural, isBust: isBust,
     buildShoe: buildShoe, init: init, reduce: reduce, view: view, hint: hint, availableActions: availableActions,
     activeHand: activeHand, canDouble: canDouble, canSplit: canSplit, canHit: canHit,
-    readyToDeal: readyToDeal, botAction: botAction, nextBotAction: nextBotAction, makeBot: makeBot, BOT_STYLES: BOT_STYLES, waitingSeats: waitingSeats
+    readyToDeal: readyToDeal, botAction: botAction, nextBotAction: nextBotAction, makeBot: makeBot, BOT_STYLES: BOT_STYLES, BOT_ORDER: BOT_ORDER, waitingSeats: waitingSeats
   };
 })(typeof window !== 'undefined' ? window : globalThis);

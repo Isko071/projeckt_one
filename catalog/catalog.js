@@ -64,7 +64,7 @@
 
       card.appendChild(frame);
       card.appendChild(name);
-      card.addEventListener('click', function () { lastCard = card; go(game.id); });
+      card.addEventListener('click', function () { lastCard = card; go(game.id); scrollToPoster(); });
       el.grid.appendChild(card);
     });
     el.empty.hidden = games.length > 0;
@@ -111,6 +111,12 @@
     });
   }
 
+  // Постер открывается над списком: на телефоне после выбора игры плавно возвращаем страницу наверх, к нему
+  function scrollToPoster() {
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try { window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+  }
+
   // ---------- Навигация: состояние хранится в адресе (#id) ----------
   function go(id) {
     var hash = L.hashForId(id);
@@ -123,7 +129,7 @@
     selectedId = L.idFromHash(location.hash, games);
     render();
     // После закрытия возвращаем фокус на карточку, чтобы не потерять место при работе с клавиатуры
-    if (wasOpen && selectedId === null && lastCard) lastCard.focus();
+    if (wasOpen && selectedId === null && lastCard) lastCard.focus({ preventScroll: true });
   }
 
   window.addEventListener('hashchange', syncFromHash);
