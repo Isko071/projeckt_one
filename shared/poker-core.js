@@ -6,6 +6,7 @@
 // model() — всё, что нужно нарисовать: места, карты, банк, статусы, панели итога, вопросы, готовность, баннеры.
 (function (root) {
   var PK = root.Poker, Bots = root.PokerBots;
+  var BOT_STACK = 5000;                   // стек каждого бота за столом против ботов (в начале каждой руки)
   var HOLD_MS = 1600, FLIP_MS = 2800;    // пауза перед открытием карты и время переворота при вскрытии (в тестах сокращаются: cfg.holdMs, cfg.flipMs, cfg.botMs)
 
   function now() { return Date.now(); }
@@ -120,11 +121,11 @@
     this.listeners = []; this.stage = null; this.holdUntil = 0; this.dealUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.timer = null; this.spent = 0; this.stopped = false;
     var balance = this.W.getBalance(), n = cfg.size;
     this.W.capStart(now());
-    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n).map(function (b) { return Object.assign(b, { chips: balance }); }));
+    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n).map(function (b) { return Object.assign(b, { chips: Math.min(balance, BOT_STACK) }); }));
     var gopts = { variant: cfg.variant, tableSize: n };
     if (cfg.variant === 'simple') { gopts.ante = cfg.ante; gopts.minBet = cfg.minBet || cfg.ante * 2; } else { gopts.bigBlind = cfg.bigBlind; gopts.smallBlind = cfg.smallBlind || Math.floor(cfg.bigBlind / 2); }
     this.st = PK.init(seats, gopts, null);
-    this.botStack = balance;
+    this.botStack = Math.min(balance, BOT_STACK);   // у ботов в каждой руке не больше BOT_STACK: чем богаче вы, тем меньше они могут отдать
   }
   Solo.prototype.subscribe = function (fn) { this.listeners.push(fn); };
   Solo.prototype.emit = function () { var m = this; this.listeners.forEach(function (fn) { try { fn(m); } catch (e) { /* подписчик не должен ломать стол */ } }); };

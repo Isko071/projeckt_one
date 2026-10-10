@@ -185,3 +185,13 @@ test('раздача в начале руки: пока карты раздаю�
   assert.equal(t.model().dealMs, 0, 'раздача закончилась');
   t.leave();
 });
+
+test('стол с ботами: у каждого бота не больше 5000, даже если у вас на балансе гораздо больше', () => {
+  const be = fakeBackend(), ctx = load(be), W = ctx.PlatformWallet;
+  W.add(60000, 'test', Date.now());
+  const t = ctx.PokerCore.createSolo(Object.assign({ variant: 'simple', size: 4, ante: 50, name: 'Аня', wallet: W, source: 'poker-simple' }, FAST));
+  t.begin();
+  t.st.seats.forEach((s, i) => { if (i > 0) assert.ok(s.chips + s.total <= 5000, 'бот ' + i + ': ' + (s.chips + s.total)); });
+  assert.ok(t.st.seats[0].chips + t.st.seats[0].total > 5000, 'у вас баланс больше');
+  t.leave();
+});

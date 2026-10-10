@@ -8,12 +8,12 @@
 (function (root) {
   var P = root.Poker;
   // Характеры. Пороги даны в «силе» s от -1 до 1: 0 — средняя рука за этим столом, 1 — выигрыш наверняка (s = (шанс − 1/игроков) / (1 − 1/игроков)):
-  //   strong — рука для повышения; medium — рука для ставки по желанию; must — рука для обязательной ставки; bluff — шанс блефа; size — доля банка в ставке;
+  //   strong — рука для повышения; medium — рука для ставки по желанию; must — рука для обязательной ставки (ставка в обязательном круге почти всегда выгоднее потери начальной ставки, поэтому порог ниже средней руки); bluff — шанс блефа; size — доля банка в ставке;
   //   margin — запас к шансам банка при уравнивании (чем больше, тем реже уравнивает), stack — доля стека, при которой бот идёт ва-банк с сильной рукой
   var STYLES = {
-    careful: { name: 'Бот Оскар', strong: 0.55, medium: 0.3, must: 0.1, bluff: 0.03, size: 0.5, margin: 0.07, stack: 0.35 },
-    average: { name: 'Бот Макс', strong: 0.45, medium: 0.2, must: 0.0, bluff: 0.07, size: 0.7, margin: 0.03, stack: 0.5 },
-    risky:   { name: 'Бот Рико', strong: 0.35, medium: 0.1, must: -0.12, bluff: 0.16, size: 1.0, margin: -0.02, stack: 0.7 }
+    careful: { name: 'Бот Оскар', strong: 0.55, medium: 0.3, must: -0.08, bluff: 0.03, size: 0.5, margin: 0.07, stack: 0.35 },
+    average: { name: 'Бот Макс', strong: 0.45, medium: 0.2, must: -0.1, bluff: 0.07, size: 0.7, margin: 0.03, stack: 0.5 },
+    risky:   { name: 'Бот Рико', strong: 0.35, medium: 0.1, must: -0.2, bluff: 0.16, size: 1.0, margin: -0.02, stack: 0.7 }
   };
   var ORDER = ['average', 'risky', 'careful'];
 
