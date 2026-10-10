@@ -16,6 +16,7 @@
 //   Battleship.view(state, seat) → вид для места seat (свои корабли целиком, чужие не видны; без seat — публичный вид, как у зрителя)
 //   Battleship.randomLayout(rng, options) → список кораблей для действия place
 //   Battleship.validateLayout(ships, options) → { ok, error?, ships }
+//   Battleship.canPlace(placed, ship, options) → { ok } | { ok: false, error } — можно ли добавить корабль к уже поставленным; Battleship.remaining(placed, options) → { длина: сколько осталось }
 //   Battleship.waitingSeats(state), Battleship.progressKey(state, seat), Battleship.legalActions(state, seat)
 (function (root) {
   var CONFIG = { minSeats: 2, maxSeats: 2, size: 10, fleet: [4, 3, 3, 2, 2, 2, 1, 1, 1, 1] };
@@ -71,6 +72,27 @@
       }
     }
     return { ok: true, ships: out };
+  }
+
+  // Можно ли добавить корабль ship {x, y, len, dir} к уже поставленным placed (для расстановки по одному): { ok } или { ok: false, error }
+  function canPlace(placed, ship, options) {
+    var size = sizeOf(options), cells = ship && typeof ship === 'object' ? cellsOf(ship, size) : null;
+    if (!cells) return bad('bounds');
+    var owner = {};
+    (placed || []).forEach(function (p, k) { (cellsOf(p, size) || []).forEach(function (c) { owner[c] = k; }); });
+    for (var i = 0; i < cells.length; i++) if (owner[cells[i]] !== undefined) return bad('overlap');
+    for (var j = 0; j < cells.length; j++) {
+      var nb = around(cells[j], size);
+      for (var n = 0; n < nb.length; n++) if (owner[nb[n]] !== undefined) return bad('touch');
+    }
+    return { ok: true };
+  }
+  // Сколько кораблей каждой длины ещё осталось расставить: { 4: n, 3: n, 2: n, 1: n }
+  function remaining(placed, options) {
+    var out = {};
+    fleetOf(options).forEach(function (len) { out[len] = (out[len] || 0) + 1; });
+    (placed || []).forEach(function (p) { if (out[p.len]) out[p.len]--; });
+    return out;
   }
 
   // Случайная правильная расстановка: самые длинные корабли первыми, при тупике начинаем заново
@@ -219,7 +241,7 @@
   }
 
   root.Battleship = {
-    CONFIG: CONFIG, PLAYER_ACTIONS: PLAYER_ACTIONS, init: init, reduce: reduce, view: view, randomLayout: randomLayout, validateLayout: validateLayout,
+    CONFIG: CONFIG, PLAYER_ACTIONS: PLAYER_ACTIONS, init: init, reduce: reduce, view: view, randomLayout: randomLayout, validateLayout: validateLayout, canPlace: canPlace, remaining: remaining,
     legalActions: legalActions, waitingSeats: waitingSeats, progressKey: progressKey, cellsOf: cellsOf, around: around
   };
 })(typeof window !== 'undefined' ? window : globalThis);

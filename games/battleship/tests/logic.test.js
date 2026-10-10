@@ -217,3 +217,15 @@ test('первый ход без options.first выбирается по rng и 
   for (let i = 1; i < 40; i++) firsts.add(B.init([{ id: 'a' }, { id: 'b' }], {}, seededRng(i)).first);
   assert.equal(firsts.size, 2);
 });
+
+test('расстановка по одному: canPlace и remaining', () => {
+  const placed = [{ x: 0, y: 0, len: 4, dir: 'h' }];
+  assert.equal(B.canPlace(placed, { x: 0, y: 2, len: 3, dir: 'h' }).ok, true);
+  assert.equal(B.canPlace(placed, { x: 0, y: 1, len: 3, dir: 'h' }).error, 'touch');
+  assert.equal(B.canPlace(placed, { x: 4, y: 1, len: 2, dir: 'v' }).error, 'touch', 'угол');
+  assert.equal(B.canPlace(placed, { x: 2, y: 0, len: 2, dir: 'v' }).error, 'overlap');
+  assert.equal(B.canPlace(placed, { x: 9, y: 9, len: 2, dir: 'h' }).error, 'bounds');
+  assert.equal(B.canPlace([], { x: 0, y: 0, len: 4, dir: 'h' }).ok, true);
+  assert.deepEqual(plain(B.remaining(placed)), { 1: 4, 2: 3, 3: 2, 4: 0 });
+  assert.deepEqual(plain(B.remaining([])), { 1: 4, 2: 3, 3: 2, 4: 1 });
+});
