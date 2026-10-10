@@ -209,6 +209,8 @@ root.LOCALES.ru = {
   'wallet.src.blackjack': 'Блэкджек',
   'wallet.src.poker-simple': 'Покер: Чожук',
   'wallet.src.battleship': 'Морской бой',
+  'wallet.src.battleship-easy': 'Морской бой: лёгкий',
+  'wallet.src.battleship-expert': 'Морской бой: эксперт',
   'wallet.src.bet': 'Ставка',
   'wallet.src.win': 'Выигрыш',
   'wallet.src.other': 'Операция',

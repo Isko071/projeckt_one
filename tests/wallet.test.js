@@ -295,12 +295,14 @@ test('награды без ставок: частичная выдача на �
 });
 
 
-test('награды: «Морской бой» 500 за победу, за день не больше 5000', () => {
+test('награды: «Морской бой» 500 за победу над ботом: лёгкий до 2500 в день, эксперт до 5000, у каждого уровня свой счётчик', () => {
   const W = load({ localStorage: fakeBackend() });
   const t0 = D(2026, 5, 1, 10);
-  assert.equal(W.rewardStatus('battleship', t0).left, 5000);
-  let total = 0, last;
-  for (let i = 0; i < 12; i++) { last = W.reward('battleship', 500, t0 + i); total += last.granted; }
-  assert.equal(total, 5000); assert.equal(last.granted, 0); assert.equal(last.capped, true);
-  assert.equal(W.reward('battleship', 500, D(2026, 5, 2, 10)).granted, 500);
+  [['battleship-easy', 2500], ['battleship-expert', 5000]].forEach(([src, cap]) => {
+    assert.equal(W.rewardStatus(src, t0).left, cap);
+    let total = 0, last;
+    for (let i = 0; i < cap / 500 + 2; i++) { last = W.reward(src, 500, t0 + i); total += last.granted; }
+    assert.equal(total, cap); assert.equal(last.granted, 0); assert.equal(last.capped, true);
+    assert.equal(W.reward(src, 500, D(2026, 5, 2, 10)).granted, 500);
+  });
 });

@@ -10,7 +10,7 @@ var N = B.CONFIG.size, C = 100, OFF = C;            // клетка 100 един
 var WIN_REWARD = 500;                       // награда за победу над ботом (потоплен весь флот); за день не больше PlatformWallet.CONFIG.rewardCaps.battleship
 var W = window.PlatformWallet;
 
-var app = { screen: 'start', mode: 'bot', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null };
+var app = { screen: 'start', mode: 'bot', level: 'easy', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function cellLabel(idx) { return tr('letters').charAt(Math.floor(idx / N)) + (idx % N + 1); }
@@ -429,18 +429,19 @@ function startHtml() {
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
       ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
+    (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div><div class="modes">' + ['easy', 'expert'].map(function (l) { return '<button class="mode-btn" data-act="level" data-v="' + l + '" aria-pressed="' + (app.level === l) + '">' + esc(tr('start.level.' + l)) + '<small>' + esc(tr('start.level.' + l + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button>' + '<button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
 // ===== Партия против бота: награда за победу, партия идёт в браузере =====
-function botController() {
+function botController(level) {
   var st, listeners = [], seat = 0, timer = null, reward = null, paid = false;
   function emit() { listeners.forEach(function (fn) { fn(); }); }
   // Награда за победу над ботом: только когда потоплен весь флот; за день не больше предела кошелька
   function settle() {
     if (!st.gameOver || paid) return;
     paid = true;
-    if (st.winner === seat && st.reason === 'fleet' && W) { var r = W.reward('battleship', WIN_REWARD, Date.now()); W.countWin('battleship'); reward = { granted: r.granted, capped: r.capped }; }
+    if (st.winner === seat && st.reason === 'fleet' && W) { var src = 'battleship-' + level, r = W.reward(src, WIN_REWARD, Date.now()); W.countWin(src); reward = { granted: r.granted, capped: r.capped }; }
   }
   function reset() {
     reward = null; paid = false;
@@ -452,13 +453,7 @@ function botController() {
     clearTimeout(timer);
     if (st.gameOver || st.current !== 1) return;
     timer = setTimeout(function () {
-      var marks = st.seats[0].marks, hits = [], free = [];
-      marks.forEach(function (m, i) { if (m === 0 || m === 4) free.push(i); if (m === 2) hits.push(i); });
-      var near = [], arm = st.seats[1].arsenal, avail = B.WEAPONS.filter(function (w) { return arm[w] > 0; });
-      hits.forEach(function (h) { [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var x = h % N + d[0], y = Math.floor(h / N) + d[1]; if (x >= 0 && y >= 0 && x < N && y < N && (marks[y * N + x] === 0 || marks[y * N + x] === 4)) near.push(y * N + x); }); });
-      var pool = near.length ? near : free, pick = pool[Math.floor(Math.random() * pool.length)], type = 'shoot';
-      if (avail.length && !near.length && Math.random() < 0.3) type = avail[Math.floor(Math.random() * avail.length)];   // бот иногда применяет оружие
-      var r = B.reduce(st, { type: type, seat: 1, x: pick % N, y: Math.floor(pick / N) });
+      var r = B.reduce(st, window.BattleshipBot.choose(B.view(st, 1), 1, level));
       if (r.ok) { st = r.state; settle(); emit(); botMove(); }
     }, 1700);
   }
@@ -515,7 +510,8 @@ appEl.addEventListener('click', function (e) {
     case 'theme': window.PlatformTheme.toggle(); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
-    case 'play': startGame(botController()); break;
+    case 'play': startGame(botController(app.level)); break;
+    case 'level': app.level = el.getAttribute('data-v') === 'expert' ? 'expert' : 'easy'; render(); break;
     case 'mode': app.mode = el.getAttribute('data-v') === 'online' ? 'online' : 'bot'; render(); break;
     case 'exit': { var v2 = ctrl.view(); if (v2.phase === 'playing' && !v2.gameOver) { app.confirm = true; render(); } else toMenu(); break; }
     case 'stay': app.confirm = false; render(); break;

@@ -53,3 +53,8 @@ test('словарь онлайна: ключи с динамическим ок
   ['notFound', 'full', 'closed', 'started', 'network', 'missing', 'denied', 'other'].forEach((k) => assert.ok(dict[PREFIX + 'o.err.' + k] && dict[PREFIX + 'o.err.' + k + 'Text'], 'o.err.' + k));
   ['server', 'offline', 'back'].forEach((k) => assert.ok(dict[PREFIX + 'o.banner.' + k], 'o.banner.' + k));
 });
+
+test('словарь: уровни бота', () => {
+  ['easy', 'expert'].forEach((l) => assert.ok(dict[PREFIX + 'start.level.' + l] && dict[PREFIX + 'start.level.' + l + 'Sub'], l));
+  ['battleship-easy', 'battleship-expert'].forEach((k) => assert.ok(load(['locales/ru.js']).LOCALES.ru['wallet.src.' + k], k));
+});
