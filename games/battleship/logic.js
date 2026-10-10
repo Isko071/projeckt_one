@@ -195,8 +195,8 @@
     if (!me || !me.active) return bad('not-seated');
     var ns = clone(state), mine = ns.seats[seat], events = [];
 
-    if (action.type === 'concede') {
-      finish(ns, otherSeat(seat), 'concede', events);
+    if (action.type === 'concede' || action.type === 'leave') {          // «leave» — выход из-за стола (по обрыву связи, «Вы ещё играете?»): тоже сдача
+      finish(ns, otherSeat(seat), action.type === 'leave' ? 'left' : 'concede', events);
       return { ok: true, state: ns, events: events };
     }
 
@@ -307,6 +307,31 @@
     };
   }
 
+  // Скрытое у каждого игрока: корабли и запас оружия (ключ — id игрока). Сервер отдаёт каждому только его часть
+  function secrets(state) {
+    var out = {};
+    state.seats.forEach(function (s) { out[s.id] = { ships: s.ships, arsenal: s.arsenal }; });
+    return out;
+  }
+  // Публичный вид стола + своя скрытая часть (mine) → вид места seat, как view(state, seat)
+  function withMine(pub, mine, seat) {
+    var out = JSON.parse(JSON.stringify(pub));
+    if (mine && out.seats[seat] && !out.gameOver) {
+      out.seats[seat].ships = (mine.ships || []).map(function (sh) { return { len: sh.len, cells: sh.cells.slice(), hit: sh.hit.slice() }; });
+      out.seats[seat].arsenal = mine.arsenal || null;
+    }
+    return out;
+  }
+  // Из действия игрока берём только известные поля (остальное отбрасывается)
+  function cleanAction(p) {
+    var out = { type: p.type };
+    if (typeof p.x === 'number') out.x = p.x;
+    if (typeof p.y === 'number') out.y = p.y;
+    if (Array.isArray(p.ships)) out.ships = p.ships.slice(0, 12).map(function (s) { return { x: Number(s && s.x), y: Number(s && s.y), len: Number(s && s.len), dir: s && s.dir }; });
+    if (p.arsenal && typeof p.arsenal === 'object') out.arsenal = { radar: Number(p.arsenal.radar), sub: Number(p.arsenal.sub), bomber: Number(p.arsenal.bomber) };
+    return out;
+  }
+
   function legalActions(state, seat) {
     if (state.gameOver || !state.seats[seat] || !state.seats[seat].active) return [];
     if (state.phase === 'placing') return state.seats[seat].ready ? ['unplace', 'concede'] : ['place', 'concede'];
@@ -330,6 +355,6 @@
 
   root.Battleship = {
     CONFIG: CONFIG, PLAYER_ACTIONS: PLAYER_ACTIONS, init: init, reduce: reduce, view: view, randomLayout: randomLayout, validateLayout: validateLayout, validateArsenal: validateArsenal, WEAPONS: WEAPONS, area3: area3, canPlace: canPlace, remaining: remaining,
-    legalActions: legalActions, waitingSeats: waitingSeats, progressKey: progressKey, cellsOf: cellsOf, around: around
+    legalActions: legalActions, secrets: secrets, withMine: withMine, cleanAction: cleanAction, waitingSeats: waitingSeats, progressKey: progressKey, cellsOf: cellsOf, around: around
   };
 })(typeof window !== 'undefined' ? window : globalThis);

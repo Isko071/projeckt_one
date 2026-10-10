@@ -81,6 +81,7 @@
       var listeners = [];
       return { on: function (fn) { listeners.push(fn); }, emit: function (x) { listeners.forEach(function (fn) { try { fn(x); } catch (e) { /* подписчик не должен ломать остальных */ } }); } };
     }
+    function seatsOf(st) { return st.players || st.seats || []; }     // у «Ятзи» места лежат в players, у «Морского боя» в seats
     function publicMember(m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }
 
     // ================= Хост =================
@@ -114,7 +115,7 @@
         if (!serverMode || ownerUid !== leavingUid) return;
         var next = members.filter(function (x) {
           if (x.uid === leavingUid) return false;
-          return status === 'lobby' || !full || (full.players[x.seat] && full.players[x.seat].active);
+          return status === 'lobby' || !full || (seatsOf(full)[x.seat] && seatsOf(full)[x.seat].active);
         })[0];
         ownerUid = next ? next.uid : null;
         if (next) sys('owner', next.name);
@@ -132,7 +133,7 @@
       function fields() {
         var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(),
           meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, owner: ownerUid, members: members.map(publicMember) }) };
-        if (full) f.state = JSON.stringify(game.view(full));
+        if (full) { f.state = JSON.stringify(game.view(full)); if (game.secrets) f.secret = JSON.stringify(game.secrets(full)); }   // secret — скрытое у каждого игрока (корабли): сервер отдаёт каждому только его часть
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
         return f;
@@ -157,7 +158,7 @@
       function doRematch() {
         if (status !== 'playing' || !full || !full.gameOver) return false;
         var alive = {};
-        full.players.forEach(function (p) { if (p.active) alive[p.id] = true; });
+        seatsOf(full).forEach(function (p) { if (p.active) alive[p.id] = true; });
         members = members.filter(function (m) { return (!serverMode && m.uid === env.uid) || alive[m.uid]; });
         members.forEach(function (m, i) { m.seat = i; });
         full = null; status = 'lobby'; idle = {};
@@ -173,6 +174,7 @@
         return true;
       }
       function clean(payload) {      // из действия игрока берём только известные поля; место определяет хост
+        if (game.cleanAction) return game.cleanAction(payload);
         var out = { type: payload.type };
         if (typeof payload.index === 'number') out.index = payload.index;
         if (typeof payload.cat === 'string') out.cat = payload.cat.slice(0, 30);
@@ -280,7 +282,7 @@
         var m = parseJson(d.meta, { members: [] });
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
-        return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
+        return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), mine: parseJson(d.mine, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
           private: d.private === true, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {

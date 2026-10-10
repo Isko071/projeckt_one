@@ -47,6 +47,8 @@
     'over.lose.fleet': 'Ваш флот потоплен.',
     'over.win.concede': 'Соперник сдался.',
     'over.lose.concede': 'Вы сдались.',
+    'over.win.left': 'Соперник вышел из игры.',
+    'over.lose.left': 'Вы вышли из игры.',
     'over.menu': 'В меню',
     'over.again': 'Сыграть ещё',
     'confirm.title': 'Сдаться?',
