@@ -11,6 +11,7 @@ const FILES = [
   'games/yahtzee/logic.js',
   'games/yahtzee/table.js',
   'games/poker/logic.js',
+  'games/battleship/logic.js',
   'shared/rooms.js',
   'shared/rooms-turns.js',
   'shared/rooms-poker.js'
@@ -24,6 +25,7 @@ function loadEngine() {
     YahtzeeTable: ctx.YahtzeeTable,
     PlatformRooms: ctx.PlatformRooms,
     Poker: ctx.Poker,
+    Battleship: ctx.Battleship,
     PlatformTurnRooms: ctx.PlatformTurnRooms,
     PlatformPokerRooms: ctx.PlatformPokerRooms,
     PlatformChat: ctx.PlatformChat

@@ -4,8 +4,8 @@
 // Сокеты сюда не заходят: подключение — любой объект { uid, send(obj) }, поэтому менеджер проверяется тестами без сети.
 const { MemStore, decodeFields } = require('./memstore');
 
-const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready'];
-const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple'];
+const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede'];
+const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship'];
 const POKER = ['poker', 'poker-simple'];
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
@@ -23,13 +23,14 @@ class RoomManager {
     const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, options: this.cfg.engineOptions };
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
+    this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));
     this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
     this.apis['poker-simple'] = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker-simple', gameOptions: { variant: 'simple' } }));
     this.timer = null;
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
-    this.counters = { created: { blackjack: 0, yahtzee: 0, 'poker-simple': 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
+    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
   event(type, o) {
@@ -64,6 +65,12 @@ class RoomManager {
   }
   // Скрытые карты покера: поле `hole` (карты всех игроков) никому не уходит, каждому клиенту кладутся только его карты (`mine`)
   docFor(doc, uid) {
+    if (doc && typeof doc.secret === 'string') {          // скрытое у каждого игрока (корабли «Морского боя»): общее поле убирается, свою часть получает владелец
+      const out = Object.assign({}, doc);
+      delete out.secret;
+      try { const own = JSON.parse(doc.secret)[uid]; if (own) out.mine = JSON.stringify(own); } catch (e) { /* без своей части */ }
+      return out;
+    }
     if (!doc || typeof doc.hole !== 'string') return doc;
     const out = Object.assign({}, doc);
     delete out.hole;

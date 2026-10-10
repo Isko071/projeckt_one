@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="900" text-anchor="middle">
+<rect width="200" height="250" fill="oklch(0.98 0.01 95)"/>
+<g stroke="oklch(0.84 0.055 235)" stroke-width="1.4" fill="none"><path d="M0 25H200M0 50H200M0 75H200M0 100H200M0 125H200M0 150H200M0 175H200M0 200H200M0 225H200M25 0V250M50 0V250M75 0V250M100 0V250M125 0V250M150 0V250M175 0V250"/></g>
+<path d="M0 0V250" stroke="oklch(0.62 0.2 27)" stroke-width="2" opacity=".6" transform="translate(16 0)"/>
+<g stroke="oklch(0.42 0.17 280)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" fill="oklch(0.93 0.04 280)">
+<path d="M28 106 L96 102 Q122 125 96 148 L28 144 L24 134 L24 116Z"/>
+<path d="M36 112 L92 109 Q108 125 92 141 L36 138Z" fill="none" stroke-width="2"/>
+<rect x="44" y="118" width="14" height="14" rx="2" fill="oklch(0.99 0.006 95)"/><rect x="66" y="118" width="14" height="14" rx="2" fill="oklch(0.99 0.006 95)"/>
+<path d="M126 150 L172 150 Q184 162 172 174 L126 174 L122 168 L122 156Z"/>
+<rect x="130" y="156" width="12" height="12" rx="2" fill="oklch(0.99 0.006 95)"/>
+</g>
+<g stroke="oklch(0.55 0.21 27)" stroke-width="4.5" stroke-linecap="round"><path d="M126 52 L150 76 M150 52 L126 76"/><path d="M52 176 L72 196 M72 176 L52 196" opacity=".0"/></g>
+<circle cx="62" cy="62" r="5" fill="oklch(0.42 0.17 280)"/>
+<path d="M150 200 L162 188 L174 200 L162 212Z" fill="none" stroke="oklch(0.42 0.17 280)" stroke-width="2.5" opacity=".0"/>
+<rect x="0" y="0" width="200" height="40" fill="oklch(0.42 0.17 280)" opacity=".0"/>
+<text x="100" y="236" font-size="22" fill="oklch(0.42 0.17 280)" stroke="oklch(0.98 0.01 95)" stroke-width="5" paint-order="stroke" stroke-linejoin="round">МОРСКОЙ БОЙ</text>
+</svg>

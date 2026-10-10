@@ -60,3 +60,38 @@ test('пустой стол удаляется, чужие и неизвестн
   m.tick();
   assert.strictEqual(m.rooms.size, 0);
 });
+
+test('морской бой: корабли и оружие соперника не уходят по сети, своё приходит в mine', async () => {
+  const eng = loadEngine(), B = eng.Battleship;
+  const m = new RoomManager({ engine: eng, config: { engineOptions: { startDelayMs: 0 } } }), a = conn('A'), b = conn('B');
+  const code = await m.create(a, 'battleship', { size: 2, name: 'Аня' });
+  await m.join(b, 'battleship', code, { name: 'Боря' });
+  await settle();
+  m.act(a, code, { type: 'start' });
+  await settle();
+  assert.strictEqual(a.last().status, 'playing');
+  const shipsA = B.randomLayout(), shipsB = B.randomLayout();
+  m.act(a, code, { type: 'place', ships: shipsA, arsenal: { radar: 1, sub: 1, bomber: 2 }, hack: 1 });
+  m.act(b, code, { type: 'place', ships: shipsB, arsenal: { radar: 0, sub: 2, bomber: 2 } });
+  await settle();
+  const da = a.last(), db = b.last();
+  assert.strictEqual(da.secret, undefined); assert.strictEqual(db.secret, undefined);
+  const pubA = JSON.parse(da.state);
+  assert.ok(pubA.seats.every((s) => s.ships.length === 0 && s.arsenal === null), 'в общем виде нет ни кораблей, ни оружия');
+  assert.strictEqual(pubA.phase, 'playing');
+  const mineA = JSON.parse(da.mine), mineB = JSON.parse(db.mine);
+  assert.strictEqual(mineA.ships.length, 10); assert.strictEqual(mineA.arsenal.radar, 1);
+  assert.strictEqual(mineB.arsenal.sub, 2);
+  assert.notDeepStrictEqual(mineA.ships.map((s) => s.cells), mineB.ships.map((s) => s.cells));
+  const first = pubA.current, cur = first === 0 ? a : b, other = first === 0 ? b : a;
+  assert.throws(() => m.act(conn('Z'), code, { type: 'shoot', x: 0, y: 0 }), /not-member/);
+  m.act(other, code, { type: 'shoot', x: 0, y: 0 });                  // не его ход: игнорируется
+  m.act(cur, code, { type: 'shoot', x: 0, y: 0 });
+  await settle();
+  assert.strictEqual(JSON.parse(a.last().state).turns, 1);
+  m.leave(b, code);
+  await settle();
+  const over = JSON.parse(a.last().state);
+  assert.strictEqual(over.gameOver, true); assert.strictEqual(over.winner, 0); assert.strictEqual(over.reason, 'left');
+  assert.ok(over.seats[1].ships.length === 10, 'после конца корабли открыты');
+});
