@@ -315,9 +315,9 @@ test('подлодка: две торпеды по столбцу вверх и 
   st = act(st, { type: 'sub', seat: 0, x: 0, y: 3 });
   const up = st.last.torpedoes[0], down = st.last.torpedoes[1];
   assert.equal(up.dir, 'up'); assert.equal(down.dir, 'down');
-  assert.deepEqual(plain(up.path), [xy2(0, 3), xy2(0, 2)]); assert.equal(up.hit, xy2(0, 2)); assert.equal(up.result, 'hit');
+  assert.deepEqual(plain(up.path), [xy2(0, 2)]); assert.equal(up.hit, xy2(0, 2)); assert.equal(up.result, 'hit');
   assert.deepEqual(plain(down.path), [xy2(0, 4)]); assert.equal(down.hit, xy2(0, 4)); assert.equal(down.result, 'hit');
-  assert.equal(st.seats[1].marks[xy2(0, 3)], 1, 'проплытая вода отмечена');
+  assert.equal(st.seats[1].marks[xy2(0, 3)], 0, 'клетка самой подлодки не задета');
   assert.equal(st.seats[1].marks[xy2(0, 2)], 2); assert.equal(st.seats[1].marks[xy2(0, 4)], 2);
   assert.equal(st.last.hits, 2); assert.equal(st.current, 0);
   assert.equal(st.seats[0].arsenal.sub, 0);
@@ -326,7 +326,7 @@ test('подлодка: две торпеды по столбцу вверх и 
 test('подлодка: пустой столбец до краёв — торпеды уходят за край, ход передаётся; уже подбитые клетки торпеда проходит', () => {
   let st = withFleetA(0);
   st = act(st, { type: 'sub', seat: 0, x: 9, y: 5 });
-  assert.equal(st.last.torpedoes[0].path.length, 6); assert.equal(st.last.torpedoes[0].hit, -1);
+  assert.equal(st.last.torpedoes[0].path.length, 5); assert.equal(st.last.torpedoes[0].hit, -1);
   assert.equal(st.last.torpedoes[1].path.length, 4); assert.equal(st.last.torpedoes[1].hit, -1);
   assert.equal(st.last.hits, 0); assert.equal(st.current, 1);
   // повторный пуск по столбцу с ранее подбитой клеткой: торпеда проходит её и бьёт следующий корабль
@@ -410,10 +410,10 @@ test('радар повторно по той же области: новых о
 test('подлодка запоминает в fresh только новые клетки воды', () => {
   let st = withFleetA(0);
   st = act(st, { type: 'sub', seat: 0, x: 9, y: 5 });
-  assert.equal(st.last.torpedoes[0].fresh.length, 6);
+  assert.equal(st.last.torpedoes[0].fresh.length, 5);
   const second = Object.assign(plain(st), { current: 0 });
   second.seats[0].arsenal.sub = 1;
   const r = B.reduce(second, { type: 'sub', seat: 0, x: 9, y: 2 });
   assert.equal(r.state.last.torpedoes[0].fresh.length, 0, 'вода уже отмечена');
-  assert.equal(r.state.last.torpedoes[0].path.length, 3);
+  assert.equal(r.state.last.torpedoes[0].path.length, 2);
 });

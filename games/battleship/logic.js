@@ -258,9 +258,9 @@
         }
         last = { seat: seat, kind: 'bomber', x: x, y: y, cells: drops, hits: hits };
         events.push({ type: 'bomb', seat: seat, x: x, y: y, hits: hits });
-      } else {                                                         // подлодка: две торпеды по столбцу, вверх (включая выбранную клетку) и вниз
+      } else {                                                         // подлодка: две торпеды по столбцу, вверх и вниз; сама клетка подлодки не задевается
         var torp = [];
-        [{ dir: 'up', from: y, step: -1 }, { dir: 'down', from: y + 1, step: 1 }].forEach(function (tp) {
+        [{ dir: 'up', from: y - 1, step: -1 }, { dir: 'down', from: y + 1, step: 1 }].forEach(function (tp) {
           var path = [], fresh = [], hitIdx = -1, tr2 = null;
           for (var ry = tp.from; ry >= 0 && ry < size; ry += tp.step) {
             var ci = ry * size + x, cm = foe.marks[ci];
