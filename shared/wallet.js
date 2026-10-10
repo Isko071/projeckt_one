@@ -24,7 +24,7 @@
     dailyBase: 500,     // бонус в первый день серии
     dailyStep: 250,     // прибавка за каждый следующий день подряд
     dailyMax: 2000,     // потолок (достигается на 7-й день)
-    rewards: { minesweeper: { novice: 100, amateur: 250, expert: 400 }, yahtzee: { easy: 100, hard: 250 } }, // награды за победу в одиночных играх
+    rewards: { minesweeper: { novice: 100, amateur: 250, expert: 300 }, yahtzee: { easy: 100, hard: 250 } }, // награды за победу в одиночных играх
     onlineCap: 5000,    // в онлайн-блэкджеке за день можно выиграть (чистыми) не больше этой суммы
     capShare: 0.5,      // в игре с ботом за день можно выиграть не больше этой доли баланса (на начало дня)
     rewardCaps: { blackjack: 3000, 'battleship-easy': 2500, 'battleship-expert': 5000 }, // игры без ставок: сколько наград можно получить за день (по играм)
@@ -197,17 +197,17 @@
     save(s);
   }
 
-  // Награда за одиночную игру: не больше earnDailyCap в день
-  function earn(source, n, now) {
+  // Награда за одиночную игру: не больше earnDailyCap в день. uncapped = true — награда без дневного предела (не расходует и не ждёт предела других игр)
+  function earn(source, n, now, uncapped) {
     var s = load(), today = dayOf(now);
     if (num(n, -1) < 1) return { granted: 0, capped: false };
     var key = String(source || 'earn').slice(0, 40);
     s.wins[key] = (s.wins[key] || 0) + 1; // победа засчитывается, даже если дневной лимит наград исчерпан
     if (s.earnDay !== today) { s.earnDay = today; s.earned = 0; }
-    var room = Math.max(0, CONFIG.earnDailyCap - s.earned);
+    var room = uncapped ? n : Math.max(0, CONFIG.earnDailyCap - s.earned);
     var granted = Math.min(n, room);
     if (granted > 0) {
-      s.earned += granted;
+      if (!uncapped) s.earned += granted;
       s.balance += granted;
       record(s, source || 'earn', granted, now);
     }
