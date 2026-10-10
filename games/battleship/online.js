@@ -5,6 +5,7 @@
 (function () {
   var Cloud = window.PlatformCloud, P = window.PlatformProfile;
   var on = { screen: 'login', rooms: null, private: false, code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
+  var WIN_REWARD = 500;      // награда за победу (потоплен весь флот); за день не больше предела PlatformWallet.CONFIG.rewardCaps.battleship
   var G = null, wsApi = null, pollTimer = null, roomsTimer = null, failing = 0;
 
   function now() { return Date.now(); }
@@ -73,6 +74,7 @@
       view: function () { var v = G && G.view; return B.withMine(v.state, v.mine, v.seat); },
       send: function (a) { return send(a); },
       subscribe: function () { /* перерисовку запускает online.js при каждом новом виде стола */ },
+      reward: function () { return G ? G.reward : null; },
       again: function () { if (isOwner()) G.room.rematch(); else send({ type: 'again' }); },
       leave: function () { dispose(); }
     };
@@ -114,6 +116,16 @@
     if (v.status === 'lobby' && app.screen === 'game') { app.ctrl = null; app.screen = 'online'; on.screen = 'lobby'; on.banner = null; app.confirm = false; }
     if (v.status === 'playing' && v.state && v.seat !== null && v.seat !== undefined && app.screen !== 'game') {
       app.screen = 'online'; startGame(G.ctrl); on.banner = null;
+      G.reward = null; G.counted = false;
+      if (window.PlatformWallet) { window.PlatformWallet.markPlayed(); window.PlatformWallet.countPlay('battleship'); }
+    }
+    if (v.state && v.state.gameOver && !G.counted && v.seat !== null && v.seat !== undefined) {         // награду получает победитель, потопивший весь флот (выход и сдача не в счёт)
+      G.counted = true;
+      if (v.state.winner === v.seat && v.state.reason === 'fleet' && window.PlatformWallet) {
+        var W = window.PlatformWallet, r = W.reward('battleship', WIN_REWARD, now());
+        W.countWin('battleship');
+        G.reward = { granted: r.granted, capped: r.capped };
+      }
     }
     render();
   }

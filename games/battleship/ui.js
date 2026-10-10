@@ -393,12 +393,19 @@ function battleHtml(v) {
 }
 
 // ===== Окна =====
+function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function rewardHtml() {
+  var r = app.ctrl && app.ctrl.online && app.ctrl.reward();
+  if (!r) return '';
+  var p = { n: fmt(r.granted), unit: window.I18n.plural(r.granted, 'wallet.unit') };
+  return '<p class="reward" role="status">' + esc(r.granted <= 0 ? tr('over.cap.reached') : (r.capped ? tr('over.cap.cut', p) : tr('over.reward', p))) + '</p>';
+}
 function modalHtml() {
   var out = '';
   var v = app.ctrl ? app.ctrl.view() : null;
   if (v && v.gameOver && app.screen === 'game') {
     var win = v.winner === app.ctrl.seat;
-    out += '<div class="scrim"><div class="modal over ' + (win ? 'win' : 'lose') + '" role="alertdialog" aria-modal="true"><h2>' + esc(tr(win ? 'over.win' : 'over.lose')) + '</h2><p>' + esc(tr((win ? 'over.win.' : 'over.lose.') + v.reason)) + '</p>' +
+    out += '<div class="scrim"><div class="modal over ' + (win ? 'win' : 'lose') + '" role="alertdialog" aria-modal="true"><h2>' + esc(tr(win ? 'over.win' : 'over.lose')) + '</h2><p>' + esc(tr((win ? 'over.win.' : 'over.lose.') + v.reason)) + '</p>' + rewardHtml() +
       '<button class="btn primary full" data-act="menu">' + esc(tr('over.menu')) + '</button>' + (app.ctrl.local ? '<button class="btn full" data-act="again">' + esc(tr('over.again')) + '</button>' : '') + (app.ctrl.online ? '<button class="btn full" data-act="again">' + esc(tr('o.over.again')) + '</button>' : '') + '</div></div>';
   }
   if (app.ctrl && app.ctrl.online && app.screen === 'game') out += window.BattleshipOnline.askHtml();

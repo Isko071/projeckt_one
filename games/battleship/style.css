@@ -266,3 +266,4 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .o-ask { display: flex; align-items: baseline; gap: 10px; }
 .o-ask b { font-size: 56px; line-height: 1; }
 .o-ask span { color: var(--muted); }
+.modal .reward { color: var(--ink); font-weight: 700; font-size: 16px; }

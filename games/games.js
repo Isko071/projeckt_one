@@ -24,6 +24,10 @@
       titleKey: 'games.poker-simple.title', descriptionKey: 'games.poker-simple.description'
     },
     {
+      id: 'battleship', status: 'available', path: 'games/battleship/', cover: 'games/battleship/cover.svg',
+      titleKey: 'games.battleship.title', descriptionKey: 'games.battleship.description'
+    },
+    {
       id: 'next', status: 'soon', path: 'games/next/', cover: 'assets/covers/soon.svg',
       titleKey: 'games.next.title', descriptionKey: 'games.next.description'
     }
