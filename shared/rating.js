@@ -1,5 +1,5 @@
 // Рейтинг игроков: у каждого вошедшего игрока в Firestore есть публичная строка ratings/<uid> (имя, аватар, баланс),
-// которую обновляет сам игрок, а читают все вошедшие. Правила базы: docs/rating.md.
+// которую обновляет сам игрок, а читают все вошедшие. Правила базы: docs/google-login.md.
 //   var rating = PlatformRating.create({ fetch, projectId, db })
 //   rating.rowFields(profile, balance) → { name, avatar, icon, balance } (очищенная строка)
 //   rating.fingerprint(profile, balance) → строка: менялась ли строка с прошлой отправки
