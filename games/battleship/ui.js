@@ -76,17 +76,12 @@ function sunkShips(marks) {
   return out;
 }
 // ===== Анимации (SMIL внутри SVG поля; время в секундах от появления поля) =====
-var FALL = 0.55;
+var FALL = 0.05;                                                                  // выстрел сразу взрывается на клетке, без полёта ядра
 function anim(attr, from, to, begin, dur, extra) {
   return '<animate attributeName="' + attr + '" from="' + from + '" to="' + to + '" begin="' + begin.toFixed(2) + 's" dur="' + dur + 's" fill="freeze" ' + (extra || '') + '/>';
 }
 function appear(t) { return '<set attributeName="opacity" to="1" begin="' + t.toFixed(2) + 's"/>'; }
 function cellXY(idx) { return { cx: OFF + (idx % N) * C + C / 2, cy: OFF + Math.floor(idx / N) * C + C / 2 }; }
-// Ядро падает на клетку: t0 — начало падения, fall — длительность, h — высота падения
-function ballFx(cx, cy, t0, fall, h) {
-  return '<circle class="ball" cx="' + cx + '" cy="' + (cy - h) + '" r="34" opacity="0">' + appear(t0) +
-    anim('cy', cy - h, cy, t0, fall, 'calcMode="spline" keyTimes="0;1" keySplines=".45 0 .9 .6"') + anim('r', 34, 15, t0, fall) + anim('opacity', 1, 0, t0 + fall, 0.01) + '</circle>';
-}
 // Удар в момент t: промах — всплеск и пузырьки, попадание — взрыв (потопление крупнее), «пусто» — лёгкое облачко
 function impactFx(cx, cy, kind, t) {
   var s = '', i;
@@ -147,14 +142,14 @@ function fxPlan(fx) {
   if (!fx) return { svg: svg, delays: delays };
   var p = cellXY(fx.idx), i;
   if (fx.kind === 'shoot') {
-    svg += ballFx(p.cx, p.cy, 0, FALL, 700) + impactFx(p.cx, p.cy, fx.result, FALL);
+    svg += impactFx(p.cx, p.cy, fx.result, FALL);
     delays[fx.idx] = FALL + (fx.result === 'miss' ? 0.4 : 0.07);
   } else if (fx.kind === 'bomber') {
     var pl = planeFx(p.cx, p.cy);
     svg += pl.svg;
     fx.cells.forEach(function (d, k) {
-      var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.1), q = cellXY(d.idx), tIn = t + 0.35;
-      svg += ballFx(q.cx, q.cy, t, 0.35, 260) + impactFx(q.cx, q.cy, d.result, tIn);
+      var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.1), q = cellXY(d.idx), tIn = t;
+      svg += impactFx(q.cx, q.cy, d.result, tIn);
       if (d.result !== 'none') delays[d.idx] = tIn + (d.result === 'miss' ? 0.4 : 0.07);
     });
   } else if (fx.kind === 'sub') {
