@@ -84,6 +84,44 @@ function sunkShips(marks) {
   }
   return out;
 }
+// Выстрел: ядро летит с неба (0,55 с), дальше попадание (взрыв: вспышка, искры, дым) или промах (всплеск: круги на воде и пузырьки)
+var FALL = 0.55;
+function anim(attr, from, to, begin, dur, extra) {
+  return '<animate attributeName="' + attr + '" from="' + from + '" to="' + to + '" begin="' + begin + 's" dur="' + dur + 's" fill="freeze" ' + (extra || '') + '/>';
+}
+function shotFx(cx, cy, kind) {
+  var s = '<g class="fx" pointer-events="none">', i, t = FALL;
+  s += '<circle class="ball" cx="' + cx + '" cy="' + (cy - 700) + '" r="34">' +
+    anim('cy', cy - 700, cy, 0, FALL, 'calcMode="spline" keyTimes="0;1" keySplines=".45 0 .9 .6"') + anim('r', 34, 15, 0, FALL) + anim('opacity', 1, 0, FALL, 0.01) + '</circle>';
+  if (kind === 1) {
+    for (i = 0; i < 2; i++) {
+      s += '<circle class="ripple" cx="' + cx + '" cy="' + cy + '" r="6" opacity="0">' + anim('r', 6, 62 + i * 14, t + i * 0.18, 0.75) + anim('opacity', 0.95, 0, t + i * 0.18, 0.75) + anim('stroke-width', 8, 1.5, t + i * 0.18, 0.75) + '</circle>';
+    }
+    [[-26, -8], [-10, -22], [10, -22], [26, -8], [0, -30]].forEach(function (d, k) {
+      s += '<circle class="drop" cx="' + (cx + d[0] * 0.3) + '" cy="' + cy + '" r="6" opacity="0">' +
+        '<animate attributeName="cy" values="' + cy + ';' + (cy + d[1] * 2.2) + ';' + (cy + 6) + '" keyTimes="0;.45;1" begin="' + t + 's" dur="0.6s" fill="freeze"/>' +
+        '<animate attributeName="cx" from="' + (cx + d[0] * 0.3) + '" to="' + (cx + d[0] * 1.5) + '" begin="' + t + 's" dur="0.6s" fill="freeze"/>' +
+        '<animate attributeName="opacity" values="0;1;0" keyTimes="0;.2;1" begin="' + t + 's" dur="0.6s" fill="freeze"/></circle>';
+    });
+    [[-22, 14, 0], [18, 10, 0.18], [-6, 26, 0.34], [26, 24, 0.5]].forEach(function (b) {
+      s += '<circle class="bubble" cx="' + (cx + b[0]) + '" cy="' + (cy + b[1]) + '" r="7" opacity="0">' + anim('cy', cy + b[1], cy + b[1] - 38, t + 0.45 + b[2], 0.7) + anim('r', 4, 10, t + 0.45 + b[2], 0.7) +
+        '<animate attributeName="opacity" values="0;.9;0" keyTimes="0;.3;1" begin="' + (t + 0.45 + b[2]) + 's" dur="0.7s" fill="freeze"/></circle>';
+    });
+  } else {
+    s += '<circle class="boom-fire" cx="' + cx + '" cy="' + cy + '" r="4" opacity="0">' + anim('r', 4, kind === 3 ? 90 : 62, t, 0.55) + anim('opacity', 1, 0, t, 0.55) + '</circle>';
+    s += '<circle class="boom-core" cx="' + cx + '" cy="' + cy + '" r="3" opacity="0">' + anim('r', 3, kind === 3 ? 56 : 38, t, 0.4) + anim('opacity', 1, 0, t, 0.4) + '</circle>';
+    for (i = 0; i < 10; i++) {
+      var a = i * Math.PI / 5 + 0.3, dx = Math.cos(a), dy = Math.sin(a);
+      s += '<line class="spark" x1="' + (cx + dx * 14) + '" y1="' + (cy + dy * 14) + '" x2="' + (cx + dx * 14) + '" y2="' + (cy + dy * 14) + '" opacity="0">' +
+        anim('x2', cx + dx * 14, cx + dx * (kind === 3 ? 92 : 70), t, 0.45) + anim('y2', cy + dy * 14, cy + dy * (kind === 3 ? 92 : 70), t, 0.45) + anim('opacity', 1, 0, t + 0.15, 0.3) + '</line>';
+    }
+    [[-14, 0], [14, 0.12], [0, 0.24]].forEach(function (sm) {
+      s += '<circle class="smoke" cx="' + (cx + sm[0]) + '" cy="' + cy + '" r="12" opacity="0">' + anim('cy', cy, cy - 54, t + 0.2 + sm[1], 0.9) + anim('r', 12, 26, t + 0.2 + sm[1], 0.9) +
+        '<animate attributeName="opacity" values="0;.6;0" keyTimes="0;.25;1" begin="' + (t + 0.2 + sm[1]) + 's" dur="0.9s" fill="freeze"/></circle>';
+    });
+  }
+  return s + '</g>';
+}
 // o: { key, label, marks, ships (свои корабли для показа), sunkShips, interactive, sel, ghost: { ship, ok }, popIdx, small }
 function boardSvg(o) {
   var W = (N + 1) * C, s = '<svg class="board' + (o.small ? ' small' : '') + (o.interactive ? '' : ' locked') + '" viewBox="0 0 ' + W + ' ' + W + '" role="img" aria-label="' + esc(o.label) + '">', i;
@@ -106,20 +144,26 @@ function boardSvg(o) {
       '<g class="aim"><circle cx="' + sx + '" cy="' + sy + '" r="70"/><path d="M' + sx + ' ' + (sy - 110) + 'V' + (sy - 42) + 'M' + sx + ' ' + (sy + 42) + 'V' + (sy + 110) + 'M' + (sx - 110) + ' ' + sy + 'H' + (sx - 42) + 'M' + (sx + 42) + ' ' + sy + 'H' + (sx + 110) + '"/></g>';
   }
   (o.ships || []).forEach(function (sh) {
-    if (sh.cells) s += shipSvg({ x: sh.cells[0] % N, y: Math.floor(sh.cells[0] / N), len: sh.len, dir: sh.cells.length > 1 && sh.cells[1] - sh.cells[0] === 1 ? 'h' : 'v' }, sh.hit.every(Boolean) ? 'sunk' : '', o.key);
+    if (sh.cells) s += shipSvg({ x: sh.cells[0] % N, y: Math.floor(sh.cells[0] / N), len: sh.len, dir: sh.cells.length > 1 && sh.cells[1] - sh.cells[0] === 1 ? 'h' : 'v' }, sh.hit.every(Boolean) ? 'sunk' + (o.popIdx >= 0 && sh.cells.indexOf(o.popIdx) >= 0 ? ' late' : '') : '', o.key);
     else s += shipSvg(sh, '', o.key);
   });
-  (o.sunkShips || []).forEach(function (sh) { s += shipSvg(sh, 'sunk', o.key); });
+  (o.sunkShips || []).forEach(function (sh) {
+    var late = o.popIdx >= 0 && B.cellsOf(sh, N).indexOf(o.popIdx) >= 0;
+    s += shipSvg(sh, 'sunk' + (late ? ' late' : ''), o.key);
+  });
   if (o.ghost) {
     B.cellsOf(o.ghost.ship, N).forEach(function (c) { s += '<rect class="cellfx ' + (o.ghost.ok ? 'ok' : 'no') + '" x="' + (OFF + (c % N) * C) + '" y="' + (OFF + Math.floor(c / N) * C) + '" width="' + C + '" height="' + C + '"/>'; });
     s += shipSvg(o.ghost.ship, 'ghost' + (o.ghost.ok ? '' : ' bad'), o.key);
   }
+  var fx = '';
   (o.marks || []).forEach(function (m, idx) {
     if (!m) return;
-    var cx = OFF + (idx % N) * C + C / 2, cy = OFF + Math.floor(idx / N) * C + C / 2, pop = idx === o.popIdx ? ' pop' : '';
-    if (m === 1) s += '<rect class="m-miss' + pop + '" x="' + (cx - C / 2 + 3) + '" y="' + (cy - C / 2 + 3) + '" width="' + (C - 6) + '" height="' + (C - 6) + '" fill="url(#hatch-' + o.key + ')"/>';
-    else s += '<path class="m-hit' + pop + '" d="M' + (cx - 24) + ' ' + (cy - 24) + 'L' + (cx + 24) + ' ' + (cy + 24) + 'M' + (cx + 24) + ' ' + (cy - 24) + 'L' + (cx - 24) + ' ' + (cy + 24) + '"/>';
+    var cx = OFF + (idx % N) * C + C / 2, cy = OFF + Math.floor(idx / N) * C + C / 2, fresh = idx === o.popIdx;
+    if (fresh) fx += shotFx(cx, cy, m);
+    if (m === 1) s += '<rect class="m-miss' + (fresh ? ' pop late-miss' : '') + '" x="' + (cx - C / 2 + 3) + '" y="' + (cy - C / 2 + 3) + '" width="' + (C - 6) + '" height="' + (C - 6) + '" fill="url(#hatch-' + o.key + ')"/>';
+    else s += '<path class="m-hit' + (fresh ? ' pop late-hit' : '') + '" d="M' + (cx - 24) + ' ' + (cy - 24) + 'L' + (cx + 24) + ' ' + (cy + 24) + 'M' + (cx + 24) + ' ' + (cy - 24) + 'L' + (cx - 24) + ' ' + (cy + 24) + '"/>';
   });
+  s += fx;
   if (o.interactive) {
     for (i = 0; i < N * N; i++) s += '<rect class="hit-target" data-cell="' + i + '" x="' + (OFF + (i % N) * C) + '" y="' + (OFF + Math.floor(i / N) * C) + '" width="' + C + '" height="' + C + '"/>';
   }
@@ -257,7 +301,7 @@ function devController() {
       var pool = near.length ? near : free, pick = pool[Math.floor(Math.random() * pool.length)];
       var r = B.reduce(st, { type: 'shoot', seat: 1, x: pick % N, y: Math.floor(pick / N) });
       if (r.ok) { st = r.state; emit(); botMove(); }
-    }, 900);
+    }, 1700);
   }
   reset();
   return {

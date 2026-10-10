@@ -43,7 +43,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .sheet::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--ink-r); opacity: .5; border-radius: 6px 6px 0 0; }
 .sheet::after { content: ''; position: absolute; left: -1px; right: -1px; bottom: -6px; height: 7px; background: repeating-linear-gradient(135deg, var(--torn) 0 5px, transparent 5px 9px); opacity: .55; clip-path: polygon(0 0, 100% 0, 100% 40%, 96% 100%, 90% 30%, 84% 100%, 78% 35%, 70% 100%, 62% 30%, 55% 100%, 46% 40%, 38% 100%, 30% 35%, 22% 100%, 14% 40%, 8% 100%, 0 45%); }
 .sheet .cap { font-size: 13px; font-weight: 700; color: var(--ink-b); margin: 2px 4px 4px; display: flex; justify-content: space-between; gap: 8px; }
-.board { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.board { overflow: visible; display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 .board.small { max-width: 220px; margin: 0 auto; }
 .who { width: 28px; height: 26px; flex: none; }
 .who.me { fill: oklch(0.65 0.17 150); }
@@ -75,6 +75,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .board .hit-target { fill: transparent; cursor: pointer; }
 .board.locked .hit-target { cursor: default; }
 .pop { animation: pop .25s ease-out both; transform-box: fill-box; transform-origin: center; }
+.late-hit { animation-delay: .62s; }
+.late-miss { animation-delay: .95s; }
+.ship.late { animation: fadein .35s ease-out .75s both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop { from { transform: scale(.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* Расстановка */
@@ -125,3 +129,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 
 /* Длинное название «Морской бой» помещается компактнее */
 .brand h1 { font-size: clamp(28px, 5.4vh, 38px); }
+
+/* Анимация выстрела: ядро, взрыв, всплеск */
+.fx .ball { fill: oklch(0.3 0.03 265); stroke: var(--ink-b); stroke-width: 4; }
+.fx .boom-fire { fill: oklch(0.72 0.19 50); }
+.fx .boom-core { fill: oklch(0.94 0.14 95); }
+.fx .spark { stroke: oklch(0.8 0.17 70); stroke-width: 7; stroke-linecap: round; }
+.fx .smoke { fill: oklch(0.55 0.01 260); }
+.fx .ripple { fill: none; stroke: var(--ink-b); }
+.fx .drop { fill: oklch(0.7 0.12 235); }
+.fx .bubble { fill: none; stroke: oklch(0.65 0.13 235); stroke-width: 4; }
+@media (prefers-reduced-motion: reduce) { .fx { display: none; } .late-hit, .late-miss, .ship.late { animation: none; } }
