@@ -36,26 +36,17 @@ function headHtml(act, title, label) {
 // ===== Корабли и поле (рисуются как в тетради: чернильные контуры) =====
 // Корабль длиной len клеток, нос справа: корпус с заострённым носом, внутренний контур, штриховка борта, башня со стволом, рубка, купол, труба
 function shipG(len) {
-  var W = len * C, i, o = '';
-  function circ(cx, cy, r, cls) { return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" class="' + (cls || 'deck pf') + '"/>'; }
-  function box(x, y, w, h, r) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 6) + '" class="deck pf"/>'; }
-  if (len === 1) {
-    o += '<path d="M10 14 L56 14 Q94 50 56 86 L10 86 Q-2 50 10 14Z" class="hull"/>';
-    o += '<path d="M20 26 L52 26 Q76 50 52 74 L20 74 Q12 50 20 26Z" class="deck"/>';
-    o += circ(40, 50, 15) + circ(40, 50, 6) + '<path d="M55 50 L74 50" class="gun"/>';
-    return o;
-  }
-  o += '<path d="M8 10 L' + (W - 38) + ' 10 Q' + (W - 2) + ' 50 ' + (W - 38) + ' 90 L8 90 Q-4 50 8 10Z" class="hull"/>';
-  o += '<path d="M20 22 L' + (W - 42) + ' 22 Q' + (W - 16) + ' 50 ' + (W - 42) + ' 78 L20 78 Q10 50 20 22Z" class="deck"/>';
-  for (i = 26; i < W - 56; i += 13) o += '<path d="M' + i + ' 80 L' + (i + 9) + ' 70" class="shade"/>';       // штриховка нижнего борта
-  var bow = W - 76;                                                                                    // башня со стволом у носа
-  o += circ(bow, 50, 15) + circ(bow, 50, 6) + '<path d="M' + (bow + 15) + ' 50 L' + (bow + 40) + ' 50" class="gun"/>';
-  o += circ(44, 50, 22) + circ(44, 50, 10);                                                           // купол на корме
-  if (len >= 3) {
-    var bx = Math.round(W / 2) - 26;
-    o += box(bx, 34, 52, 32, 7) + circ(bx + 14, 50, 4.5, 'deck') + circ(bx + 38, 50, 4.5, 'deck');       // рубка с окнами
-  }
-  if (len === 4) o += circ(Math.round(W * 0.7), 50, 11) + circ(Math.round(W * 0.7), 50, 4, 'deck');     // труба
+  var W = len * C, i, o = '', t = W - 52, bowX = W - 4;
+  function rect(x, y, w, h, cls) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="3" class="' + (cls || 'deck pf') + '"/>'; }
+  function turret(x) { return '<path d="M' + (x + 12) + ' 43 H' + (x + 40) + ' M' + (x + 12) + ' 57 H' + (x + 40) + '" class="gun"/>' + rect(x - 12, 36, 26, 28, 'deck pf'); }
+  o += '<path d="M8 20 L' + t + ' 12 Q' + (W - 18) + ' 28 ' + bowX + ' 50 Q' + (W - 18) + ' 72 ' + t + ' 88 L8 80 L3 66 L3 34Z" class="hull"/>';
+  o += '<path d="M16 30 L' + (t - 2) + ' 24 Q' + (W - 30) + ' 38 ' + (W - 24) + ' 50 Q' + (W - 30) + ' 62 ' + (t - 2) + ' 76 L16 70Z" class="deck thin"/>';
+  for (i = 24; i < W - 90; i += 11) o += '<path d="M' + i + ' 82 L' + (i + 7) + ' 76" class="shade"/>';
+  if (len === 1) return o + turret(34);
+  o += turret(W - 80);
+  if (len >= 2) o += turret(30);
+  if (len >= 3) o += rect(Math.round(W / 2) - 30, 38, 60, 24) + '<path d="M' + (Math.round(W / 2) - 20) + ' 50 H' + (Math.round(W / 2) + 20) + '" class="deck thin"/>';
+  if (len === 4) o += '<ellipse cx="' + Math.round(W * 0.66) + '" cy="50" rx="16" ry="9" class="deck pf"/>';
   return o;
 }
 function shipSvg(sh, cls, key, style) {
@@ -137,16 +128,16 @@ function impactFx(cx, cy, kind, t) {
 // Самолёт пролетает слева направо на высоте cy; возвращает время, когда он над столбцом cx
 function planeFx(cx, cy) {
   var W = (N + 1) * C, from = -300, to = W + 300, dur = 1.5, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
-  var body = '<g transform="scale(1.7) translate(0,0)"><path d="M0 0 L34 -13 L110 -13 L138 0 L110 13 L34 13Z M58 -13 L84 -70 L102 -70 L92 -13Z M58 13 L84 70 L102 70 L92 13Z M6 -6 L2 -32 L20 -32 L30 -6Z M6 6 L2 32 L20 32 L30 6Z" class="plane-body"/>' +
-    '<ellipse cx="82" cy="-34" rx="9" ry="12" class="deck pf"/><ellipse cx="82" cy="34" rx="9" ry="12" class="deck pf"/><circle cx="118" cy="0" r="6" class="deck"/></g>';
+  var body = '<g transform="scale(1.7)"><path d="M-2 0 Q2 -6 18 -7 L118 -6 L142 0 L118 6 L18 7 Q2 6 -2 0Z M100 -7 L72 -7 L42 -76 L58 -76Z M100 7 L72 7 L42 76 L58 76Z M10 -6 L-6 -28 L6 -28 L26 -6Z M10 6 L-6 28 L6 28 L26 6Z" class="plane-body"/>' +
+    '<path d="M66 -42 H88 M66 42 H88" class="deck"/><path d="M108 -3 L122 0 L108 3Z" class="deck pf"/></g>';
   function path(dx, dy, cls) { return '<g class="' + cls + '" opacity="0" transform="translate(' + from + ',' + cy + ')">' + appear(0) + '<animateTransform attributeName="transform" type="translate" from="' + (from + dx) + ' ' + (cy + dy) + '" to="' + (to + dx) + ' ' + (cy + dy) + '" begin="0s" dur="' + dur + 's" fill="freeze"/>' + body + '</g>'; }
   return { tAt: tAt, svg: path(48, 60, 'plane shadow') + path(0, 0, 'plane') };
 }
 // Подлодка в точке удара: капсула с рубкой и перископом, появляется и уходит под воду
 function subBodyFx(cx, cy) {
-  var d = 'M20 35 Q20 5 70 5 L230 5 Q280 5 280 35 Q280 65 230 65 L70 65 Q20 65 20 35Z';
+  var d = 'M16 35 Q40 6 90 6 L220 6 Q268 8 290 35 Q268 62 220 64 L90 64 Q40 64 16 35Z';
   return '<g class="sub" opacity="0" transform="translate(' + (cx - 150) + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.16;.8;1" begin="0s" dur="1.5s" fill="freeze"/>' +
-    '<path d="' + d + '" class="hull"/><path d="M118 5 L130 -18 L172 -18 L184 5" class="hull"/><path d="M150 -18 L150 -36 L172 -36" class="deck"/><circle cx="60" cy="35" r="9" class="deck pf"/><circle cx="240" cy="35" r="9" class="deck pf"/></g>';
+    '<path d="' + d + '" class="hull"/><rect x="118" y="22" width="56" height="26" rx="3" class="deck pf"/><path d="M146 22 V10 H162" class="deck"/><path d="M40 35 H110 M182 35 H260" class="deck thin"/></g>';
 }
 // План анимации действия: рисунок и задержки появления итоговых отметок по клеткам
 function fxPlan(fx) {
@@ -264,15 +255,11 @@ function weaponIcon(kind) {
       '<path d="M19 50H81M50 19V81" class="deck thin"/><circle cx="64" cy="38" r="3.5" class="wi-dot"/></svg>';
   }
   if (kind === 'sub') {
-    return '<svg class="wicon" viewBox="0 0 160 80" aria-hidden="true"><path d="M0 70 q10 -7 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" class="deck thin"/>' +
-      '<path d="M12 44 Q12 27 42 27 L118 27 Q150 27 150 44 Q150 61 118 61 L42 61 Q12 61 12 44Z" class="hull"/><path d="M62 27 L69 10 L99 10 L106 27" class="hull"/><path d="M84 10 L84 3 L97 3" class="deck"/>' +
-      '<circle cx="48" cy="44" r="6" class="deck pf"/><circle cx="76" cy="44" r="6" class="deck pf"/><circle cx="104" cy="44" r="6" class="deck pf"/><path d="M12 44 L2 36 M12 44 L2 52 M12 44 L0 44" class="deck"/>' +
-      '<path d="M30 56 L52 52 M90 56 L116 52" class="shade"/></svg>';
+    return '<svg class="wicon" viewBox="0 0 160 80" aria-hidden="true"><path d="M0 72 q10 -6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" class="deck thin"/>' +
+      '<path d="M6 46 Q30 30 62 30 L124 30 Q148 32 156 46 Q148 58 124 60 L62 60 Q30 60 6 46Z" class="hull"/><path d="M64 30 L70 14 L100 14 L106 30" class="hull"/><path d="M88 14 V5 H100" class="deck"/>' +
+      '<path d="M26 46 H56 M112 46 H140" class="deck thin"/></svg>';
   }
-  return '<svg class="wicon" viewBox="0 0 160 100" aria-hidden="true"><path d="M8 50 Q8 43 20 43 L118 43 Q152 50 118 57 L20 57 Q8 57 8 50Z" class="hull"/>' +
-    '<path d="M62 43 L50 5 L76 5 L88 43Z" class="hull"/><path d="M62 57 L50 95 L76 95 L88 57Z" class="hull"/>' +
-    '<ellipse cx="60" cy="22" rx="7" ry="9" class="deck pf"/><ellipse cx="60" cy="78" rx="7" ry="9" class="deck pf"/><ellipse cx="74" cy="12" rx="6" ry="8" class="deck pf"/><ellipse cx="74" cy="88" rx="6" ry="8" class="deck pf"/>' +
-    '<path d="M16 44 L8 26 L24 26 L30 44Z" class="hull"/><path d="M16 56 L8 74 L24 74 L30 56Z" class="hull"/><circle cx="116" cy="50" r="5" class="deck"/><path d="M94 47 L108 47 M94 53 L108 53" class="shade"/></svg>';
+  return '<svg class="wicon" viewBox="0 0 120 100" aria-hidden="true"><g transform="translate(10 50) scale(.72)"><path d="M-2 0 Q2 -6 18 -7 L118 -6 L142 0 L118 6 L18 7 Q2 6 -2 0Z M100 -7 L72 -7 L42 -68 L58 -68Z M100 7 L72 7 L42 68 L58 68Z M10 -6 L-6 -28 L6 -28 L26 -6Z M10 6 L-6 28 L6 28 L26 6Z" class="hull"/><path d="M66 -38 H88 M66 38 H88" class="deck"/></g></svg>';
 }
 // Вымпел «Арсенал»: щит с красной штриховкой снизу
 function pennantSvg() {

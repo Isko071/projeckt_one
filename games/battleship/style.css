@@ -55,11 +55,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .board .paper { fill: var(--paper); }
 .board .gridline { stroke: var(--grid); stroke-width: 3; }
 .board .frame { fill: none; stroke: var(--ink-b); stroke-width: 7; stroke-linejoin: round; }
-.hull { fill: var(--ship-fill); stroke: var(--ink-b); stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
-.deck { fill: none; stroke: var(--ink-b); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+.hull { fill: var(--ship-fill); stroke: var(--ink-b); stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.deck { fill: none; stroke: var(--ink-b); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 .deck.pf { fill: var(--paper); }
+.deck.thin { stroke-width: 2; }
 .shade { stroke: var(--ink-b); stroke-width: 4; stroke-linecap: round; opacity: .55; }
-.gun { stroke: var(--ink-b); stroke-width: 8; stroke-linecap: round; fill: none; }
+.gun { stroke: var(--ink-b); stroke-width: 5; stroke-linecap: round; fill: none; }
 .ship.sunk .hull { stroke: var(--ink-r); fill: oklch(0.9 0.05 25 / .6); }
 .ship.sunk .deck, .ship.sunk .gun, .ship.sunk .shade { stroke: var(--ink-r); }
 .ship.ghost { opacity: .75; }
