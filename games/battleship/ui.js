@@ -136,8 +136,10 @@ function planeFx(cx, cy) {
 // Подлодка в точке удара: капсула с рубкой и перископом, появляется и уходит под воду
 function subBodyFx(cx, cy) {
   var d = 'M16 35 Q40 6 90 6 L220 6 Q268 8 290 35 Q268 62 220 64 L90 64 Q40 64 16 35Z';
-  return '<g class="sub" opacity="0" transform="translate(' + (cx - 150) + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.16;.8;1" begin="0s" dur="1.5s" fill="freeze"/>' +
-    '<path d="' + d + '" class="hull"/><rect x="118" y="22" width="56" height="26" rx="3" class="deck pf"/><path d="M146 22 V10 H162" class="deck"/><path d="M40 35 H110 M182 35 H260" class="deck thin"/></g>';
+  var x0 = cx - 150, x1 = (N + 1) * C - 120, run = Math.max(300, x1 - x0);
+  return '<g class="sub" opacity="0" transform="translate(' + x0 + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.82;1" begin="0s" dur="2.6s" fill="freeze"/>' +
+    '<animateTransform attributeName="transform" type="translate" from="' + x0 + ' ' + (cy - 35) + '" to="' + (x0 + run) + ' ' + (cy - 35) + '" begin="0.9s" dur="1.7s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".5 0 .9 .8"/>' +
+    '<path d="' + d + '" class="hull"/><rect x="118" y="22" width="56" height="26" rx="3" class="deck pf"/><path d="M146 22 V10 H162" class="deck"/><path d="M40 35 H110 M182 35 H260" class="deck thin"/><path d="M-10 26 q-14 9 0 18 M-34 22 q-16 13 0 26" class="deck thin"/></g>';
 }
 // План анимации действия: рисунок и задержки появления итоговых отметок по клеткам
 function fxPlan(fx) {
@@ -158,9 +160,9 @@ function fxPlan(fx) {
   } else if (fx.kind === 'sub') {
     svg += subBodyFx(p.cx, p.cy);
     fx.torpedoes.forEach(function (tp) {
-      var steps = tp.path.length, t0 = 0.45, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
-      svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.5) + '</line>';
-      svg += '<circle class="torp" cx="' + p.cx + '" cy="' + p.cy + '" r="11" opacity="0">' + appear(t0) + anim('cy', p.cy, end.cy, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</circle>';
+      var steps = tp.path.length, t0 = 0.5, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
+      svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.6) + '</line>';
+      svg += '<rect class="torp" x="' + (p.cx - 7) + '" y="' + (p.cy - 20) + '" width="14" height="40" rx="7" opacity="0">' + appear(t0) + anim('y', p.cy - 20, end.cy - 20, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</rect>';
       tp.fresh.forEach(function (ci) { delays[ci] = t0 + dur * (tp.path.indexOf(ci) + 1) / steps + 0.05; });
       if (tp.hit >= 0) { svg += impactFx(end.cx, end.cy, tp.result, t0 + dur); delays[tp.hit] = t0 + dur + 0.07; }
       else svg += impactFx(end.cx, end.cy, 'miss', t0 + dur);

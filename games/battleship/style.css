@@ -167,7 +167,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .selarrow { fill: none; stroke: var(--ink-b); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .plane-body { fill: var(--ship-fill); stroke: var(--ink-b); stroke-width: 5; stroke-linejoin: round; }
 .fx .torp { fill: oklch(0.45 0.05 265); stroke: var(--ink-b); stroke-width: 4; }
-.fx .wake { stroke: oklch(0.75 0.08 235); stroke-width: 12; stroke-linecap: round; }
+.fx .wake { stroke: oklch(0.7 0.1 270); stroke-width: 8; stroke-linecap: round; stroke-dasharray: 2 14; }
 .fx .radar-ring { fill: none; stroke: oklch(0.72 0.15 160); stroke-width: 8; }
 .fx .radar-arm { stroke: oklch(0.72 0.15 160); stroke-width: 10; stroke-linecap: round; }
 .sub .hull { fill: var(--ship-fill); }
