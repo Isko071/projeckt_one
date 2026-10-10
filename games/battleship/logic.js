@@ -243,8 +243,8 @@
           var m = foe.marks[c];
           if (m === 0) {
             if (shipAt(foe, c)) { foe.marks[c] = DETECTED; found++; } else foe.marks[c] = MISS;
+            seen.push(c);                                                  // только клетки, где появилась новая отметка
           } else if (m === DETECTED) found++;
-          seen.push(c);
         });
         last = { seat: seat, kind: 'radar', x: x, y: y, cells: seen, found: found };
         events.push({ type: 'radar', seat: seat, x: x, y: y, found: found });
@@ -261,16 +261,16 @@
       } else {                                                         // подлодка: две торпеды по столбцу, вверх (включая выбранную клетку) и вниз
         var torp = [];
         [{ dir: 'up', from: y, step: -1 }, { dir: 'down', from: y + 1, step: 1 }].forEach(function (tp) {
-          var path = [], hitIdx = -1, tr2 = null;
+          var path = [], fresh = [], hitIdx = -1, tr2 = null;
           for (var ry = tp.from; ry >= 0 && ry < size; ry += tp.step) {
             var ci = ry * size + x, cm = foe.marks[ci];
             path.push(ci);
             if (cm === MISS || cm === HIT || cm === SUNK) continue;        // знакомая вода и уже подбитые клетки торпеда проходит
-            if (!shipAt(foe, ci)) { foe.marks[ci] = MISS; continue; }
+            if (!shipAt(foe, ci)) { if (cm === 0) { foe.marks[ci] = MISS; fresh.push(ci); } continue; }
             tr2 = applyShot(foe, ci, size); hitIdx = ci; hits++;
             break;
           }
-          torp.push({ dir: tp.dir, path: path, hit: hitIdx, result: tr2 });
+          torp.push({ dir: tp.dir, path: path, fresh: fresh, hit: hitIdx, result: tr2 });
         });
         last = { seat: seat, kind: 'sub', x: x, y: y, torpedoes: torp, hits: hits };
         events.push({ type: 'sub', seat: seat, x: x, y: y, hits: hits });

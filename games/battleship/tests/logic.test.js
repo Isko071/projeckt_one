@@ -271,7 +271,7 @@ test('радар: корабли в области 3×3 отмечаются «�
   [xy2(0, 0), xy2(1, 0), xy2(2, 0), xy2(0, 2), xy2(1, 2), xy2(2, 2)].forEach((c) => assert.equal(m[c], 4, 'корабль в клетке ' + c));
   [xy2(0, 1), xy2(1, 1), xy2(2, 1)].forEach((c) => assert.equal(m[c], 1, 'пусто в клетке ' + c));
   assert.equal(m[xy2(3, 0)], 0, 'вне области без изменений');
-  assert.equal(st.last.kind, 'radar'); assert.equal(st.last.found, 6); assert.equal(st.last.cells.length, 9);
+  assert.equal(st.last.kind, 'radar'); assert.equal(st.last.found, 6); assert.equal(st.last.cells.length, 9, 'все клетки области получили новые отметки');
   assert.equal(st.current, 1);
   assert.equal(st.seats[0].arsenal.radar, 0);
   const back = Object.assign(plain(st), { current: 0 });
@@ -395,4 +395,25 @@ test('случайные партии с оружием доигрываются
     assert.equal(st.gameOver, true, 'партия ' + g + ' закончилась');
     assert.ok(st.seats[1 - st.winner].ships.every((s) => s.hit.every(Boolean)));
   }
+});
+
+test('радар повторно по той же области: новых отметок нет, найдено считает уже обнаруженные', () => {
+  let st = withFleetA(0);
+  st = act(st, { type: 'radar', seat: 0, x: 1, y: 1 });
+  const again = Object.assign(plain(st), { current: 0 });
+  again.seats[0].arsenal.radar = 1;
+  const r = B.reduce(again, { type: 'radar', seat: 0, x: 1, y: 1 });
+  assert.equal(r.state.last.cells.length, 0);
+  assert.equal(r.state.last.found, 6);
+});
+
+test('подлодка запоминает в fresh только новые клетки воды', () => {
+  let st = withFleetA(0);
+  st = act(st, { type: 'sub', seat: 0, x: 9, y: 5 });
+  assert.equal(st.last.torpedoes[0].fresh.length, 6);
+  const second = Object.assign(plain(st), { current: 0 });
+  second.seats[0].arsenal.sub = 1;
+  const r = B.reduce(second, { type: 'sub', seat: 0, x: 9, y: 2 });
+  assert.equal(r.state.last.torpedoes[0].fresh.length, 0, 'вода уже отмечена');
+  assert.equal(r.state.last.torpedoes[0].path.length, 3);
 });

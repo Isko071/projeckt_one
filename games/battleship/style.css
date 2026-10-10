@@ -140,3 +140,33 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .fx .drop { fill: oklch(0.7 0.12 235); }
 .fx .bubble { fill: none; stroke: oklch(0.65 0.13 235); stroke-width: 4; }
 @media (prefers-reduced-motion: reduce) { .fx { display: none; } .late-hit, .late-miss, .ship.late { animation: none; } }
+
+/* Оружие: выбор перед боем, панель в бою, цели на поле, анимации */
+.arsenal { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 10px 12px; }
+.arsenal .cap { display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; margin: 0; }
+.arsenal .cnt.ok { color: var(--accent); }
+.arow { display: flex; align-items: center; gap: 10px; }
+.ainfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
+.ainfo b { font-size: 15px; }
+.ainfo span { color: var(--muted); line-height: 1.3; }
+.step { display: flex; align-items: center; gap: 8px; }
+.stepbtn { width: 40px; height: 40px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); font-size: 20px; font-weight: 700; cursor: pointer; }
+.stepbtn:disabled { opacity: .4; cursor: not-allowed; }
+.num { min-width: 20px; text-align: center; font-weight: 800; font-size: 18px; }
+.wbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.wbtn { flex: 1 1 0; min-width: 72px; min-height: 46px; padding: 4px 6px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.wbtn small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.wbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.wbtn:disabled { opacity: .4; cursor: not-allowed; }
+.m-blip circle { fill: none; stroke: oklch(0.7 0.17 55); stroke-width: 8; }
+.m-blip .dot { fill: oklch(0.7 0.17 55); stroke: none; }
+.selarea { fill: oklch(0.65 0.17 250 / .12); stroke: var(--ink-b); stroke-width: 6; stroke-dasharray: 18 12; pointer-events: none; }
+.selarea.bomber { stroke: var(--ink-r); fill: oklch(0.6 0.2 27 / .1); }
+.selline { stroke: var(--ink-b); stroke-width: 6; stroke-dasharray: 16 12; opacity: .7; pointer-events: none; }
+.selarrow { fill: none; stroke: var(--ink-b); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.plane-body { fill: var(--ship-fill); stroke: var(--ink-b); stroke-width: 5; stroke-linejoin: round; }
+.fx .torp { fill: oklch(0.45 0.05 265); stroke: var(--ink-b); stroke-width: 4; }
+.fx .wake { stroke: oklch(0.75 0.08 235); stroke-width: 12; stroke-linecap: round; }
+.fx .radar-ring { fill: none; stroke: oklch(0.72 0.15 160); stroke-width: 8; }
+.fx .radar-arm { stroke: oklch(0.72 0.15 160); stroke-width: 10; stroke-linecap: round; }
+.sub .hull { fill: var(--ship-fill); }

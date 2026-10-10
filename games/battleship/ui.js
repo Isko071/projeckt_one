@@ -9,7 +9,7 @@ var appEl = document.getElementById('app');
 var N = B.CONFIG.size, C = 100, OFF = C;            // клетка 100 единиц, поле смещено на ширину подписей
 var DEV = /[?&]dev\b/.test(location.search) || location.hash === '#dev';
 
-var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, place: null, msg: '' };
+var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', place: null, msg: '' };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function cellLabel(idx) { return tr('letters').charAt(Math.floor(idx / N)) + (idx % N + 1); }
@@ -58,10 +58,10 @@ function shipG(len) {
   if (len === 4) o += circ(Math.round(W * 0.7), 50, 11) + circ(Math.round(W * 0.7), 50, 4, 'deck');     // труба
   return o;
 }
-function shipSvg(sh, cls, key) {
+function shipSvg(sh, cls, key, style) {
   var px = OFF + sh.x * C, py = OFF + sh.y * C;
   var t = sh.dir === 'v' ? 'translate(' + (px + C) + ',' + py + ') rotate(90)' : 'translate(' + px + ',' + py + ')';
-  return '<g class="ship ' + (cls || '') + '" transform="' + t + '" filter="url(#wob-' + key + ')">' + shipG(sh.len) + '</g>';
+  return '<g class="ship ' + (cls || '') + '" transform="' + t + '" filter="url(#wob-' + key + ')"' + (style || '') + '>' + shipG(sh.len) + '</g>';
 }
 function miniShip(len) { return '<svg viewBox="0 0 ' + (len * C) + ' ' + C + '" aria-hidden="true" class="board-mini"><g class="ship">' + shipG(len) + '</g></svg>'; }
 // Потопленные корабли соперника восстанавливаются по отметкам «потоплен» (3): связные клетки в линию
@@ -84,47 +84,124 @@ function sunkShips(marks) {
   }
   return out;
 }
-// Выстрел: ядро летит с неба (0,55 с), дальше попадание (взрыв: вспышка, искры, дым) или промах (всплеск: круги на воде и пузырьки)
+// ===== Анимации (SMIL внутри SVG поля; время в секундах от появления поля) =====
 var FALL = 0.55;
 function anim(attr, from, to, begin, dur, extra) {
-  return '<animate attributeName="' + attr + '" from="' + from + '" to="' + to + '" begin="' + begin + 's" dur="' + dur + 's" fill="freeze" ' + (extra || '') + '/>';
+  return '<animate attributeName="' + attr + '" from="' + from + '" to="' + to + '" begin="' + begin.toFixed(2) + 's" dur="' + dur + 's" fill="freeze" ' + (extra || '') + '/>';
 }
-function shotFx(cx, cy, kind) {
-  var s = '<g class="fx" pointer-events="none">', i, t = FALL;
-  s += '<circle class="ball" cx="' + cx + '" cy="' + (cy - 700) + '" r="34">' +
-    anim('cy', cy - 700, cy, 0, FALL, 'calcMode="spline" keyTimes="0;1" keySplines=".45 0 .9 .6"') + anim('r', 34, 15, 0, FALL) + anim('opacity', 1, 0, FALL, 0.01) + '</circle>';
-  if (kind === 1) {
+function appear(t) { return '<set attributeName="opacity" to="1" begin="' + t.toFixed(2) + 's"/>'; }
+function cellXY(idx) { return { cx: OFF + (idx % N) * C + C / 2, cy: OFF + Math.floor(idx / N) * C + C / 2 }; }
+// Ядро падает на клетку: t0 — начало падения, fall — длительность, h — высота падения
+function ballFx(cx, cy, t0, fall, h) {
+  return '<circle class="ball" cx="' + cx + '" cy="' + (cy - h) + '" r="34" opacity="0">' + appear(t0) +
+    anim('cy', cy - h, cy, t0, fall, 'calcMode="spline" keyTimes="0;1" keySplines=".45 0 .9 .6"') + anim('r', 34, 15, t0, fall) + anim('opacity', 1, 0, t0 + fall, 0.01) + '</circle>';
+}
+// Удар в момент t: промах — всплеск и пузырьки, попадание — взрыв (потопление крупнее), «пусто» — лёгкое облачко
+function impactFx(cx, cy, kind, t) {
+  var s = '', i;
+  if (kind === 'none') {
+    return '<circle class="smoke" cx="' + cx + '" cy="' + cy + '" r="10" opacity="0">' + anim('r', 10, 24, t, 0.5) + '<animate attributeName="opacity" values="0;.5;0" keyTimes="0;.3;1" begin="' + t.toFixed(2) + 's" dur="0.5s" fill="freeze"/></circle>';
+  }
+  if (kind === 'miss') {
     for (i = 0; i < 2; i++) {
       s += '<circle class="ripple" cx="' + cx + '" cy="' + cy + '" r="6" opacity="0">' + anim('r', 6, 62 + i * 14, t + i * 0.18, 0.75) + anim('opacity', 0.95, 0, t + i * 0.18, 0.75) + anim('stroke-width', 8, 1.5, t + i * 0.18, 0.75) + '</circle>';
     }
-    [[-26, -8], [-10, -22], [10, -22], [26, -8], [0, -30]].forEach(function (d, k) {
+    [[-26, -8], [-10, -22], [10, -22], [26, -8], [0, -30]].forEach(function (d) {
       s += '<circle class="drop" cx="' + (cx + d[0] * 0.3) + '" cy="' + cy + '" r="6" opacity="0">' +
-        '<animate attributeName="cy" values="' + cy + ';' + (cy + d[1] * 2.2) + ';' + (cy + 6) + '" keyTimes="0;.45;1" begin="' + t + 's" dur="0.6s" fill="freeze"/>' +
-        '<animate attributeName="cx" from="' + (cx + d[0] * 0.3) + '" to="' + (cx + d[0] * 1.5) + '" begin="' + t + 's" dur="0.6s" fill="freeze"/>' +
-        '<animate attributeName="opacity" values="0;1;0" keyTimes="0;.2;1" begin="' + t + 's" dur="0.6s" fill="freeze"/></circle>';
+        '<animate attributeName="cy" values="' + cy + ';' + (cy + d[1] * 2.2) + ';' + (cy + 6) + '" keyTimes="0;.45;1" begin="' + t.toFixed(2) + 's" dur="0.6s" fill="freeze"/>' +
+        '<animate attributeName="cx" from="' + (cx + d[0] * 0.3) + '" to="' + (cx + d[0] * 1.5) + '" begin="' + t.toFixed(2) + 's" dur="0.6s" fill="freeze"/>' +
+        '<animate attributeName="opacity" values="0;1;0" keyTimes="0;.2;1" begin="' + t.toFixed(2) + 's" dur="0.6s" fill="freeze"/></circle>';
     });
     [[-22, 14, 0], [18, 10, 0.18], [-6, 26, 0.34], [26, 24, 0.5]].forEach(function (b) {
-      s += '<circle class="bubble" cx="' + (cx + b[0]) + '" cy="' + (cy + b[1]) + '" r="7" opacity="0">' + anim('cy', cy + b[1], cy + b[1] - 38, t + 0.45 + b[2], 0.7) + anim('r', 4, 10, t + 0.45 + b[2], 0.7) +
-        '<animate attributeName="opacity" values="0;.9;0" keyTimes="0;.3;1" begin="' + (t + 0.45 + b[2]) + 's" dur="0.7s" fill="freeze"/></circle>';
+      var tb = t + 0.45 + b[2];
+      s += '<circle class="bubble" cx="' + (cx + b[0]) + '" cy="' + (cy + b[1]) + '" r="7" opacity="0">' + anim('cy', cy + b[1], cy + b[1] - 38, tb, 0.7) + anim('r', 4, 10, tb, 0.7) +
+        '<animate attributeName="opacity" values="0;.9;0" keyTimes="0;.3;1" begin="' + tb.toFixed(2) + 's" dur="0.7s" fill="freeze"/></circle>';
     });
-  } else {
-    s += '<circle class="boom-fire" cx="' + cx + '" cy="' + cy + '" r="4" opacity="0">' + anim('r', 4, kind === 3 ? 90 : 62, t, 0.55) + anim('opacity', 1, 0, t, 0.55) + '</circle>';
-    s += '<circle class="boom-core" cx="' + cx + '" cy="' + cy + '" r="3" opacity="0">' + anim('r', 3, kind === 3 ? 56 : 38, t, 0.4) + anim('opacity', 1, 0, t, 0.4) + '</circle>';
-    for (i = 0; i < 10; i++) {
-      var a = i * Math.PI / 5 + 0.3, dx = Math.cos(a), dy = Math.sin(a);
-      s += '<line class="spark" x1="' + (cx + dx * 14) + '" y1="' + (cy + dy * 14) + '" x2="' + (cx + dx * 14) + '" y2="' + (cy + dy * 14) + '" opacity="0">' +
-        anim('x2', cx + dx * 14, cx + dx * (kind === 3 ? 92 : 70), t, 0.45) + anim('y2', cy + dy * 14, cy + dy * (kind === 3 ? 92 : 70), t, 0.45) + anim('opacity', 1, 0, t + 0.15, 0.3) + '</line>';
-    }
-    [[-14, 0], [14, 0.12], [0, 0.24]].forEach(function (sm) {
-      s += '<circle class="smoke" cx="' + (cx + sm[0]) + '" cy="' + cy + '" r="12" opacity="0">' + anim('cy', cy, cy - 54, t + 0.2 + sm[1], 0.9) + anim('r', 12, 26, t + 0.2 + sm[1], 0.9) +
-        '<animate attributeName="opacity" values="0;.6;0" keyTimes="0;.25;1" begin="' + (t + 0.2 + sm[1]) + 's" dur="0.9s" fill="freeze"/></circle>';
-    });
+    return s;
   }
-  return s + '</g>';
+  var big = kind === 'sunk';
+  s += '<circle class="boom-fire" cx="' + cx + '" cy="' + cy + '" r="4" opacity="0">' + anim('r', 4, big ? 90 : 62, t, 0.55) + anim('opacity', 1, 0, t, 0.55) + '</circle>';
+  s += '<circle class="boom-core" cx="' + cx + '" cy="' + cy + '" r="3" opacity="0">' + anim('r', 3, big ? 56 : 38, t, 0.4) + anim('opacity', 1, 0, t, 0.4) + '</circle>';
+  for (i = 0; i < 10; i++) {
+    var a = i * Math.PI / 5 + 0.3, dx = Math.cos(a), dy = Math.sin(a);
+    s += '<line class="spark" x1="' + (cx + dx * 14) + '" y1="' + (cy + dy * 14) + '" x2="' + (cx + dx * 14) + '" y2="' + (cy + dy * 14) + '" opacity="0">' +
+      anim('x2', cx + dx * 14, cx + dx * (big ? 92 : 70), t, 0.45) + anim('y2', cy + dy * 14, cy + dy * (big ? 92 : 70), t, 0.45) + anim('opacity', 1, 0, t + 0.15, 0.3) + '</line>';
+  }
+  [[-14, 0], [14, 0.12], [0, 0.24]].forEach(function (sm) {
+    var ts = t + 0.2 + sm[1];
+    s += '<circle class="smoke" cx="' + (cx + sm[0]) + '" cy="' + cy + '" r="12" opacity="0">' + anim('cy', cy, cy - 54, ts, 0.9) + anim('r', 12, 26, ts, 0.9) +
+      '<animate attributeName="opacity" values="0;.6;0" keyTimes="0;.25;1" begin="' + ts.toFixed(2) + 's" dur="0.9s" fill="freeze"/></circle>';
+  });
+  return s;
 }
-// o: { key, label, marks, ships (свои корабли для показа), sunkShips, interactive, sel, ghost: { ship, ok }, popIdx, small }
+// Самолёт пролетает слева направо на высоте cy; возвращает время, когда он над столбцом cx
+function planeFx(cx, cy) {
+  var W = (N + 1) * C, from = -170, to = W + 170, dur = 1.4, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
+  var body = '<path d="M0 0 L26 -10 L84 -10 L106 0 L84 10 L26 10Z M44 -10 L64 -52 L76 -52 L70 -10Z M44 10 L64 52 L76 52 L70 10Z M6 -5 L4 -24 L16 -24 L22 -5Z M6 5 L4 24 L16 24 L22 5Z" class="plane-body"/>' +
+    '<circle cx="88" cy="0" r="5" class="deck"/>';
+  return { tAt: tAt, svg: '<g class="plane" opacity="0" transform="translate(' + from + ',' + cy + ')">' + appear(0) + '<animateTransform attributeName="transform" type="translate" from="' + from + ' ' + cy + '" to="' + to + ' ' + cy + '" begin="0s" dur="' + dur + 's" fill="freeze"/>' + body + '</g>' };
+}
+// Подлодка в точке удара: капсула с рубкой и перископом, появляется и уходит под воду
+function subBodyFx(cx, cy) {
+  var d = 'M20 35 Q20 5 70 5 L230 5 Q280 5 280 35 Q280 65 230 65 L70 65 Q20 65 20 35Z';
+  return '<g class="sub" opacity="0" transform="translate(' + (cx - 150) + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.16;.8;1" begin="0s" dur="1.5s" fill="freeze"/>' +
+    '<path d="' + d + '" class="hull"/><path d="M118 5 L130 -18 L172 -18 L184 5" class="hull"/><path d="M150 -18 L150 -36 L172 -36" class="deck"/><circle cx="60" cy="35" r="9" class="deck pf"/><circle cx="240" cy="35" r="9" class="deck pf"/></g>';
+}
+// План анимации действия: рисунок и задержки появления итоговых отметок по клеткам
+function fxPlan(fx) {
+  var svg = '', delays = {};
+  if (!fx) return { svg: svg, delays: delays };
+  var p = cellXY(fx.idx), i;
+  if (fx.kind === 'shoot') {
+    svg += ballFx(p.cx, p.cy, 0, FALL, 700) + impactFx(p.cx, p.cy, fx.result, FALL);
+    delays[fx.idx] = FALL + (fx.result === 'miss' ? 0.4 : 0.07);
+  } else if (fx.kind === 'bomber') {
+    var pl = planeFx(p.cx, p.cy);
+    svg += pl.svg;
+    fx.cells.forEach(function (d, k) {
+      var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.1), q = cellXY(d.idx), tIn = t + 0.35;
+      svg += ballFx(q.cx, q.cy, t, 0.35, 260) + impactFx(q.cx, q.cy, d.result, tIn);
+      if (d.result !== 'none') delays[d.idx] = tIn + (d.result === 'miss' ? 0.4 : 0.07);
+    });
+  } else if (fx.kind === 'sub') {
+    svg += subBodyFx(p.cx, p.cy);
+    fx.torpedoes.forEach(function (tp) {
+      var steps = tp.path.length, t0 = 0.45, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
+      svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.5) + '</line>';
+      svg += '<circle class="torp" cx="' + p.cx + '" cy="' + p.cy + '" r="11" opacity="0">' + appear(t0) + anim('cy', p.cy, end.cy, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</circle>';
+      tp.fresh.forEach(function (ci) { delays[ci] = t0 + dur * (tp.path.indexOf(ci) + 1) / steps + 0.05; });
+      if (tp.hit >= 0) { svg += impactFx(end.cx, end.cy, tp.result, t0 + dur); delays[tp.hit] = t0 + dur + 0.07; }
+      else svg += impactFx(end.cx, end.cy, 'miss', t0 + dur);
+    });
+  } else if (fx.kind === 'radar') {
+    for (i = 0; i < 3; i++) {
+      svg += '<circle class="radar-ring" cx="' + p.cx + '" cy="' + p.cy + '" r="10" opacity="0">' + appear(i * 0.25) + anim('r', 10, 230, i * 0.25, 0.8) + anim('opacity', 0.9, 0, i * 0.25, 0.8) + '</circle>';
+    }
+    svg += '<line class="radar-arm" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + (p.cx + 170) + '" y2="' + p.cy + '" opacity="0">' + appear(0) + '<animateTransform attributeName="transform" type="rotate" from="0 ' + p.cx + ' ' + p.cy + '" to="360 ' + p.cx + ' ' + p.cy + '" begin="0s" dur="0.9s" fill="freeze"/>' + anim('opacity', 0.9, 0, 0.6, 0.35) + '</line>';
+    fx.cells.forEach(function (ci) { delays[ci] = 0.9; });
+  }
+  return { svg: svg ? '<g class="fx" pointer-events="none">' + svg + '</g>' : '', delays: delays };
+}
+// Выбранная цель: прицел (выстрел), квадрат 3×3 (радар, бомбардировщик) или подлодка с линией торпед
+function selSvg(sel, weapon, key) {
+  var sx = OFF + (sel % N) * C + C / 2, sy = OFF + Math.floor(sel / N) * C + C / 2, s = '';
+  if (weapon === 'radar' || weapon === 'bomber') {
+    var x0 = Math.max(0, sel % N - 1), x1 = Math.min(N - 1, sel % N + 1), y0 = Math.max(0, Math.floor(sel / N) - 1), y1 = Math.min(N - 1, Math.floor(sel / N) + 1);
+    return '<rect class="selarea ' + weapon + '" x="' + (OFF + x0 * C + 5) + '" y="' + (OFF + y0 * C + 5) + '" width="' + ((x1 - x0 + 1) * C - 10) + '" height="' + ((y1 - y0 + 1) * C - 10) + '" rx="12"/>';
+  }
+  if (weapon === 'sub') {
+    s += '<line class="selline" x1="' + sx + '" y1="' + OFF + '" x2="' + sx + '" y2="' + (OFF + N * C) + '"/>';
+    s += '<path class="selarrow" d="M' + (sx - 16) + ' ' + (OFF + 26) + 'L' + sx + ' ' + (OFF + 4) + 'L' + (sx + 16) + ' ' + (OFF + 26) + 'M' + (sx - 16) + ' ' + (OFF + N * C - 26) + 'L' + sx + ' ' + (OFF + N * C - 4) + 'L' + (sx + 16) + ' ' + (OFF + N * C - 26) + '"/>';
+    s += '<g class="ship ghost" transform="translate(' + (sx - 150) + ',' + (sy - 35) + ')"><path d="M20 35 Q20 5 70 5 L230 5 Q280 5 280 35 Q280 65 230 65 L70 65 Q20 65 20 35Z" class="hull"/><path d="M118 5 L130 -18 L172 -18 L184 5" class="hull"/></g>';
+    return s;
+  }
+  return '<rect x="' + (sx - C / 2 + 4) + '" y="' + (sy - C / 2 + 4) + '" width="' + (C - 8) + '" height="' + (C - 8) + '" fill="url(#hatchr-' + key + ')"/>' +
+    '<g class="aim"><circle cx="' + sx + '" cy="' + sy + '" r="70"/><path d="M' + sx + ' ' + (sy - 110) + 'V' + (sy - 42) + 'M' + sx + ' ' + (sy + 42) + 'V' + (sy + 110) + 'M' + (sx - 110) + ' ' + sy + 'H' + (sx - 42) + 'M' + (sx + 42) + ' ' + sy + 'H' + (sx + 110) + '"/></g>';
+}
+// o: { key, label, marks, ships (свои корабли для показа), sunkShips, interactive, sel, weapon, ghost: { ship, ok }, fx, small }
 function boardSvg(o) {
   var W = (N + 1) * C, s = '<svg class="board' + (o.small ? ' small' : '') + (o.interactive ? '' : ' locked') + '" viewBox="0 0 ' + W + ' ' + W + '" role="img" aria-label="' + esc(o.label) + '">', i;
+  var plan = fxPlan(o.fx), delays = plan.delays;
   s += '<defs><filter id="wob-' + o.key + '" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>' +
     '<pattern id="hatch-' + o.key + '" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="16" class="hatch-line"/></pattern>' +
     '<pattern id="hatchr-' + o.key + '" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="14" class="hatch-red"/></pattern></defs>';
@@ -138,32 +215,33 @@ function boardSvg(o) {
     s += '<text x="' + (OFF + i * C + C / 2) + '" y="' + (C / 2) + '">' + (i + 1) + '</text>';
     s += '<text x="' + (C / 2) + '" y="' + (OFF + i * C + C / 2) + '">' + esc(tr('letters').charAt(i)) + '</text>';
   }
-  if (o.sel >= 0) {
-    var sx = OFF + (o.sel % N) * C + C / 2, sy = OFF + Math.floor(o.sel / N) * C + C / 2;
-    s += '<rect x="' + (sx - C / 2 + 4) + '" y="' + (sy - C / 2 + 4) + '" width="' + (C - 8) + '" height="' + (C - 8) + '" fill="url(#hatchr-' + o.key + ')"/>' +
-      '<g class="aim"><circle cx="' + sx + '" cy="' + sy + '" r="70"/><path d="M' + sx + ' ' + (sy - 110) + 'V' + (sy - 42) + 'M' + sx + ' ' + (sy + 42) + 'V' + (sy + 110) + 'M' + (sx - 110) + ' ' + sy + 'H' + (sx - 42) + 'M' + (sx + 42) + ' ' + sy + 'H' + (sx + 110) + '"/></g>';
+  if (o.sel >= 0) s += selSvg(o.sel, o.weapon || 'shoot', o.key);
+  function lateStyle(cells) {
+    var d = -1;
+    cells.forEach(function (c) { if (delays[c] !== undefined && delays[c] > d) d = delays[c]; });
+    return d >= 0 ? ' style="animation-delay:' + (d + 0.1).toFixed(2) + 's"' : '';
   }
   (o.ships || []).forEach(function (sh) {
-    if (sh.cells) s += shipSvg({ x: sh.cells[0] % N, y: Math.floor(sh.cells[0] / N), len: sh.len, dir: sh.cells.length > 1 && sh.cells[1] - sh.cells[0] === 1 ? 'h' : 'v' }, sh.hit.every(Boolean) ? 'sunk' + (o.popIdx >= 0 && sh.cells.indexOf(o.popIdx) >= 0 ? ' late' : '') : '', o.key);
-    else s += shipSvg(sh, '', o.key);
+    if (!sh.cells) { s += shipSvg(sh, '', o.key); return; }
+    var sunk = sh.hit.every(Boolean), ls = sunk ? lateStyle(sh.cells) : '';
+    s += shipSvg({ x: sh.cells[0] % N, y: Math.floor(sh.cells[0] / N), len: sh.len, dir: sh.cells.length > 1 && sh.cells[1] - sh.cells[0] === 1 ? 'h' : 'v' }, sunk ? 'sunk' + (ls ? ' late' : '') : '', o.key, ls);
   });
   (o.sunkShips || []).forEach(function (sh) {
-    var late = o.popIdx >= 0 && B.cellsOf(sh, N).indexOf(o.popIdx) >= 0;
-    s += shipSvg(sh, 'sunk' + (late ? ' late' : ''), o.key);
+    var cells = B.cellsOf(sh, N), ls = lateStyle(cells);
+    s += shipSvg(sh, 'sunk' + (ls ? ' late' : ''), o.key, ls);
   });
   if (o.ghost) {
     B.cellsOf(o.ghost.ship, N).forEach(function (c) { s += '<rect class="cellfx ' + (o.ghost.ok ? 'ok' : 'no') + '" x="' + (OFF + (c % N) * C) + '" y="' + (OFF + Math.floor(c / N) * C) + '" width="' + C + '" height="' + C + '"/>'; });
     s += shipSvg(o.ghost.ship, 'ghost' + (o.ghost.ok ? '' : ' bad'), o.key);
   }
-  var fx = '';
   (o.marks || []).forEach(function (m, idx) {
     if (!m) return;
-    var cx = OFF + (idx % N) * C + C / 2, cy = OFF + Math.floor(idx / N) * C + C / 2, fresh = idx === o.popIdx;
-    if (fresh) fx += shotFx(cx, cy, m);
-    if (m === 1) s += '<rect class="m-miss' + (fresh ? ' pop late-miss' : '') + '" x="' + (cx - C / 2 + 3) + '" y="' + (cy - C / 2 + 3) + '" width="' + (C - 6) + '" height="' + (C - 6) + '" fill="url(#hatch-' + o.key + ')"/>';
-    else s += '<path class="m-hit' + (fresh ? ' pop late-hit' : '') + '" d="M' + (cx - 24) + ' ' + (cy - 24) + 'L' + (cx + 24) + ' ' + (cy + 24) + 'M' + (cx + 24) + ' ' + (cy - 24) + 'L' + (cx - 24) + ' ' + (cy + 24) + '"/>';
+    var cx = OFF + (idx % N) * C + C / 2, cy = OFF + Math.floor(idx / N) * C + C / 2, dl = delays[idx], pop = dl !== undefined ? ' pop" style="animation-delay:' + dl.toFixed(2) + 's' : '';
+    if (m === 1) s += '<rect class="m-miss' + pop + '" x="' + (cx - C / 2 + 3) + '" y="' + (cy - C / 2 + 3) + '" width="' + (C - 6) + '" height="' + (C - 6) + '" fill="url(#hatch-' + o.key + ')"/>';
+    else if (m === 4) s += '<g class="m-blip' + pop + '"><circle cx="' + cx + '" cy="' + cy + '" r="30"/><circle cx="' + cx + '" cy="' + cy + '" r="12" class="dot"/></g>';
+    else s += '<path class="m-hit' + pop + '" d="M' + (cx - 24) + ' ' + (cy - 24) + 'L' + (cx + 24) + ' ' + (cy + 24) + 'M' + (cx + 24) + ' ' + (cy - 24) + 'L' + (cx - 24) + ' ' + (cy + 24) + '"/>';
   });
-  s += fx;
+  s += plan.svg;
   if (o.interactive) {
     for (i = 0; i < N * N; i++) s += '<rect class="hit-target" data-cell="' + i + '" x="' + (OFF + (i % N) * C) + '" y="' + (OFF + Math.floor(i / N) * C) + '" width="' + C + '" height="' + C + '"/>';
   }
@@ -177,7 +255,8 @@ function whoIcon(kind) {
 }
 
 // ===== Расстановка =====
-function newPlace() { return { ships: [], pick: 4, dir: 'h', msg: '' }; }
+function newPlace() { return { ships: [], pick: 4, dir: 'h', msg: '', arsenal: { radar: 1, sub: 1, bomber: 2 } }; }
+function arsenalTotal(a) { return a.radar + a.sub + a.bomber; }
 function placeShipAt(idx) {
   var x = idx % N, y = Math.floor(idx / N), P2 = app.place, len = P2.pick, dir = P2.dir;
   if (dir === 'h' && x + len > N) x = N - len;
@@ -201,9 +280,20 @@ function onPlaceCell(idx) {
   P2.ships.push(ship); P2.msg = ''; P2.pick = nextPick(ship.len);
   render();
 }
+function arsenalHtml() {
+  var a = app.place.arsenal, total = arsenalTotal(a), cap = B.CONFIG.arsenal.total;
+  return '<div class="arsenal"><div class="cap"><span>' + esc(tr('arsenal.title')) + '</span><span class="cnt' + (total === cap ? ' ok' : '') + '">' + esc(tr('arsenal.count', { n: total, m: cap })) + '</span></div>' +
+    B.WEAPONS.map(function (w) {
+      var max = B.CONFIG.arsenal.max[w];
+      return '<div class="arow"><div class="ainfo"><b>' + esc(tr('w.' + w)) + '</b><span>' + esc(tr('w.' + w + '.d')) + '</span></div>' +
+        '<div class="step"><button class="stepbtn" data-act="arsenal" data-w="' + w + '" data-d="-1" aria-label="' + esc(tr('arsenal.minus', { w: tr('w.' + w) })) + '"' + (a[w] > 0 ? '' : ' disabled') + '>−</button>' +
+        '<span class="num" role="status">' + a[w] + '</span>' +
+        '<button class="stepbtn" data-act="arsenal" data-w="' + w + '" data-d="1" aria-label="' + esc(tr('arsenal.plus', { w: tr('w.' + w) })) + '"' + (a[w] < max && total < cap ? '' : ' disabled') + '>+</button></div></div>';
+    }).join('') + '</div>';
+}
 function placeHtml(v) {
   var P2 = app.place, rem = B.remaining(P2.ships), left = P2.ships.length ? B.CONFIG.fleet.length - P2.ships.length : B.CONFIG.fleet.length;
-  var ghost = null;
+  var ghost = null, total = arsenalTotal(P2.arsenal), cap = B.CONFIG.arsenal.total;
   if (app.hover >= 0 && P2.pick && !P2.ships.some(function (sh) { return B.cellsOf(sh, N).indexOf(app.hover) >= 0; })) {
     var gs = placeShipAt(app.hover);
     ghost = { ship: gs, ok: B.canPlace(P2.ships, gs).ok };
@@ -211,12 +301,14 @@ function placeHtml(v) {
   var tray = [4, 3, 2, 1].map(function (len) {
     return '<button class="tray-ship" data-act="pick" data-len="' + len + '" aria-pressed="' + (P2.pick === len) + '" aria-label="' + esc(tr('ship.aria', { len: len, n: rem[len] })) + '"' + (rem[len] > 0 ? '' : ' disabled') + '>' + miniShip(len) + '<span>×' + rem[len] + '</span></button>';
   }).join('');
+  var hint = P2.msg ? tr(P2.msg) : (left > 0 ? tr('place.left', { n: left }) : (total < cap ? tr('arsenal.need', { n: cap - total }) : tr('place.hint')));
   return '<div class="page">' + headHtml('exit', tr('place.title'), tr('exit.aria')) +
     '<div class="sheet">' + boardSvg({ key: 'p', label: tr('board.mine'), marks: [], ships: P2.ships, interactive: true, ghost: ghost }) + '</div>' +
-    '<div class="hint' + (P2.msg ? ' bad' : '') + '" role="status">' + esc(P2.msg ? tr(P2.msg) : (left > 0 ? tr('place.left', { n: left }) : tr('place.hint'))) + '</div>' +
+    '<div class="hint' + (P2.msg ? ' bad' : '') + '" role="status">' + esc(hint) + '</div>' +
     '<div class="tray">' + tray + '</div>' +
     '<div class="row"><button class="btn" data-act="rotate">' + esc(tr('place.rotate')) + '</button><button class="btn" data-act="random">' + esc(tr('place.random')) + '</button><button class="btn" data-act="clear">' + esc(tr('place.clear')) + '</button></div>' +
-    '<button class="btn primary full" data-act="ready"' + (left === 0 ? '' : ' disabled') + '>' + esc(tr('place.ready')) + '</button></div>';
+    arsenalHtml() +
+    '<button class="btn primary full" data-act="ready"' + (left === 0 && total === cap ? '' : ' disabled') + '>' + esc(tr('place.ready')) + '</button></div>';
 }
 function waitHtml(v) {
   var me = app.ctrl.seat;
@@ -228,20 +320,43 @@ function waitHtml(v) {
 
 // ===== Бой =====
 function lastShotText(v) {
-  if (!v.last) return '';
-  var mine = v.last.seat === app.ctrl.seat;
-  return tr(mine ? 'last.you' : 'last.foe', { cell: cellLabel(v.last.y * N + v.last.x), res: tr('res.' + v.last.result) });
+  var L = v.last;
+  if (!L) return '';
+  var mine = L.seat === app.ctrl.seat, cell = cellLabel(L.y * N + L.x);
+  if (L.kind === 'shoot') return tr(mine ? 'last.you' : 'last.foe', { cell: cell, res: tr('res.' + L.result) });
+  var res = L.kind === 'radar' ? tr('res.found', { n: L.found }) : (L.hits > 0 ? tr('res.hits', { n: L.hits }) : tr('res.nohit'));
+  return tr(mine ? 'last.w.you' : 'last.w.foe', { weapon: tr('w.' + L.kind), cell: cell, res: res });
+}
+// Описание последнего действия для анимации на поле защитника defSeat (только когда ход сменился с прошлой отрисовки)
+function fxOf(v, defSeat) {
+  var L = v.last;
+  if (!L || L.seat === defSeat || app.animTurns === v.turns) return null;
+  var fx = { kind: L.kind, idx: L.y * N + L.x };
+  if (L.kind === 'shoot') fx.result = L.result;
+  else if (L.kind === 'radar') fx.cells = L.cells;
+  else if (L.kind === 'bomber') fx.cells = L.cells;
+  else fx.torpedoes = L.torpedoes;
+  return fx;
+}
+function weaponBarHtml(v) {
+  var me = app.ctrl.seat, arm = v.seats[me].arsenal || { radar: 0, sub: 0, bomber: 0 };
+  var btns = '<button class="wbtn" data-act="weapon" data-w="shoot" aria-pressed="' + (app.weapon === 'shoot') + '">' + esc(tr('w.shoot')) + '</button>' +
+    B.WEAPONS.map(function (w) {
+      return '<button class="wbtn" data-act="weapon" data-w="' + w + '" aria-pressed="' + (app.weapon === w) + '"' + (arm[w] > 0 ? '' : ' disabled') + '>' + esc(tr('w.' + w)) + '<small>×' + arm[w] + '</small></button>';
+    }).join('');
+  return '<div class="wbar" role="group" aria-label="' + esc(tr('w.title')) + '">' + btns + '</div>';
 }
 function battleHtml(v) {
   var me = app.ctrl.seat, foe = 1 - me, mine = v.seats[me], other = v.seats[foe], myTurn = v.current === me && !v.gameOver;
-  var pop = app.animTurns !== v.turns && v.last ? v.last.y * N + v.last.x : -1;
-  var foeBoard = boardSvg({ key: 'f', label: tr('board.foe'), marks: other.marks, sunkShips: other.ships.length ? [] : sunkShips(other.marks), ships: other.ships.length ? other.ships : [], interactive: myTurn, sel: myTurn ? app.sel : -1, popIdx: v.last && v.last.seat === me ? pop : -1 });
-  var myBoard = boardSvg({ key: 'm', label: tr('board.mine'), marks: mine.marks, ships: mine.ships, small: true, popIdx: v.last && v.last.seat === foe ? pop : -1 });
+  var arm = mine.arsenal || { radar: 0, sub: 0, bomber: 0 };
+  if (app.weapon !== 'shoot' && !(arm[app.weapon] > 0)) app.weapon = 'shoot';
+  var foeBoard = boardSvg({ key: 'f', label: tr('board.foe'), marks: other.marks, sunkShips: other.ships.length ? [] : sunkShips(other.marks), ships: other.ships.length ? other.ships : [], interactive: myTurn, sel: myTurn ? app.sel : -1, weapon: app.weapon, fx: fxOf(v, foe) });
+  var myBoard = boardSvg({ key: 'm', label: tr('board.mine'), marks: mine.marks, ships: mine.ships, small: true, fx: fxOf(v, me) });
   var leftRow = other.left ? Object.keys(other.left).sort(function (a, b) { return b - a; }).map(function (len) {
     return '<span class="lw">' + miniShip(Number(len)) + '×' + other.left[len] + '</span>';
   }).join('') : '';
   var fire = myTurn
-    ? '<button class="btn primary full" data-act="fire"' + (app.sel >= 0 ? '' : ' disabled') + '>' + esc(app.sel >= 0 ? tr('fire') + ' ' + cellLabel(app.sel) : tr('fire.pick')) + '</button>'
+    ? weaponBarHtml(v) + '<button class="btn primary full" data-act="fire"' + (app.sel >= 0 ? '' : ' disabled') + '>' + esc(app.sel >= 0 ? tr('fire.' + app.weapon) + ' ' + cellLabel(app.sel) : tr('fire.pick')) + '</button>'
     : '';
   var foeIcon = app.ctrl.local ? 'ai' : 'foe';
   return '<div class="page wide">' + headHtml('exit', tr('battle.title'), tr('exit.aria')) +
@@ -265,7 +380,7 @@ function modalHtml() {
   }
   if (app.rules) {
     out += '<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2><ol>' +
-      [1, 2, 3, 4, 5].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+      [1, 2, 3, 4, 5, 6, 7].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
   }
   return out;
 }
@@ -288,18 +403,19 @@ function devController() {
   function emit() { listeners.forEach(function (fn) { fn(); }); }
   function reset() {
     st = B.init([{ id: 'me', name: P.getProfile().name }, { id: 'bot', name: tr('foe') }], {});
-    st = B.reduce(st, { type: 'place', seat: 1, ships: B.randomLayout() }).state;
+    st = B.reduce(st, { type: 'place', seat: 1, ships: B.randomLayout(), arsenal: { radar: 1, sub: 1, bomber: 2 } }).state;
   }
   function botMove() {
     clearTimeout(timer);
     if (st.gameOver || st.current !== 1) return;
     timer = setTimeout(function () {
       var marks = st.seats[0].marks, hits = [], free = [];
-      marks.forEach(function (m, i) { if (m === 0) free.push(i); if (m === 2) hits.push(i); });
-      var near = [];
-      hits.forEach(function (h) { [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var x = h % N + d[0], y = Math.floor(h / N) + d[1]; if (x >= 0 && y >= 0 && x < N && y < N && marks[y * N + x] === 0) near.push(y * N + x); }); });
-      var pool = near.length ? near : free, pick = pool[Math.floor(Math.random() * pool.length)];
-      var r = B.reduce(st, { type: 'shoot', seat: 1, x: pick % N, y: Math.floor(pick / N) });
+      marks.forEach(function (m, i) { if (m === 0 || m === 4) free.push(i); if (m === 2) hits.push(i); });
+      var near = [], arm = st.seats[1].arsenal, avail = B.WEAPONS.filter(function (w) { return arm[w] > 0; });
+      hits.forEach(function (h) { [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var x = h % N + d[0], y = Math.floor(h / N) + d[1]; if (x >= 0 && y >= 0 && x < N && y < N && (marks[y * N + x] === 0 || marks[y * N + x] === 4)) near.push(y * N + x); }); });
+      var pool = near.length ? near : free, pick = pool[Math.floor(Math.random() * pool.length)], type = 'shoot';
+      if (avail.length && !near.length && Math.random() < 0.3) type = avail[Math.floor(Math.random() * avail.length)];   // бот иногда применяет оружие
+      var r = B.reduce(st, { type: type, seat: 1, x: pick % N, y: Math.floor(pick / N) });
       if (r.ok) { st = r.state; emit(); botMove(); }
     }, 1700);
   }
@@ -325,7 +441,7 @@ function render() {
   appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml();
 }
 function startGame(ctrl) {
-  app.ctrl = ctrl; app.screen = 'game'; app.place = newPlace(); app.sel = -1; app.hover = -1; app.confirm = false; app.animTurns = -1;
+  app.ctrl = ctrl; app.screen = 'game'; app.place = newPlace(); app.weapon = 'shoot'; app.sel = -1; app.hover = -1; app.confirm = false; app.animTurns = -1;
   ctrl.subscribe(function () { if (app.ctrl === ctrl) render(); });
   render();
 }
@@ -338,7 +454,10 @@ appEl.addEventListener('click', function (e) {
   if (cell && app.ctrl) {
     var idx = Number(cell.getAttribute('data-cell')), v = app.ctrl.view();
     if (v.phase === 'placing') onPlaceCell(idx);
-    else if (v.current === app.ctrl.seat && !v.gameOver && v.seats[1 - app.ctrl.seat].marks[idx] === 0) { app.sel = idx; render(); }
+    else if (v.current === app.ctrl.seat && !v.gameOver) {
+      var mk = v.seats[1 - app.ctrl.seat].marks[idx];
+      if (app.weapon !== 'shoot' || mk === 0 || mk === 4) { app.sel = idx; render(); }
+    }
     return;
   }
   var el = e.target.closest('[data-act]');
@@ -353,14 +472,20 @@ appEl.addEventListener('click', function (e) {
     case 'stay': app.confirm = false; render(); break;
     case 'concede': app.confirm = false; ctrl.send({ type: 'concede', seat: ctrl.seat }); render(); break;
     case 'menu': toMenu(); break;
-    case 'again': ctrl.restart(); app.place = newPlace(); app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
+    case 'again': ctrl.restart(); app.place = newPlace(); app.weapon = 'shoot'; app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
     case 'pick': app.place.pick = Number(el.getAttribute('data-len')); app.place.msg = ''; render(); break;
     case 'rotate': app.place.dir = app.place.dir === 'h' ? 'v' : 'h'; render(); break;
     case 'random': app.place.ships = B.randomLayout(); app.place.pick = null; app.place.msg = ''; render(); break;
     case 'clear': app.place = newPlace(); render(); break;
-    case 'ready': ctrl.send({ type: 'place', seat: ctrl.seat, ships: app.place.ships }); break;
+    case 'ready': ctrl.send({ type: 'place', seat: ctrl.seat, ships: app.place.ships, arsenal: app.place.arsenal }); break;
     case 'unready': ctrl.send({ type: 'unplace', seat: ctrl.seat }); break;
-    case 'fire': if (app.sel >= 0) { var i2 = app.sel; app.sel = -1; ctrl.send({ type: 'shoot', seat: ctrl.seat, x: i2 % N, y: Math.floor(i2 / N) }); } break;
+    case 'arsenal': {
+      var w = el.getAttribute('data-w'), d2 = Number(el.getAttribute('data-d')), a2 = app.place.arsenal, nv = a2[w] + d2;
+      if (nv >= 0 && nv <= B.CONFIG.arsenal.max[w] && arsenalTotal(a2) + d2 <= B.CONFIG.arsenal.total) { a2[w] = nv; render(); }
+      break;
+    }
+    case 'weapon': app.weapon = el.getAttribute('data-w'); render(); break;
+    case 'fire': if (app.sel >= 0) { var i2 = app.sel, wp = app.weapon; app.sel = -1; app.weapon = 'shoot'; ctrl.send({ type: wp, seat: ctrl.seat, x: i2 % N, y: Math.floor(i2 / N) }); } break;
   }
 });
 // Подсказка-тень при наведении мыши (на телефоне её нет: корабль ставится нажатием)
