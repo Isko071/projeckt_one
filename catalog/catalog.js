@@ -64,7 +64,7 @@
 
       card.appendChild(frame);
       card.appendChild(name);
-      card.addEventListener('click', function () { lastCard = card; go(game.id); });
+      card.addEventListener('click', function () { lastCard = card; go(game.id); scrollToPoster(); });
       el.grid.appendChild(card);
     });
     el.empty.hidden = games.length > 0;
@@ -109,6 +109,12 @@
     Array.prototype.forEach.call(el.grid.children, function (card) {
       card.setAttribute('aria-pressed', String(card.getAttribute('data-id') === selectedId));
     });
+  }
+
+  // Постер открывается над списком: на телефоне после выбора игры плавно возвращаем страницу наверх, к нему
+  function scrollToPoster() {
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try { window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
   }
 
   // ---------- Навигация: состояние хранится в адресе (#id) ----------

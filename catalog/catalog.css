@@ -91,13 +91,13 @@
 .poster-wrap.is-open .poster { opacity: 1; }
 
 .poster-cover {
-  flex: 1 1 240px; max-width: 320px; margin: 0 auto;
+  flex: none; width: 160px; margin: 0;
   border-radius: var(--r-card); overflow: hidden; border: 1px solid var(--line);
 }
 .poster-cover img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; }
 
 .poster-body {
-  flex: 2 1 280px; min-width: 0; padding: 8px 4px;
+  flex: 1 1 240px; min-width: 0; padding: 8px 4px;
   display: flex; flex-direction: column; justify-content: center; gap: 12px;
 }
 .poster-title {
@@ -130,6 +130,17 @@
 }
 .poster-close:hover { border-color: var(--accent); }
 .poster-close:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Телефон: постер компактный, картинка около 60 пикселей слева от текста */
+@media (max-width: 599px) {
+  .poster { flex-wrap: nowrap; gap: 12px; padding: 12px; align-items: flex-start; }
+  .poster-cover { width: 60px; border-radius: 10px; }
+  .poster-body { flex: 1 1 0; padding: 0; gap: 8px; justify-content: flex-start; }
+  .poster-title { font-size: 24px; padding-right: 48px; }
+  .poster-desc { font-size: 15px; }
+  .poster-actions { margin-top: 4px; }
+  .btn-play { flex: 1 1 100%; max-width: none; min-height: 48px; }
+}
 
 /* Профиль: аватар в шапке, меню и окно редактирования */
 .avatar-btn {
