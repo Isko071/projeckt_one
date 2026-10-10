@@ -223,3 +223,46 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
   .boards .sheet { align-self: flex-start; }
   .boards { flex-direction: row; }
 }
+
+/* Онлайн: вход, список столов, комната ожидания (вид как у «Ятзи») */
+@keyframes pop-in { from { transform: scale(.82); opacity: .4; } to { transform: scale(1); opacity: 1; } }
+.name-input { padding: 8px 16px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); font-size: 17px; min-height: 48px; font-family: inherit; }
+.mode-btn.o-mode { width: 100%; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; min-width: 0; }
+.name-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.o-page { display: flex; flex-direction: column; gap: 14px; max-width: 560px; width: 100%; margin: 0 auto; }
+.o-box { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.o-box h3 { margin: 0; font-size: 16px; }
+.o-center { text-align: center; align-items: center; }
+.o-p { margin: 0; font-size: 16px; }
+.o-err { color: var(--danger, #c0392b); font-weight: 700; font-size: 14px; margin: 0; }
+.o-hint { font-size: 14px; color: var(--muted); text-align: center; }
+.o-dashed { border: 2px dashed var(--line); border-radius: 20px; padding: 16px; text-align: center; color: var(--muted); font-size: 15px; }
+.o-msg { border-radius: 20px; padding: 16px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.o-msg.bad { border: 1.5px solid var(--danger, #c0392b); }
+.o-msg span { color: var(--muted); font-size: 14px; }
+.o-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.o-row .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.o-row .who small { color: var(--muted); font-size: 14px; }
+.o-row.skel .av, .o-row.skel .ln { background: var(--line); display: block; }
+.o-row.skel .ln { height: 12px; width: 50%; border-radius: 6px; flex: 1; max-width: 50%; }
+.av { width: 36px; height: 36px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; background: var(--accent-soft); color: var(--ink); }
+.o-you { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px 0 6px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.o-you .av { width: 32px; height: 32px; }
+.o-code-row { display: flex; gap: 8px; }
+.o-code { flex: 1; min-width: 0; text-align: center; font-size: 24px; letter-spacing: .3em; text-transform: uppercase; }
+.o-mode b { display: block; }
+.o-mode small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; font-size: 14px; }
+.o-bigcode { font-size: 46px; font-weight: 700; letter-spacing: 10px; padding-left: 10px; }
+.o-mode-tag { font-size: 14px; color: var(--muted); }
+.o-seats { display: flex; flex-direction: column; gap: 8px; }
+.o-seat { display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-height: 56px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); animation: pop-in .25s ease both; }
+.o-seat.empty { background: transparent; border: 2px dashed var(--line); color: var(--muted); animation: none; }
+.o-seat .nm { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.o-seat .tg { font-size: 14px; color: var(--muted); }
+.o-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; font-size: 15px; font-weight: 700; background: var(--accent-soft); border: 1.5px solid var(--accent); }
+.o-banner.bad { border-color: var(--danger, #c0392b); }
+.o-banner span { flex: 1; min-width: 0; }
+.o-ask { display: flex; align-items: baseline; gap: 10px; }
+.o-ask b { font-size: 56px; line-height: 1; }
+.o-ask span { color: var(--muted); }

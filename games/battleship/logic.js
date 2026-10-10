@@ -190,7 +190,11 @@
     if (!action || typeof action !== 'object') return bad('bad-action');
     var seat = action.seat;
     if (seat !== 0 && seat !== 1) return bad('bad-seat');
-    if (state.gameOver) return bad('game-over');
+    if (state.gameOver) {
+      if (action.type !== 'leave' || !state.seats[seat] || !state.seats[seat].active) return bad('game-over');
+      var gone = clone(state); gone.seats[seat].active = false;           // ушёл после конца партии: места за столом больше нет
+      return { ok: true, state: gone, events: [] };
+    }
     var me = state.seats[seat];
     if (!me || !me.active) return bad('not-seated');
     var ns = clone(state), mine = ns.seats[seat], events = [];

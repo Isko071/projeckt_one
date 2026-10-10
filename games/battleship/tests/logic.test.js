@@ -417,3 +417,25 @@ test('подлодка запоминает в fresh только новые к�
   assert.equal(r.state.last.torpedoes[0].fresh.length, 0, 'вода уже отмечена');
   assert.equal(r.state.last.torpedoes[0].path.length, 2);
 });
+
+test('выход из-за стола: в партии это сдача (соперник побеждает), после конца партии место освобождается', () => {
+  let st = withFleetA(0);
+  const r = B.reduce(st, { type: 'leave', seat: 1 });
+  assert.equal(r.ok, true); assert.equal(r.state.gameOver, true); assert.equal(r.state.winner, 0); assert.equal(r.state.reason, 'left');
+  const r2 = B.reduce(r.state, { type: 'leave', seat: 1 });
+  assert.equal(r2.ok, true); assert.equal(r2.state.seats[1].active, false); assert.equal(r2.state.seats[0].active, true);
+  assert.equal(B.reduce(r2.state, { type: 'leave', seat: 1 }).error, 'game-over', 'повторный выход не нужен');
+  assert.equal(B.reduce(r.state, { type: 'shoot', seat: 0, x: 0, y: 0 }).error, 'game-over');
+});
+
+test('скрытая часть игрока: secrets и withMine собирают вид места из общего вида', () => {
+  const st = withFleetA(0);
+  const sec = B.secrets(st);
+  assert.deepEqual(plain(Object.keys(sec)), ['seat0', 'seat1'].map((k) => st.seats[k === 'seat0' ? 0 : 1].id));
+  const pub = B.view(st);
+  assert.equal(pub.seats[0].ships.length, 0); assert.equal(pub.seats[0].arsenal, null);
+  const mine = B.withMine(pub, sec[st.seats[0].id], 0);
+  assert.deepEqual(plain(mine), plain(B.view(st, 0)), 'совпадает с видом места');
+  assert.equal(mine.seats[1].ships.length, 0, 'чужие корабли не появляются');
+  assert.deepEqual(plain(B.cleanAction({ type: 'place', x: 1, y: 2, junk: 5, ships: [{ x: 0, y: 0, len: 4, dir: 'h', evil: 1 }], arsenal: { radar: 1, sub: 1, bomber: 2, z: 9 } })), { type: 'place', x: 1, y: 2, ships: [{ x: 0, y: 0, len: 4, dir: 'h' }], arsenal: { radar: 1, sub: 1, bomber: 2 } });
+});

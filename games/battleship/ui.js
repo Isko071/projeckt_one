@@ -9,7 +9,7 @@ var appEl = document.getElementById('app');
 var N = B.CONFIG.size, C = 100, OFF = C;            // клетка 100 единиц, поле смещено на ширину подписей
 var DEV = /[?&]dev\b/.test(location.search) || location.hash === '#dev';
 
-var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null, msg: '' };
+var app = { screen: 'start', rules: false, confirm: false, ctrl: null, sel: -1, hover: -1, animTurns: -1, weapon: 'shoot', arsenalOpen: false, place: null };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function cellLabel(idx) { return tr('letters').charAt(Math.floor(idx / N)) + (idx % N + 1); }
@@ -30,7 +30,7 @@ function catalogLinkHtml() {
 }
 function headHtml(act, title, label) {
   return '<div class="o-head"><button class="theme-btn" data-act="' + act + '" aria-label="' + esc(label) + '">←</button><h2>' + esc(title) + '</h2>' +
-    '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml('theme-btn') + '</div>';
+    (app.ctrl && app.ctrl.online ? window.BattleshipOnline.chatButtonHtml() : '') + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml('theme-btn') + '</div>';
 }
 
 // ===== Корабли и поле (рисуются как в тетради: чернильные контуры) =====
@@ -399,8 +399,9 @@ function modalHtml() {
   if (v && v.gameOver && app.screen === 'game') {
     var win = v.winner === app.ctrl.seat;
     out += '<div class="scrim"><div class="modal over ' + (win ? 'win' : 'lose') + '" role="alertdialog" aria-modal="true"><h2>' + esc(tr(win ? 'over.win' : 'over.lose')) + '</h2><p>' + esc(tr((win ? 'over.win.' : 'over.lose.') + v.reason)) + '</p>' +
-      '<button class="btn primary full" data-act="menu">' + esc(tr('over.menu')) + '</button>' + (app.ctrl.local ? '<button class="btn full" data-act="again">' + esc(tr('over.again')) + '</button>' : '') + '</div></div>';
+      '<button class="btn primary full" data-act="menu">' + esc(tr('over.menu')) + '</button>' + (app.ctrl.local ? '<button class="btn full" data-act="again">' + esc(tr('over.again')) + '</button>' : '') + (app.ctrl.online ? '<button class="btn full" data-act="again">' + esc(tr('o.over.again')) + '</button>' : '') + '</div></div>';
   }
+  if (app.ctrl && app.ctrl.online && app.screen === 'game') out += window.BattleshipOnline.askHtml();
   if (app.confirm) {
     out += '<div class="scrim"><div class="modal" role="alertdialog" aria-modal="true"><h2>' + esc(tr('confirm.title')) + '</h2><p>' + esc(tr('confirm.text')) + '</p><div class="row"><button class="btn primary" data-act="stay">' + esc(tr('confirm.stay')) + '</button><button class="btn" data-act="concede">' + esc(tr('confirm.ok')) + '</button></div></div></div>';
   }
@@ -419,8 +420,7 @@ function startHtml() {
     '<div class="top-actions">' + catalogLinkHtml() + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes"><button class="mode-btn" aria-pressed="true">' + esc(tr('start.online')) + '<small>' + esc(tr('start.onlineSub')) + '</small></button></div></div>' +
-    (app.msg ? '<div class="muted-text" role="status">' + esc(tr(app.msg)) + '</div>' : '') +
-    '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
+    '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button>' + (DEV ? '<button class="btn-secondary wide" data-act="dev">' + esc(tr('start.dev')) + '</button>' : '') + '<button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
 // ===== Локальная партия против случайного бота (для проверки экранов: ?dev) =====
@@ -463,8 +463,11 @@ function render() {
     var v = app.ctrl.view();
     html = v.phase === 'placing' ? (v.seats[app.ctrl.seat].ready ? waitHtml(v) : placeHtml(v)) : battleHtml(v);
     if (v.turns !== undefined) app.animTurns = v.turns;
-  } else html = startHtml();
-  appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml();
+    if (app.ctrl.online) html = window.BattleshipOnline.bannerHtml() + html;
+  } else if (app.screen === 'online') html = window.BattleshipOnline.html();
+  else html = startHtml();
+  appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml() + (window.BattleshipOnline ? window.BattleshipOnline.overlayHtml() : '');
+  if (window.BattleshipOnline) window.BattleshipOnline.afterRender();
 }
 function startGame(ctrl) {
   app.ctrl = ctrl; app.screen = 'game'; app.place = newPlace(); app.weapon = 'shoot'; app.arsenalOpen = false; app.sel = -1; app.hover = -1; app.confirm = false; app.animTurns = -1;
@@ -488,17 +491,18 @@ appEl.addEventListener('click', function (e) {
   }
   var el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
+  if (window.BattleshipOnline && window.BattleshipOnline.click(el)) return;
   var act = el.getAttribute('data-act'), ctrl = app.ctrl;
   switch (act) {
     case 'theme': window.PlatformTheme.toggle(); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
-    case 'play': if (DEV) startGame(devController()); else { app.msg = 'start.soon'; render(); } break;
+    case 'dev': startGame(devController()); break;
     case 'exit': { var v2 = ctrl.view(); if (v2.phase === 'playing' && !v2.gameOver) { app.confirm = true; render(); } else toMenu(); break; }
     case 'stay': app.confirm = false; render(); break;
     case 'concede': app.confirm = false; ctrl.send({ type: 'concede', seat: ctrl.seat }); render(); break;
     case 'menu': toMenu(); break;
-    case 'again': ctrl.restart(); app.place = newPlace(); app.weapon = 'shoot'; app.arsenalOpen = false; app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
+    case 'again': if (ctrl.online) { ctrl.again(); break; } ctrl.restart(); app.place = newPlace(); app.weapon = 'shoot'; app.arsenalOpen = false; app.sel = -1; app.hover = -1; app.animTurns = -1; render(); break;
     case 'pick': app.place.pick = Number(el.getAttribute('data-len')); app.place.msg = ''; render(); break;
     case 'rotate': app.place.dir = app.place.dir === 'h' ? 'v' : 'h'; render(); break;
     case 'random': app.place.ships = B.randomLayout(); app.place.pick = null; app.place.msg = ''; render(); break;
