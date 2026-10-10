@@ -627,11 +627,11 @@ function playHtml(D) {
     hidden = now() < seq.revealAt;
     if (hidden) dl = dl.map(function (c, i) { return i === 0 ? c : '??'; });       // открыта только первая карта, добранные лежат рубашкой вверх
   }
-  var dw = L.desk ? 92 : (L.narrow ? 56 : 66);
+  var dw = L.desk ? 76 : (L.narrow ? 50 : 58);
   var dsum = hidden ? String(BJ.cardValue(dl[0]) === 11 ? 11 : BJ.cardValue(dl[0])) : (dl.length === 2 && BJ.handValue(dl).total === 21 ? tr('sum.bj') : (BJ.handValue(dl).total > 21 ? tr('st.bust') + ' ' + BJ.handValue(dl).total : String(BJ.handValue(dl).total)));
   var dealerBox = '<div class="dealer-box"><div class="lbl">' + esc(tr('dealer')) + ' <span class="pill">' + esc(dsum) + '</span></div><div class="row-cards">' + cardsRow('dealer', dl, dw, 400, dw * 1.1) + '</div></div>';
   // я
-  var pw = (hand && hand.cards.length > 4) ? (L.desk ? 92 : 58) : (L.desk ? 100 : (L.narrow ? 60 : 72));
+  var pw = (hand && hand.cards.length > 4) ? (L.desk ? 84 : 54) : (L.desk ? 84 : (L.narrow ? 54 : 64));
   var mine = hand ? cardsRow('me', hand.cards, pw, L.vw - (L.desk ? 200 : 110), pw * 0.55) : '';
   var sumText = seatSumText(seat, true);
   if (hand && vs.phase === 'playing' && hand.done && !BJ.isBust(hand) && !BJ.isNatural(hand)) sumText += ' · ' + tr('st.stand');
@@ -650,8 +650,8 @@ function playHtml(D) {
       '<div class="pop-btns">' + '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>' +
       '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
   }
-  var shoeW = L.desk ? 64 : (L.narrow ? 44 : 52);
-  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i><i></i></div>';
+  var shoeW = L.desk ? 84 : (L.narrow ? 58 : 68);
+  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>';
   var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + center + meBox + pop + '</div>';
 
   var notice = activeNotice();
