@@ -13,7 +13,7 @@ var ROOM_CFG = window.PlatformRooms ? window.PlatformRooms.DEFAULTS : { idleMs: 
 var app = {
   screen: 'start', startMode: 'bot', modal: null, size: 4, fillBots: true, private: false,
   code: '', codeError: null, tableError: null, rooms: null, busy: false, loginError: null, copied: false,
-  notice: null, noticeUntil: 0, resultAt: 0, pending: false, banner: null, seen: {}, settledAt: 0, closedReason: null, askShown: false
+  notice: null, noticeUntil: 0, fx: {}, resultAt: 0, pending: false, banner: null, seen: {}, settledAt: 0, closedReason: null, askShown: false
 };
 var G = null;            // текущая игра: { mode: 'bot' | 'online', ... }
 var gameToken = 0;       // растёт при выходе из игры: отменяет отложенные действия бота
@@ -82,14 +82,15 @@ var PIPS = {
 };
 function cardHtml(code, w, extra) {
   var c = cardParts(code), h = w * 1.4, cls = 'pcard' + (extra && extra.cls ? ' ' + extra.cls : '');
-  var style = 'width:' + w + 'px;height:' + h + 'px;border-radius:' + (w * 0.08) + 'px;' + (extra && extra.delay ? 'animation-delay:' + extra.delay + 'ms;' : '');
+  var style = 'width:' + w + 'px;height:' + h + 'px;border-radius:' + (w * 0.08) + 'px;' + (extra && extra.delay ? 'animation-delay:' + extra.delay + 'ms;' : '') + (extra && extra.sx !== undefined ? '--sx:' + extra.sx + 'px;--sy:' + extra.sy + 'px;' : '');
+  var attrs = extra && extra.key ? ' data-fx="' + esc(extra.key) + '"' : '';
   if (c.down) {
-    return '<div class="' + cls + '" style="' + style + '" role="img" aria-label="' + esc(tr('card.down')) + '"><div class="back" style="inset:' + (w * 0.07) + 'px;border-radius:' + (w * 0.05) + 'px;background-size:' + (w * 0.2) + 'px ' + (w * 0.2) + 'px"></div></div>';
+    return '<div class="' + cls + '"' + attrs + ' style="' + style + '" role="img" aria-label="' + esc(tr('card.down')) + '"><div class="back" style="inset:' + (w * 0.07) + 'px;border-radius:' + (w * 0.05) + 'px;background-size:' + (w * 0.2) + 'px ' + (w * 0.2) + 'px"></div></div>';
   }
   var glyph = GLYPH[c.suit] + '︎', col = (c.suit === 'h' || c.suit === 'd') ? 'var(--suit-red)' : 'var(--suit-black)';
   var idx = 'font-size:' + (w * 0.2) + 'px;min-width:' + (w * 0.2) + 'px;color:' + col + ';' + (c.rank === '10' ? 'letter-spacing:' + (-w * 0.015) + 'px;' : '');
   var sub = 'font-size:' + (w * 0.18) + 'px;margin-top:' + (w * 0.01) + 'px';
-  var out = '<div class="' + cls + '" style="' + style + 'color:' + col + '" role="img" aria-label="' + esc(tr('card.name', { rank: c.rank, suit: tr('suit.' + c.suit) })) + '">' +
+  var out = '<div class="' + cls + '"' + attrs + ' style="' + style + 'color:' + col + '" role="img" aria-label="' + esc(tr('card.name', { rank: c.rank, suit: tr('suit.' + c.suit) })) + '">' +
     '<div class="idx" style="' + idx + 'left:' + (w * 0.06) + 'px;top:' + (w * 0.04) + 'px"><div>' + c.rank + '</div><div style="' + sub + '">' + glyph + '</div></div>' +
     '<div class="idx" style="' + idx + 'right:' + (w * 0.06) + 'px;bottom:' + (w * 0.04) + 'px;transform:rotate(180deg)"><div>' + c.rank + '</div><div style="' + sub + '">' + glyph + '</div></div>';
   var pos = c.rank === 'A' ? [[PIP_C, 0.5]] : (PIPS[parseInt(c.rank, 10)] || []);
@@ -111,12 +112,14 @@ var renderPass = { fresh: 0, keys: [] };
 function cardsRow(zone, codes, w, avail, maxStep) {
   var n = codes.length, step = n > 1 ? Math.min(maxStep || w * 0.7, (avail - w) / (n - 1)) : 0, out = '';
   codes.forEach(function (code, i) {
-    var key = zone + ':' + i + ':' + code, extra = {};
-    if (!app.seen[key]) {
+    var key = zone + ':' + i + ':' + code, extra = {}, fx = app.fx[key];
+    if (!fx && !app.seen[key]) {
       var flip = code !== '??' && app.seen[zone + ':' + i + ':??'];
-      extra = { cls: flip ? 'flip' : 'fresh', delay: Math.min(renderPass.fresh * (flip ? 400 : 120), 1200) };
+      fx = app.fx[key] = { cls: flip ? 'flip' : 'fresh', delay: Math.min(renderPass.fresh * (flip ? 400 : 160), 1400), t: now() };
       renderPass.fresh++;
     }
+    if (fx && now() - fx.t > 2600) { delete app.fx[key]; fx = null; }      // анимация закончилась
+    if (fx) extra = { cls: fx.cls, delay: fx.delay, sx: fx.sx, sy: fx.sy, key: fx.cls === 'fresh' ? key : '' };
     renderPass.keys.push(key);
     out += '<div style="flex:none;margin-left:' + (i ? step - w : 0) + 'px">' + cardHtml(code, w, extra) + '</div>';
   });
@@ -242,9 +245,12 @@ function grantReward(outcome) {
 function startLocal() {
   gameToken++; chat.reset();
   stopOnline();
-  var st = BJ.init([{ id: 'me', name: P.getProfile().name, chips: VIRTUAL_CHIPS, kind: 'human' }], { simple: true });
+  // За столом с вами один или два бота (случайно), у каждого свой характер
+  var seats = [{ id: 'me', name: P.getProfile().name, chips: VIRTUAL_CHIPS, kind: 'human' }], pick = BJ.BOT_ORDER.slice().sort(function () { return Math.random() - 0.5; });
+  for (var b = 0, nb = 1 + Math.floor(Math.random() * 2); b < nb; b++) seats.push(Object.assign({ id: 'bot' + b, chips: VIRTUAL_CHIPS }, BJ.makeBot(BJ.BOT_ORDER.indexOf(pick[b]))));
+  var st = BJ.init(seats, { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1 };
-  app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.pending = false;
+  app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.fx = {}; app.pending = false;
   render();
   localDeal();
 }
@@ -279,14 +285,14 @@ function localDeal() {
   var a;
   while ((a = BJ.nextBotAction(G.state)) && G.state.phase === 'betting') lDispatch(a);
   lDispatch({ type: 'deal', seat: 0 });
-  app.seen = {};
+  app.seen = {}; app.fx = {};
   render();
   runBots();
 }
 function localNext() {
   if (!lDispatch({ type: 'next', seat: 0 })) return;
-  G.state.seats[0].chips = VIRTUAL_CHIPS;
-  app.seen = {}; app.resultAt = 0; app.seq = null;
+  G.state.seats.forEach(function (x) { if (x.active) x.chips = VIRTUAL_CHIPS; });
+  app.seen = {}; app.fx = {}; app.resultAt = 0; app.seq = null;
   render();
   localDeal();
 }
@@ -359,7 +365,7 @@ function onView(v) {
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
   if (v.status === 'playing' && st) {
-    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
+    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
     var me = v.seat;
     if (me === null || me === undefined || !st.seats[me] || !st.seats[me].active) {
       if (!G.left) { G.left = true; handleLeft(); }
@@ -379,7 +385,7 @@ function onView(v) {
       scheduleSeq(st);
     }
     // Ставок нет: в начале раздачи отправляем условную ставку сами
-    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; if (!seat.sitOut && !(seat.bet > 0)) onlineSend({ type: 'bet', amount: FLAT_BET }); }
+    if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.fx = {}; if (!seat.sitOut && !(seat.bet > 0)) onlineSend({ type: 'bet', amount: FLAT_BET }); }
     if (st.phase === 'playing' && G.playedRound !== st.round) { G.playedRound = st.round; W.markPlayed(); W.countPlay('blackjack'); }
   }
   render();
@@ -637,7 +643,9 @@ function playHtml(D) {
       '<div class="pop-btns">' + '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>' +
       '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
   }
-  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + dealerBox + plates + center + meBox + pop + '</div>';
+  var shoeW = L.desk ? 46 : 36;
+  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i></div>';
+  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + center + meBox + pop + '</div>';
 
   var notice = activeNotice();
   var noticeHtml = notice ? '<div class="notice" role="status">' + esc(notice) + '</div>' : '';
@@ -751,12 +759,29 @@ function render() {
   morph(appEl, tpl.content);
   chat.afterRender();
   renderPass.keys.forEach(function (k) { app.seen[k] = true; });
+  launchFromShoe();
   if (app.modal || appEl.querySelector('.overlay')) {
     var auto = appEl.querySelector('[data-autofocus]');
     var ov = auto && auto.closest('.overlay');
     if (auto && ov && !ov.contains(document.activeElement)) auto.focus();
   }
   scheduleClock();
+}
+// Новые карты вылетают из стопки в центре стола: смещение от стопки до места карты считается один раз и запоминается
+function launchFromShoe() {
+  var shoe = appEl.querySelector('.shoe');
+  if (!shoe || reduced()) return;
+  var sr = shoe.getBoundingClientRect(), cx = sr.left + sr.width / 2, cy = sr.top + sr.height / 2;
+  Array.prototype.forEach.call(appEl.querySelectorAll('.pcard.fresh[data-fx]'), function (c) {
+    var fx = app.fx[c.getAttribute('data-fx')];
+    if (!fx || fx.sx !== undefined) return;
+    var anim = c.style.animation;
+    c.style.animation = 'none';                                           // замер без учёта самой анимации
+    var r = c.getBoundingClientRect();
+    c.style.animation = anim;
+    fx.sx = Math.round(cx - (r.left + r.width / 2)); fx.sy = Math.round(cy - (r.top + r.height / 2));
+    c.style.setProperty('--sx', fx.sx + 'px'); c.style.setProperty('--sy', fx.sy + 'px');
+  });
 }
 // Секундная перерисовка нужна, пока идёт обратный отсчёт (таймер хода, вопрос «играете?», следующая раздача)
 function scheduleClock() {
