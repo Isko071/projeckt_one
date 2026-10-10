@@ -42,6 +42,14 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.token.email == 'АДРЕС_ВЛАДЕЛЬЦА@gmail.com' && request.auth.token.email_verified == true;
     }
 
+    // Рейтинг игроков (docs/rating.md): свою строку пишет сам игрок, читают все вошедшие
+    match /ratings/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.balance is int && request.resource.data.balance >= 0
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20;
+    }
+
     // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md
     match /rooms/{code} {
       allow read: if request.auth != null;

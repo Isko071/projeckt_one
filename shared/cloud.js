@@ -79,6 +79,18 @@
       .then(function () { /* отметка не критична */ }, function () { seenSent = false; });
   }
 
+  // Публичная строка рейтинга (имя, аватар, баланс): отправляется, только если изменилась с прошлой отправки; ошибки не мешают синхронизации
+  var RATING_KEY = 'platform:rating';
+  function publishRating(uid, tk) {
+    var R = root.PlatformRating, W = root.PlatformWallet, P = root.PlatformProfile;
+    if (!R || !W || !P) return Promise.resolve();
+    var prof = P.getProfile(), bal = W.getBalance(), fp = R.fingerprint(prof, bal), last = root.PlatformStorage.get(RATING_KEY, null);
+    if (last && last.uid === uid && last.fp === fp) return Promise.resolve();
+    return R.create({ fetch: function (u, i) { return root.fetch(u, i); }, projectId: cfg.projectId, db: dbName }).publish(tk, uid, prof, bal).then(function () {
+      root.PlatformStorage.set(RATING_KEY, { uid: uid, fp: fp });
+    }, function () { /* правила базы для рейтинга могли быть не добавлены: повторим при следующей синхронизации */ });
+  }
+
   function token() { return auth.currentUser.getIdToken(); }
 
   function meta(snap, updatedAt) {
@@ -112,8 +124,8 @@
         var local = PP.snapshot(), localFp = PP.fingerprint(local);
         var cloudFp = cloud ? PP.fingerprint(cloud.snap) : null;
         var d = Logic.decide({ localFp: localFp, baseFp: readBase(uid), cloudFp: cloudFp, localPristine: PP.isPristine(local) });
-        if (d === 'none') { writeBase(uid, localFp); adoptName(); return touchSeen(uid, tk).then(function () { return 'idle'; }); }
-        if (d === 'upload') { adoptName(); var s2 = PP.snapshot(); return upload(uid, tk, s2).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s2)); return 'idle'; }); }
+        if (d === 'none') { writeBase(uid, localFp); adoptName(); return touchSeen(uid, tk).then(function () { return publishRating(uid, tk); }).then(function () { return 'idle'; }); }
+        if (d === 'upload') { adoptName(); var s2 = PP.snapshot(); return upload(uid, tk, s2).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s2)); return publishRating(uid, tk); }).then(function () { return 'idle'; }); }
         if (d === 'download') {
           if (!allowDownload) return 'paused';       // на странице игры не перезагружаемся: это сделает каталог
           PP.applySnapshot(cloud.snap);
