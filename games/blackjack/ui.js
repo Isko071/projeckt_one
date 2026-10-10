@@ -389,6 +389,8 @@ function onView(v) {
       var h = seatHand(seat);
       G.rw = null;
       if (h) grantReward(h.outcome);
+      // победа онлайн в рейтинг: раздача выиграна у дилера, за столом не меньше двух игроков
+      if (h && (h.outcome === 'win' || h.outcome === 'blackjack') && window.PlatformRating && G.view && (G.view.members || []).length >= 2) window.PlatformRating.reportWin('blackjack');
       scheduleSeq(st);
     }
     // Ставок нет: в начале раздачи отправляем условную ставку сами

@@ -6,11 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <title>Игротека</title>
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-<link rel="stylesheet" href="shared/theme.css?v=99">
-<link rel="stylesheet" href="catalog/catalog.css?v=99">
+<link rel="stylesheet" href="shared/theme.css?v=104">
+<link rel="stylesheet" href="catalog/catalog.css?v=104">
 <!-- Хранилище и тема в <head>, чтобы тема применялась до первой отрисовки -->
-<script src="shared/storage.js?v=99"></script>
-<script src="shared/theme.js?v=99"></script>
+<script src="shared/storage.js?v=104"></script>
+<script src="shared/theme.js?v=104"></script>
 </head>
 <body>
 <noscript><p class="noscript" id="noscript">Для работы сайта нужен включённый JavaScript.</p></noscript>
@@ -47,6 +47,10 @@
       <button class="chip streak" id="streak-chip" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal-pop">
         <svg class="chip-icon flame" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.6 3.2-1.3 4.6-3 6.6-1.6 1.9-2.6 3.6-2.6 6a5.6 5.6 0 0 0 11.2 0c0-2.2-.9-3.7-2-5 0 1.5-.7 2.5-1.7 2.9.5-3.3-.5-7-1.9-10.5z" fill="currentColor"/></svg>
         <b id="streak-count"></b>
+      </button>
+      <button class="chip" id="rating-open" type="button" aria-haspopup="dialog">
+        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v4a5 5 0 0 1-10 0V4zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8.5 20h7M10 17h4" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span data-i18n="rating.open"></span>
       </button>
       <button class="btn-claim" id="claim-btn" type="button" hidden></button>
       <div class="cal-pop" id="cal-pop" role="dialog" aria-labelledby="cal-title" hidden>
@@ -139,6 +143,15 @@
   <div class="wallet-balance"><small data-i18n="wallet.balance"></small><div><b id="wd-balance"></b> <span id="wd-unit"></span></div></div>
 </dialog>
 
+<dialog class="dialog wallet-dialog" id="rating-dialog" aria-labelledby="rating-title">
+  <div class="wallet-head">
+    <h2 class="dialog-title" id="rating-title" data-i18n="rating.title"></h2>
+    <button class="icon-btn" id="rating-close" type="button" data-i18n-aria-label="wallet.close">✕</button>
+  </div>
+  <p class="rating-sub" data-i18n="rating.balance"></p>
+  <div id="rating-body" role="status"></div>
+</dialog>
+
 <dialog class="dialog wallet-dialog" id="stats-dialog" aria-labelledby="stats-title">
   <div class="wallet-head">
     <h2 class="dialog-title" id="stats-title" data-i18n="stats.title"></h2>
@@ -154,22 +167,24 @@
   </section>
 </dialog>
 
-<script src="locales/ru.js?v=99"></script>
-<script src="shared/i18n.js?v=99"></script>
-<script src="shared/profile.js?v=99"></script>
-<script src="shared/wallet.js?v=99"></script>
-<script src="shared/progress.js?v=99"></script>
-<script src="shared/sync-logic.js?v=99"></script>
+<script src="locales/ru.js?v=104"></script>
+<script src="shared/i18n.js?v=104"></script>
+<script src="shared/profile.js?v=104"></script>
+<script src="shared/wallet.js?v=104"></script>
+<script src="shared/progress.js?v=104"></script>
+<script src="shared/sync-logic.js?v=104"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="shared/firebase-config.js?v=99"></script>
-<script src="shared/analytics.js?v=99"></script>
-<script src="shared/cloud.js?v=99"></script>
-<script src="games/games.js?v=99"></script>
-<script src="catalog/logic.js?v=99"></script>
-<script src="catalog/catalog.js?v=99"></script>
-<script src="catalog/profile-ui.js?v=99"></script>
-<script src="catalog/wallet-ui.js?v=99"></script>
-<script src="catalog/account-ui.js?v=99"></script>
+<script src="shared/firebase-config.js?v=104"></script>
+<script src="shared/analytics.js?v=104"></script>
+<script src="shared/rating.js?v=104"></script>
+<script src="shared/cloud.js?v=104"></script>
+<script src="games/games.js?v=104"></script>
+<script src="catalog/logic.js?v=104"></script>
+<script src="catalog/catalog.js?v=104"></script>
+<script src="catalog/profile-ui.js?v=104"></script>
+<script src="catalog/wallet-ui.js?v=104"></script>
+<script src="catalog/account-ui.js?v=104"></script>
+<script src="catalog/rating-ui.js?v=104"></script>
 </body>
 </html>

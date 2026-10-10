@@ -117,6 +117,11 @@
       app.screen = 'online'; startGame(G.ctrl); on.banner = null;
       if (window.PlatformWallet) { window.PlatformWallet.markPlayed(); window.PlatformWallet.countPlay('battleship'); }
     }
+    if (v.state && v.state.gameOver && !G.counted && v.seat !== null && v.seat !== undefined) {         // победа онлайн в рейтинг: только когда потоплен весь флот (сдача и выход не в счёт)
+      G.counted = true;
+      if (v.state.winner === v.seat && v.state.reason === 'fleet' && window.PlatformRating) window.PlatformRating.reportWin('battleship');
+    }
+    if (v.status === 'lobby') G.counted = false;
     render();
   }
   function attach(room, code) {
