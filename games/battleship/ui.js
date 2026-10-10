@@ -34,17 +34,29 @@ function headHtml(act, title, label) {
 }
 
 // ===== Корабли и поле (рисуются как в тетради: чернильные контуры) =====
+// Корабль длиной len клеток, нос справа: корпус с заострённым носом, внутренний контур, штриховка борта, башня со стволом, рубка, купол, труба
 function shipG(len) {
-  var W = len * C, d, deck = '', i;
-  if (len === 1) { d = 'M20 24 L58 24 Q90 50 58 76 L20 76 Q6 50 20 24Z'; deck = '<circle cx="44" cy="50" r="11" class="deck"/>'; }
-  else {
-    d = 'M12 20 L' + (W - 30) + ' 20 Q' + (W - 2) + ' 50 ' + (W - 30) + ' 80 L12 80 Q0 50 12 20Z';
-    for (i = 0; i < len; i++) {
-      var cx = i * C + (i === len - 1 ? C * 0.4 : C * 0.5);
-      deck += i === 1 && len > 2 ? '<rect x="' + (cx - 20) + '" y="36" width="40" height="28" rx="7" class="deck"/>' : '<circle cx="' + cx + '" cy="50" r="11" class="deck"/>';
-    }
+  var W = len * C, i, o = '';
+  function circ(cx, cy, r, cls) { return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" class="' + (cls || 'deck pf') + '"/>'; }
+  function box(x, y, w, h, r) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 6) + '" class="deck pf"/>'; }
+  if (len === 1) {
+    o += '<path d="M10 14 L56 14 Q94 50 56 86 L10 86 Q-2 50 10 14Z" class="hull"/>';
+    o += '<path d="M20 26 L52 26 Q76 50 52 74 L20 74 Q12 50 20 26Z" class="deck"/>';
+    o += circ(40, 50, 15) + circ(40, 50, 6) + '<path d="M55 50 L74 50" class="gun"/>';
+    return o;
   }
-  return '<path d="' + d + '" class="hull"/>' + deck;
+  o += '<path d="M8 10 L' + (W - 38) + ' 10 Q' + (W - 2) + ' 50 ' + (W - 38) + ' 90 L8 90 Q-4 50 8 10Z" class="hull"/>';
+  o += '<path d="M20 22 L' + (W - 42) + ' 22 Q' + (W - 16) + ' 50 ' + (W - 42) + ' 78 L20 78 Q10 50 20 22Z" class="deck"/>';
+  for (i = 26; i < W - 56; i += 13) o += '<path d="M' + i + ' 80 L' + (i + 9) + ' 70" class="shade"/>';       // штриховка нижнего борта
+  var bow = W - 76;                                                                                    // башня со стволом у носа
+  o += circ(bow, 50, 15) + circ(bow, 50, 6) + '<path d="M' + (bow + 15) + ' 50 L' + (bow + 40) + ' 50" class="gun"/>';
+  o += circ(44, 50, 22) + circ(44, 50, 10);                                                           // купол на корме
+  if (len >= 3) {
+    var bx = Math.round(W / 2) - 26;
+    o += box(bx, 34, 52, 32, 7) + circ(bx + 14, 50, 4.5, 'deck') + circ(bx + 38, 50, 4.5, 'deck');       // рубка с окнами
+  }
+  if (len === 4) o += circ(Math.round(W * 0.7), 50, 11) + circ(Math.round(W * 0.7), 50, 4, 'deck');     // труба
+  return o;
 }
 function shipSvg(sh, cls, key) {
   var px = OFF + sh.x * C, py = OFF + sh.y * C;
