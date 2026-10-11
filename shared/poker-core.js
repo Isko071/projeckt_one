@@ -11,7 +11,7 @@
 
   function now() { return Date.now(); }
   // Раздача карт в начале руки: карты по очереди летят каждому игроку, пока идёт раздача, ходить нельзя (cfg.dealMs переопределяет время, в тестах 0)
-  function dealTime(cfg, n) { return cfg.dealMs !== undefined ? cfg.dealMs : (reduced() ? 0 : 400 * n + 1400); }
+  function dealTime(cfg, n) { return cfg.dealMs !== undefined ? cfg.dealMs : (reduced() ? 0 : 520 * n + 1800); }   // раздача неторопливая
   function countInHand(st) { return st.seats.filter(function (s) { return s.inHand; }).length; }
   function reduced() { try { return root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
@@ -215,6 +215,14 @@
   Online.prototype.emit = function () { var m = this; this.listeners.forEach(function (fn) { try { fn(m); } catch (e) { /* подписчик не должен ломать стол */ } }); };
   Online.prototype.holding = function () { return now() < this.holdUntil; };
   Online.prototype.dealLeft = function () { return Math.max(0, this.dealUntil - now()); };
+  // Игрок сел за стол под загрузкой (экран открылся только сейчас): раздача на экране начинается заново с этого момента
+  Online.prototype.redeal = function () {
+    var v = this.v, st = v && v.state, self = this;
+    if (!st || st.phase !== 'preflop') return;
+    var dm = dealTime(this.cfg, countInHand(st));
+    this.dealUntil = now() + dm;
+    if (dm > 0) setTimeout(function () { if (!self.stopped) self.emit(); }, dm + 30);
+  };
   Online.prototype.toast = function (k, name) { this.toasts.push({ k: k, name: name, until: now() + 4000 }); };
   Online.prototype.onView = function (v) {
     if (this.stopped) return;

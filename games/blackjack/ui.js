@@ -221,7 +221,7 @@ function activeNotice() {
 // ===== Плавное вскрытие =====
 // Раздача заканчивается мгновенно (перебор, 21), но на экране всё идёт по шагам: пауза, чтобы осмыслить свою руку,
 // переворот закрытой карты дилера, карты дилера по одной и только потом итог.
-var SEQ = { pause: 1100, gap: 850, look: 700, flip: 550, flipStep: 400, after: 900 };
+var SEQ = { pause: 1400, gap: 1100, look: 900, flip: 650, flipStep: 500, after: 1200 };   // темп спокойный: игра не гонит
 // Дилер сначала добирает карты (рубашкой вверх, по одной), и только когда закончил, вскрывает ВСЕ свои карты разом
 function scheduleSeq(st) {
   var r = reduced(), t0 = now(), n = st.dealer.cards.length;
@@ -245,6 +245,7 @@ function grantReward(outcome) {
 }
 
 function startLocal() {
+  if (app.sitting) return;
   gameToken++; chat.reset();
   stopOnline();
   // За столом с вами один или два бота (случайно), у каждого свой характер
@@ -252,9 +253,11 @@ function startLocal() {
   for (var b = 0, nb = 1 + Math.floor(Math.random() * 2); b < nb; b++) seats.push(Object.assign({ id: 'bot' + b, chips: VIRTUAL_CHIPS }, BJ.makeBot(BJ.BOT_ORDER.indexOf(pick[b]))));
   var st = BJ.init(seats, { simple: true });
   G = { mode: 'bot', state: st, settledRound: -1 };
-  app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.fx = {}; app.pending = false;
-  render();
-  later(localDeal, 900);                              // сначала стол появляется, потом раздают
+  var mine = G;
+  function seat() { app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.fx = {}; app.pending = false; render(); }
+  // Садимся за стол под загрузкой; когда экран полностью открылся, игрок какое-то время просто сидит за столом, и только потом раздают
+  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: function () { if (G === mine) seat(); }, done: function () { app.sitting = false; if (G === mine) later(localDeal, 1500); } }); }
+  else { seat(); later(localDeal, 1500); }
 }
 function later(fn, ms) {
   var token = gameToken;
@@ -283,7 +286,7 @@ function runBots() {
     var a = BJ.nextBotAction(G.state);
     if (!a) return;
     lDispatch(a); render();
-    setTimeout(step, reduced() ? 0 : 700);
+    setTimeout(step, reduced() ? 0 : 1000);
   })();
 }
 // Своя ставка, ставка бота и раздача
@@ -301,7 +304,7 @@ function localNext() {
   G.state.seats.forEach(function (x) { if (x.active) x.chips = VIRTUAL_CHIPS; });
   app.seen = {}; app.fx = {}; app.resultAt = 0; app.seq = null;
   render();
-  later(localDeal, 450);
+  later(localDeal, 1000);
 }
 
 // ===== Сессия «Онлайн» =====
@@ -372,7 +375,14 @@ function onView(v) {
   if (v.closed || v.hostGone) { handleClosed(v); return; }
   var st = v.state;
   if (v.status === 'playing' && st) {
-    if (app.screen === 'lobby') { app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
+    if (app.screen === 'lobby') {
+      if (!window.PlatformLoader || !window.PlatformLoader.cover) { app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
+      else {
+        // Садимся за стол под загрузкой: комната ожидания остаётся на экране, стол собирается на закрытом экране, карты появляются, когда экран открылся
+        if (!G.entering) { G.entering = true; window.PlatformLoader.cover({ build: function () { if (!G || G.mode !== 'online') return; G.entering = false; app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); render(); } }); }
+        return;
+      }
+    }
     var me = v.seat;
     if (me === null || me === undefined || !st.seats[me] || !st.seats[me].active) {
       if (!G.left) { G.left = true; handleLeft(); }

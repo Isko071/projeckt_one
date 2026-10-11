@@ -1,10 +1,12 @@
-// Мини-загрузка при каждом переходе между страницами сайта (каталог ↔ игры): 2–5 секунд с анимацией вместо мгновенного перехода.
+// Мини-загрузка при каждом переходе между страницами сайта (каталог ↔ игры): 1–4 секунды с анимацией вместо мгновенного перехода.
 // Пока идёт загрузка, будится сервер столов (он на бесплатном хостинге засыпает): переход случается, когда сервер ответил,
-// но не раньше чем через 2 секунды и не позже чем через 5.
+// но не раньше чем через 1 секунду и не позже чем через 4.
 //   PlatformLoader.go(url)   — перейти на страницу с загрузкой (ссылки перехватываются сами; не нужно только для a[data-no-loader])
+//   PlatformLoader.cover({ build, done, ms }) — закрыть экран загрузкой, когда игрок садится за стол: на закрытом экране (через 0,3 с) вызывается build
+//                            (собрать стол), через ms (по умолчанию 1,4 с) загрузка исчезает, и когда экран полностью открылся, вызывается done (можно раздавать карты)
 // Стили: shared/theme.css (.pl, html.pl-arrive). Тексты: locales/ru.js (loader.text).
 (function (root) {
-  var MIN = 2000, MAX = 5000, FLAG = 'pl:arrive';
+  var MIN = 1000, MAX = 4000, FLAG = 'pl:arrive', FADE = 320, COVER_MS = 1400;
   var doc = root.document, going = false;
 
   // На новой странице: если пришли через загрузку, закрываем её плавным исчезновением (до первой отрисовки, без вспышки)
@@ -24,7 +26,7 @@
     var el = doc.createElement('div');
     el.className = 'pl';
     el.setAttribute('role', 'status');
-    el.innerHTML = '<div class="pl-box"><img class="pl-logo" alt="" src="' + logoUrl + '"><div class="pl-bar"><i></i></div><p class="pl-text"></p></div>';
+    el.innerHTML = '<div class="pl-box"><img class="pl-logo" alt="" src="' + logoUrl + '"><p class="pl-text"></p></div>';
     el.querySelector('.pl-text').textContent = text();
     doc.body.appendChild(el);
     void el.offsetWidth;                       // чтобы появление было плавным
@@ -38,6 +40,17 @@
     if (!url || typeof root.fetch !== 'function') { done(); return; }
     try { root.fetch(String(url).replace(/^ws/, 'http').replace(/\/+$/, '') + '/healthz', { mode: 'no-cors', cache: 'no-store' }).then(done, done); }
     catch (e) { done(); }
+  }
+
+  // Загрузка при посадке за стол: стол собирается под закрытым экраном, карты раздаются только когда экран полностью открылся
+  function cover(o) {
+    o = o || {};
+    var el = overlay(), ms = o.ms || COVER_MS;
+    setTimeout(function () { if (o.build) { try { o.build(); } catch (e) { /* загрузка всё равно закроется */ } } }, FADE);
+    setTimeout(function () {
+      el.classList.remove('show');
+      setTimeout(function () { el.remove(); if (o.done) { try { o.done(); } catch (e) { /* ничего */ } } }, FADE);
+    }, ms);
   }
 
   function go(url) {
@@ -76,5 +89,5 @@
     for (var i = 0; i < old.length; i++) old[i].remove();
   });
 
-  root.PlatformLoader = { go: go };
+  root.PlatformLoader = { go: go, cover: cover };
 })(window);
