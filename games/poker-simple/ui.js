@@ -110,7 +110,10 @@ function ringStyle(timer) {
 }
 
 // ===== Партия =====
+// Пока баланс на сервере (или ждём его), покер, который считает аконы в браузере, недоступен
+function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked()); }
 function sitDown() {
+  if (walletBlocked()) return;
   var ante = app.prefs.ante;
   if (W.getBalance() < ante && W.capStatus(now()).left > 0) return;
   var prof = P.getProfile();
@@ -177,14 +180,14 @@ function enterTable(promise) {
 }
 function createOnlineTable() {
   var api = net.api();
-  if (!api || app.busy) return;
+  if (!api || app.busy || walletBlocked()) return;
   var prof = P.getProfile(), ante = app.prefs.ante;
   enterTable(api.createRoom({ size: app.prefs.size, ante: ante, minBet: ante * 2, private: app.prefs.closed, name: prof.name, avatar: prof.avatar, chips: W.getBalance() }));
 }
 function joinOnlineTable(code) {
   var api = net.api();
   code = String(code || '').toUpperCase().trim();
-  if (!api || app.busy) return;
+  if (!api || app.busy || walletBlocked()) return;
   if (!/^[A-Z0-9]{5}$/.test(code)) { app.codeBad = true; render(); return; }
   var prof = P.getProfile();
   enterTable(api.joinRoom(code, { name: prof.name, avatar: prof.avatar, chips: W.getBalance() }));
@@ -208,7 +211,8 @@ function startHtml() {
     '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr(online ? 'start.onlineSub' : 'sub')) + '</div>' + modes +
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
-    '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
+    (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : 'server.connecting')) + '</div></div>' : '') +
+    '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth || walletBlocked() ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
     '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div></div>';
 }
@@ -562,6 +566,7 @@ document.addEventListener('keydown', function (e) {
   render();
 });
 window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
+if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
 W.onShown(function (v) {
   var els = appEl.querySelectorAll('[data-bal]');
   for (var i = 0; i < els.length; i++) {

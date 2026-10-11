@@ -87,3 +87,30 @@ test('кабинет: без ADMIN_EMAILS доступа нет ни у кого
     assert.strictEqual(r.status, 403);
   } finally { await s.close(); }
 });
+
+test('сеть: серверный кошелёк — баланс, награда по своим суммам, ставка за столом', async () => {
+  const { MemLedger } = require('../ledger');
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50, engineOptions: { startDelayMs: 0 } } });
+  try {
+    const a = await client(s.port, 'A'), b = await client(s.port, 'B');
+    const sync = await a.call({ t: 'wallet', op: 'sync' });
+    assert.ok(sync.ok); assert.strictEqual(sync.state.balance, 5000);
+    const rw = await a.call({ t: 'wallet', op: 'reward', source: 'blackjack', kind: 'win' });
+    assert.strictEqual(rw.state.balance, 5250);
+    assert.strictEqual((await a.call({ t: 'wallet', op: 'add', n: 99999 })).error, 'bad-request');
+    const created = await a.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns', name: 'Аня', stake: 250 } });
+    assert.ok(created.ok);
+    assert.strictEqual((await a.call({ t: 'wallet', op: 'sync' })).state.balance, 5000);
+    assert.strictEqual((await b.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns', stake: 1 } })).error, 'bad-stake');
+  } finally { await s.close(); }
+});
+
+test('сеть: без серверного кошелька запросы кошелька и ставки отклоняются, столы работают как раньше', async () => {
+  const s = await startServer({ insecure: true, ledger: null, config: { tickMs: 50, engineOptions: { startDelayMs: 0 } } });
+  try {
+    const a = await client(s.port, 'A');
+    assert.strictEqual((await a.call({ t: 'wallet', op: 'sync' })).error, 'wallet-off');
+    assert.strictEqual((await a.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns', stake: 100 } })).error, 'stakes-off');
+    assert.ok((await a.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns' } })).ok);
+  } finally { await s.close(); }
+});

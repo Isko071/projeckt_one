@@ -1,6 +1,7 @@
 // Общий кошелёк платформы: виртуальные «аконы», только в этом браузере (platform:wallet), настоящих денег нет.
 // Все игры работают с аконами только через этот модуль:
 //   PlatformWallet.getBalance()            → число
+//   PlatformWallet.serverOn() — включён ли серверный баланс (wallet-sync.js); в нём add/spend запрещены, награды уходят серверу, applyServer(state) принимает его ответ
 //   PlatformWallet.shownBalance()          → число для показа на экране: после выигрыша плавно доезжает до настоящего баланса; onShown(fn) — подписка на каждый кадр
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
@@ -158,7 +159,17 @@
   function getBalance() { return load().balance; }
   function canAfford(n) { return num(n, -1) >= 0 && getBalance() >= n; }
 
+  // Серверный режим (shared/wallet-sync.js): аконы лежат на сервере, браузер показывает копию. Награды и отметки здесь считаются сразу (чтобы экран ответил мгновенно)
+  // и уходят серверу запросами, а его ответ заменяет копию. Прямые add/spend в этом режиме запрещены: подделать баланс через них нельзя, сервер их не принимает.
+  var server = null;       // { active(): bool, queueing(): bool, claim(запрос) } от wallet-sync.js
+  function serverOn() { return !!(server && server.active()); }
+  function viaServer(msg) { if (server && server.queueing()) server.claim(msg); }   // queueing: и при серверном балансе, и пока ждём ответа сервера
+  function setServer(driver) { server = driver || null; }
+  // Ответ сервера: заменяет копию (после этого экран плавно доезжает до настоящего числа)
+  function applyServer(raw) { var s = sanitize(raw); save(s); return s; }
+
   function spend(n, source, now) {
+    if (serverOn()) return false;
     var s = load();
     if (num(n, -1) < 1 || s.balance < n) return false;
     s.balance -= n;
@@ -168,6 +179,7 @@
     return true;
   }
   function add(n, source, now) {
+    if (serverOn()) return false;
     if (num(n, -1) < 1) return false;
     var s = load();
     s.balance += n;
@@ -220,6 +232,7 @@
     var s = load(), key = String(source || 'win').slice(0, 40);
     s.wins[key] = (s.wins[key] || 0) + 1;
     save(s);
+    viaServer({ op: 'countWin', source: key });
   }
 
   // Партия начата: счётчик «сыграно» по играм (виден владельцу платформы в личном кабинете, на экранах игроков не показывается)
@@ -227,10 +240,11 @@
     var s = load(), key = String(source || 'game').slice(0, 40);
     s.plays[key] = (s.plays[key] || 0) + 1;
     save(s);
+    viaServer({ op: 'countPlay', source: key });
   }
 
   // Награда за одиночную игру: не больше earnDailyCap в день. uncapped = true — награда без дневного предела (не расходует и не ждёт предела других игр)
-  function earn(source, n, now, uncapped) {
+  function earn(source, n, now, uncapped, level) {
     var s = load(), today = dayOf(now);
     if (num(n, -1) < 1) return { granted: 0, capped: false };
     var key = String(source || 'earn').slice(0, 40);
@@ -244,6 +258,7 @@
       record(s, source || 'earn', granted, now);
     }
     save(s);
+    if (level) viaServer({ op: 'earn', source: key, level: level });
     return { granted: granted, capped: granted < n };
   }
 
@@ -273,6 +288,7 @@
     if (s.days.indexOf(today) < 0) s.days = cleanDays(s.days.concat([today]));
     s.pending = { amount: dailyAmount(Math.min(7, s.streak)), bonus: CONFIG.milestones[s.streak] || 0, streak: s.streak };
     save(s);
+    viaServer({ op: 'markPlayed' });
     return { counted: true, streak: s.streak, amount: s.pending.amount, bonus: s.pending.bonus };
   }
 
@@ -301,6 +317,7 @@
     var used = num(s.rw.used[source], 0), amt = Math.max(0, Math.floor(amount)), granted = Math.min(amt, Math.max(0, cap - used));
     if (granted > 0) { s.rw.used[source] = used + granted; s.balance += granted; record(s, source, granted, now); }
     save(s);
+    viaServer({ op: 'reward', source: source, kind: source === 'blackjack' && amt >= 400 ? 'blackjack' : 'win' });
     return { granted: granted, capped: granted < amt, left: Math.max(0, cap - used - granted) };
   }
 
@@ -329,6 +346,7 @@
     if (p.bonus) record(s, 'milestone', p.bonus, undefined);
     s.pending = null;
     save(s);
+    viaServer({ op: 'claimDaily' });
     return { claimed: true, amount: p.amount, bonus: p.bonus, streak: p.streak };
   }
 
@@ -344,7 +362,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
+    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, setServer: setServer, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget

@@ -90,6 +90,7 @@
       var size = Math.max(game.CONFIG.minSeats, Math.min(game.CONFIG.maxSeats, Math.floor(opts.size) || game.CONFIG.minSeats));
       var mode = game.CONFIG.modes && game.CONFIG.modes.indexOf(opts.mode) >= 0 ? opts.mode : (game.CONFIG.modes ? game.CONFIG.modes[0] : '');
       var isPrivate = !!opts.private;      // закрытый стол: не показывается в списке, зайти можно только по коду или ссылке
+      var stake = Math.max(0, Math.floor(opts.stake) || 0);   // ставка за столом (аконы с каждого игрока); сервер сам списывает и выплачивает, движок только публикует её
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var serverMode = !!opts.owner;       // стол ведёт сервер: создатель — обычный игрок, а не хост
       var ownerUid = serverMode ? String(opts.owner.uid) : env.uid;
@@ -131,8 +132,8 @@
       function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(),
-          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, owner: ownerUid, members: members.map(publicMember) }) };
+        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, stake: stake, rev: rev, heartbeat: now(), startIn: startIn(),
+          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, stake: stake, owner: ownerUid, members: members.map(publicMember) }) };
         if (full) { f.state = JSON.stringify(game.view(full)); if (game.secrets) f.secret = JSON.stringify(game.secrets(full)); }   // secret — скрытое у каждого игрока (корабли): сервер отдаёт каждому только его часть
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
@@ -283,7 +284,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
         return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), mine: parseJson(d.mine, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
-          private: d.private === true, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+          private: d.private === true, stake: Number(d.stake) || 0, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

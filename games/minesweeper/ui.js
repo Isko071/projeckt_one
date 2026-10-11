@@ -102,7 +102,7 @@ function finish() {
     var rr = MS.recordResult(app.bests, game.level, app.elapsed);
     app.bests = rr.bests;
     window.PlatformStorage.set(BEST_KEY, app.bests);
-    var rw = window.PlatformWallet.earn('minesweeper', window.PlatformWallet.CONFIG.rewards.minesweeper[game.level], undefined, game.level === 'expert');   // награда эксперта без дневного предела
+    var rw = window.PlatformWallet.earn('minesweeper', window.PlatformWallet.CONFIG.rewards.minesweeper[game.level], undefined, game.level === 'expert', game.level);   // награда эксперта без дневного предела; уровень нужен серверу, чтобы выдать награду по своей таблице
     app.result = { won: true, time: app.elapsed, isRecord: rr.isRecord, best: rr.best, granted: rw.granted };
   } else {
     app.result = { won: false, time: app.elapsed, left: MS.cellsToOpen(game) };
