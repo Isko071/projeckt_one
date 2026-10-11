@@ -147,8 +147,11 @@
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   // Календарный день по местному времени
+  // Сдвиг календарного дня: сервер считает день игрока по часам игрока (а не по своим), иначе серия дней рвётся у тех, чей день начинается не по Гринвичу
+  var dayShift = 0;
+  function setDayShift(ms) { dayShift = Math.floor(Number(ms)) || 0; }
   function dayOf(now) {
-    var d = new Date(now === undefined ? Date.now() : now);
+    var d = new Date((now === undefined ? Date.now() : now) + dayShift);
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
   // Сколько дней между двумя днями (b − a); полдень убирает влияние перехода на летнее время
@@ -172,6 +175,8 @@
   function serverOn() { return !!(server && server.active()); }
   function viaServer(msg) { if (server && server.queueing()) server.claim(msg); }   // queueing: и при серверном балансе, и пока ждём ответа сервера
   function setServer(driver) { server = driver || null; }
+  // Состояние кошелька для сервера (первый вход игрока с серверным балансом): без журнала, он серверу не нужен
+  function exportState() { var s = load(); delete s.log; return s; }
   // Ответ сервера: заменяет копию (после этого экран плавно доезжает до настоящего числа)
   function applyServer(raw) { var s = sanitize(raw); save(s); return s; }
 
@@ -369,7 +374,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, holdShown: holdShown, setServer: setServer, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
+    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, holdShown: holdShown, setServer: setServer, exportState: exportState, setDayShift: setDayShift, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget

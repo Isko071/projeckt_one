@@ -14,7 +14,7 @@ async function startServer(o) {
   o = o || {};
   const verify = o.verify || makeVerifier({ projectId: o.projectId, insecure: o.insecure });
   const origins = (o.allowedOrigins || []).filter(Boolean);
-  const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxMsg = 4000, perSec = 20;
+  const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxMsg = 8000, perSec = 20;
   const ledger = o.ledger === undefined ? makeLedger(o.env) : o.ledger;      // null — серверный баланс выключен, ставки за столами недоступны
   const wallet = ledger ? new WalletService({ ledger, now: o.now }) : null;
   if (wallet) await wallet.init();                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются

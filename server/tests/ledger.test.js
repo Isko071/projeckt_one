@@ -42,6 +42,22 @@ test('Firestore-хранилище: токен подписан ключом а�
   assert.ok(calls.filter((c) => c.url !== 'https://oauth2.googleapis.com/token').every((c) => c.init.headers.Authorization === 'Bearer tok1'));
 });
 
+test('Firestore-хранилище: новому игроку берётся кошелёк из облачного снимка, иначе баланс из рейтинга', async () => {
+  const acc = await account();
+  const snapshot = { v: 1, data: { 'platform:wallet': { balance: 6500, streak: 7, best: 7 } } };
+  const fetch = async (url, init) => {
+    if (url === 'https://oauth2.googleapis.com/token') return { ok: true, status: 200, json: async () => ({ access_token: 't', expires_in: 3600 }) };
+    if (url.includes('/users/u1')) return { ok: true, status: 200, json: async () => ({ fields: { data: { stringValue: JSON.stringify(snapshot) } } }) };
+    if (url.includes('/users/')) return { ok: false, status: 404, json: async () => ({}) };
+    if (url.includes('/ratings/u2')) return { ok: true, status: 200, json: async () => ({ fields: { balance: { integerValue: '3200' } } }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const L = new FirestoreLedger({ projectId: 'p', serviceAccount: { client_email: acc.client_email, private_key: acc.private_key }, fetch });
+  assert.deepStrictEqual(await L.seed('u1'), { balance: 6500, streak: 7, best: 7 }, 'серия и рекорд сохраняются');
+  assert.strictEqual(await L.seed('u2'), 3200, 'нет снимка: баланс из рейтинга');
+  assert.strictEqual(await L.seed('u3'), null);
+});
+
 test('выбор хранилища по переменным окружения', async () => {
   assert.strictEqual(makeLedger({}), null, 'без ключа серверный баланс выключен');
   assert.ok(makeLedger({ LEDGER: 'memory' }) instanceof MemLedger);

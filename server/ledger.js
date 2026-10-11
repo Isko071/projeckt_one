@@ -2,7 +2,7 @@
 //   get(coll, id)        → объект или null
 //   commit(writes)       → записать сразу несколько документов одной операцией: [{ op:'set', coll, id, data } | { op:'delete', coll, id }]
 //   list(coll)           → [{ id, data }]
-//   seed(uid)            → баланс, которым начать новому игроку (из рейтинга, если он там есть), или null
+//   seed(uid)            → с чего начать кошелёк новому игроку: объект кошелька из облачного снимка, число (баланс из рейтинга) или null
 // Коллекции: wallets (состояние кошелька игрока), holds (залоги ставок за столами: uid_код → { uid, code, amount }).
 // Две реализации: память (для проверок и локального запуска) и Firestore по ключу сервисного аккаунта (на Render).
 const { SignJWT, importPKCS8 } = require('jose');
@@ -86,8 +86,14 @@ class FirestoreLedger {
     } while (page);
     return out;
   }
-  // Новому игроку: баланс из рейтинга (его публикует сам клиент, поэтому в service.js он ограничен сверху)
+  // Новому игроку: его кошелёк из облачного снимка прогресса (users/{uid}: серия, рекорды, дни, баланс), а если снимка нет, баланс из рейтинга
+  // (оба пишет сам клиент, поэтому в wallet-service.js баланс ограничен сверху)
   async seed(uid) {
+    const snap = await this.call('GET', this.base + '/users/' + encodeURIComponent(uid));
+    try {
+      const w = JSON.parse(snap.fields.data.stringValue).data['platform:wallet'];
+      if (w && typeof w === 'object') return w;
+    } catch (e) { /* снимка нет или он повреждён: пробуем рейтинг */ }
     const doc = await this.call('GET', this.base + '/ratings/' + encodeURIComponent(uid));
     const v = doc && doc.fields && doc.fields.balance;
     const n = v && v.integerValue !== undefined ? Number(v.integerValue) : (v && v.doubleValue !== undefined ? Math.floor(v.doubleValue) : NaN);
