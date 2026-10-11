@@ -25,9 +25,9 @@
 
   // ---------- Полоса над списком ----------
   function renderBar() {
-    var balance = W.getBalance(), st = W.dailyStatus();
-    balanceEl.textContent = fmt(balance);
-    unitEl.textContent = unit(balance);
+    var balance = W.getBalance(), st = W.dailyStatus(), seen = W.shownBalance();
+    balanceEl.textContent = fmt(seen);
+    unitEl.textContent = unit(seen);
     streakEl.textContent = st.streak;
     streakChip.classList.toggle('cold', st.streak === 0);
     streakChip.classList.toggle('risk', st.atRisk);
@@ -83,9 +83,9 @@
   // ---------- Окно ----------
   // В окне кошелька только баланс; серия и бонус дня стоят в полосе над списком, рекорды и операции — в «Статистике» в меню профиля
   function renderDialog() {
-    var balance = W.getBalance();
-    $('wd-balance').textContent = fmt(balance);
-    $('wd-unit').textContent = unit(balance);
+    var seen = W.shownBalance();
+    $('wd-balance').textContent = fmt(seen);
+    $('wd-unit').textContent = unit(seen);
   }
 
   function openDialog() {
@@ -110,6 +110,7 @@
   // Баланс мог измениться в другой вкладке или после возврата из игры
   function refresh() { renderBar(); if (dialog.open) renderDialog(); if (!pop.hidden) renderCalendar(); }
   W.onChange(refresh);
+  W.onShown(function (v) { balanceEl.textContent = fmt(v); unitEl.textContent = unit(v); if (dialog.open) renderDialog(); });
   window.addEventListener('pageshow', refresh);
   window.addEventListener('focus', refresh);
   window.addEventListener('storage', function (e) { if (!e.key || e.key === W.KEY) refresh(); });

@@ -316,3 +316,28 @@ test('награды: «Морской бой» 500 за победу над б�
     assert.equal(W.reward(src, 500, D(2026, 5, 2, 10)).granted, 500);
   });
 });
+
+test('показываемый баланс: пополнение доезжает постепенно, ставка списывается сразу, штраф «Мин» плавно', () => {
+  let t = 0, cb = null;
+  const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  const seen = [];
+  W.onShown((v) => seen.push(v));
+  const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
+  W.add(1000, 'x');                                   // первая запись только запоминает баланс
+  W.add(500, 'win');
+  assert.equal(W.getBalance(), 6500);
+  assert.equal(W.shownBalance(), 6000, 'сразу после выигрыша на экране ещё старое число');
+  run(300);
+  assert.equal(W.shownBalance(), 6000, 'в паузе число не меняется');
+  run(5000);
+  assert.equal(W.shownBalance(), 6500);
+  assert.ok(seen.some((v) => v > 6000 && v < 6500), 'по пути были промежуточные числа');
+  assert.ok(seen.every((v, i) => i === 0 || v >= seen[i - 1]), 'число только растёт');
+  W.spend(100, 'poker-simple');
+  assert.equal(W.shownBalance(), 6400, 'ставка списывается сразу');
+  W.spend(100, 'mines');
+  assert.equal(W.getBalance(), 6300);
+  assert.equal(W.shownBalance(), 6400, 'штраф «Мин» тоже плавный');
+  run(10000);
+  assert.equal(W.shownBalance(), 6300);
+});
