@@ -178,6 +178,7 @@
   };
   Solo.prototype.onSettled = function () {
     var st = this.st, me = st.seats[0], payout = me.total + me.net, self = this;
+    if (this.W.holdShown) this.W.holdShown((st.result && st.result.showdown ? this.flipMs : 0) + 300);     // баланс на экране меняется после вскрытия карт
     if (payout > 0 && !this.free) {
       var cr = this.W.capPayout(this.source, payout, this.spent, now());
       if (cr.capped) this.notice = { k: cr.granted > 0 ? 'capCut' : 'capReached', n: cr.granted, until: now() + 6000 };
@@ -265,6 +266,7 @@
   };
   Online.prototype.onSettled = function (st, mine) {
     var self = this;
+    if (this.W.holdShown) this.W.holdShown((st.result && st.result.showdown ? (reduced() ? 600 : FLIP_MS) : 0) + 300);
     if (mine && mine.inHand) {
       var payout = mine.total + mine.net;                  // онлайн дневного предела выигрыша нет
       if (payout > 0) this.W.add(payout, this.source, now());
