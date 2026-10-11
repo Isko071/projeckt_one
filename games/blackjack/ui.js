@@ -56,7 +56,7 @@ var GRID_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/>' +
   '<rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>';
 function catalogLinkHtml(cls) {
-  return '<a class="icon-btn ' + (cls || '') + '" href="' + CATALOG_URL + '" data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
+  return '<a class="icon-btn ' + (cls || '') + '" href="' + CATALOG_URL + '" data-leave data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
 }
 function catalogButtonHtml() {
   return '<button class="icon-btn" data-act="exit" data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</button>';
@@ -889,9 +889,9 @@ appEl.addEventListener('click', function (e) {
     case 'newBet': localNext(); break;
     case 'backMenu': gameToken++; G = null; app.modal = null; app.seq = null; app.screen = 'start'; render(); break;
     case 'exit':
-      if (G && G.mode === 'bot') { if (playing()) { app.modal = 'exitCatalog'; render(); } else window.location.href = CATALOG_URL; }
+      if (G && G.mode === 'bot') { if (playing()) { app.modal = 'exitCatalog'; render(); } else window.PlatformLeave.ask(CATALOG_URL); }
       else if (G && G.mode === 'online') { app.modal = G.role === 'host' ? 'closeTable' : 'leaveTable'; render(); }
-      else window.location.href = CATALOG_URL;
+      else window.PlatformLeave.ask(CATALOG_URL);
       break;
     case 'confirmLeave':
       if (v === 'catalog') window.location.href = CATALOG_URL;

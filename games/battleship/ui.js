@@ -27,7 +27,7 @@ var GRID_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/>' +
   '<rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>';
 function catalogLinkHtml() {
-  return '<a class="theme-btn" href="' + CATALOG_URL + '" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
+  return '<a class="theme-btn" href="' + CATALOG_URL + '" data-leave aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
 }
 function headHtml(act, title, label) {
   return '<div class="o-head"><button class="theme-btn" data-act="' + act + '" aria-label="' + esc(label) + '">←</button><h2>' + esc(title) + '</h2>' +
