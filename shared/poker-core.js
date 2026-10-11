@@ -136,6 +136,7 @@
   Solo.prototype.startHand = function () {
     var st = this.st, W = this.W, self = this;
     // Достигнут дневной предел выигрыша против ботов: играем без аконов (ничего не списывается и не начисляется)
+    if (W.serverOn && W.serverOn()) { this.stage = 'broke'; this.emit(); return; }     // баланс ушёл на сервер посреди игры: играть в браузере на аконы нельзя
     this.free = W.capStatus(now()).left <= 0;
     if (!this.free && W.getBalance() < this.minToPlay()) { this.stage = 'broke'; this.emit(); return; }
     st.seats[0].chips = this.free ? Math.max(W.getBalance(), this.minToPlay() * 20) : W.getBalance();

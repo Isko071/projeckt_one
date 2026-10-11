@@ -62,11 +62,23 @@
   // ---------- Ставка за столом (серверный баланс, shared/wallet-sync.js) ----------
   var MIN_STAKE = 25;
   function stakeOn() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server'); }
-  function stakeValue() { var n = Math.floor(Number(on.stake)); return isFinite(n) && n > 0 ? n : 0; }
-  function stakeProblem() { var n = stakeValue(); if (!n) return ''; if (n < MIN_STAKE) return 'min'; if (n > window.PlatformWallet.getBalance()) return 'low'; return ''; }
+  var MAX_STAKE = 100000;
+  function stakeRaw() { return String(on.stake === undefined || on.stake === null ? '' : on.stake).trim(); }
+  function stakeValue() { var n = Number(stakeRaw()); return stakeRaw() !== '' && isFinite(n) && n > 0 ? Math.floor(n) : 0; }
+  // Что не так со ставкой: int (не целое или не больше нуля), min, max, low (не хватает аконов), offline (нет связи с сервером)
+  function stakeProblem() {
+    var raw = stakeRaw(), n = Number(raw);
+    if (raw === '') return '';
+    if (!isFinite(n) || n <= 0 || n % 1 !== 0) return 'int';
+    if (n < MIN_STAKE) return 'min';
+    if (n > MAX_STAKE) return 'max';
+    if (!stakeOn()) return 'offline';
+    if (n > window.PlatformWallet.getBalance()) return 'low';
+    return '';
+  }
   function stakeNote() {
     var p = stakeProblem(), n = stakeValue();
-    return p === 'min' ? tr('online.stake.min', { n: MIN_STAKE }) : (p === 'low' ? tr('online.stake.low') : (n ? tr('online.stake.bank', { n: n * 2 }) : tr('online.stake.none')));
+    return p === 'int' ? tr('online.stake.int') : (p === 'max' ? tr('online.stake.max') : (p === 'offline' ? tr('online.stake.offline') : (p === 'min' ? tr('online.stake.min', { n: MIN_STAKE }) : (p === 'low' ? tr('online.stake.low') : (n ? tr('online.stake.bank', { n: n * 2 }) : tr('online.stake.none'))))));
   }
   function stakeFieldHtml() {
     var bal = window.PlatformWallet.getBalance(), p = stakeProblem();
@@ -156,10 +168,10 @@
 
   function createTable() {
     var api = getRooms();
-    if (!api || on.busy || (stakeOn() && stakeProblem())) return;
+    if (!api || on.busy || stakeProblem()) return;
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: on.size, mode: on.mode, private: on.private, stake: stakeOn() ? stakeValue() : 0, name: prof.name, avatar: prof.avatar }).then(function (res) {
+    api.createRoom({ size: on.size, mode: on.mode, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) {
       stopTimers();
       var host = res.host, failing = 0;
       chat.reset();
@@ -287,9 +299,9 @@
           return '<button class="mode-btn o-mode" data-act="setMode" data-v="' + m + '" data-key="mode-' + m + '" aria-pressed="' + (on.mode === m) + '"><b>' + esc(modeName(m)) + '</b><small>' + esc(tr('online.create.' + m + 'Sub')) + '</small></button>';
         }).join('') + '</div>' +
       '<button class="mode-btn o-mode" data-act="private" data-key="private" aria-pressed="' + on.private + '"><b>' + esc(tr('online.create.private')) + '</b><small>' + esc(tr(on.private ? 'online.create.privateSub' : 'online.create.privateOff')) + '</small></button>' +
-      (stakeOn() ? stakeFieldHtml() : '') +
+      (stakeOn() || stakeRaw() !== '' ? stakeFieldHtml() : '') +
       tableErrorHtml() +
-      '<button class="btn-play" data-act="create" data-key="createGo"' + (on.busy || (stakeOn() && stakeProblem()) ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'online.create.busy' : 'online.create.btn')) + '</button>' +
+      '<button class="btn-play" data-act="create" data-key="createGo"' + (on.busy || stakeProblem() ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'online.create.busy' : 'online.create.btn')) + '</button>' +
       '<button class="btn-secondary wide" data-act="toTables" data-key="createBack">' + esc(tr('online.back')) + '</button></div>';
   }
 
@@ -460,7 +472,9 @@
     if (!stake) return '';
     var active = rows.filter(function (r) { return r.active; }), max = Math.max.apply(null, active.map(function (r) { return r.total; }));
     var winners = active.filter(function (r) { return r.total === max; }), pot = stake * rows.length, mine = rows.filter(function (r) { return r.seat === me; })[0];
-    var won = mine && mine.active && mine.total === max, share = won ? Math.floor(pot / winners.length) : 0, net = share - stake;
+    winners.sort(function (a, b) { return a.seat - b.seat; });
+    var won = mine && mine.active && mine.total === max, base = Math.floor(pot / winners.length), rest = pot - base * winners.length;
+    var idx = won ? winners.map(function (r) { return r.seat; }).indexOf(mine.seat) : -1, share = won ? base + (idx < rest ? 1 : 0) : 0, net = share - stake;     // остаток банка по одному первым победителям (как на сервере)
     return '<div class="result ' + (net > 0 ? 'win' : '') + '" role="status"><span>' + esc(tr('online.stake.result')) + '</span><b>' + (net > 0 ? '+' : (net < 0 ? '−' : '')) + Math.abs(net) + '</b></div>';
   }
   function overHtml(st, me) {
@@ -625,6 +639,7 @@
   });
   appEl.addEventListener('keydown', function (e) { if (e.target.id === 'ocode' && e.key === 'Enter') { e.preventDefault(); joinTable(on.code); } });
   window.addEventListener('pagehide', function () { if (G) { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
+  if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (isOn() && on.screen === 'create') render(); });
   Cloud.onChange(function () {
     if (!isOn()) return;
     if (on.screen === 'login' && Cloud.getState().status === 'signedIn' && !on.busy) { openTables(); consumeInvite(); }

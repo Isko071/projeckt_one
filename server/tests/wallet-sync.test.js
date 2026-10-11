@@ -80,7 +80,7 @@ test('очередь: награда, полученная до ответа с�
     assert.ok(await until(() => c.S.status() === 'server'));
     assert.ok(await until(() => s.wallet.balanceOf('D') === 5400), 'награда доехала до сервера из очереди');
     assert.strictEqual(c.W.getBalance(), 5400);
-    assert.deepStrictEqual(JSON.parse(c.data['platform:wallet-queue']), []);
+    assert.deepStrictEqual(JSON.parse(c.data['platform:wallet-queue:D'] || '[]'), []);
   } finally { await s.close(); }
 });
 
@@ -92,5 +92,36 @@ test('первый вход с серверным балансом: серия �
     assert.strictEqual(c.W.getBalance(), 9000, 'не 5000 и не баланс рейтинга');
     const st = (await s.wallet.act('E', { op: 'sync' })).state;
     assert.strictEqual(st.streak, 4); assert.strictEqual(st.best, 12); assert.strictEqual(st.days.length, 3); assert.strictEqual(st.wins.yahtzee, 5);
+  } finally { await s.close(); }
+});
+
+test('очередь привязана к игроку: награды прошлого аккаунта не уходят на счёт нового', async () => {
+  // сервера нет (порт закрыт), поэтому запросы лежат в очереди
+  const a = client(1, 'QA');
+  a.W.reward('blackjack', 250, Date.now());
+  assert.ok(a.data['platform:wallet-queue:QA'] && JSON.parse(a.data['platform:wallet-queue:QA']).length >= 1, 'очередь игрока QA');
+  assert.ok(!('platform:wallet-queue' in a.data), 'общей очереди нет');
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50 } });
+  try {
+    const b = client(s.port, 'QB', a.data);                       // тот же браузер (хранилище), вошёл другой игрок
+    assert.ok(await until(() => b.S.status() === 'server'));
+    assert.strictEqual(b.W.getBalance(), 5000, 'чужие награды ему не засчитаны');
+    assert.strictEqual(s.wallet.balanceOf('QB'), 5000);
+  } finally { await s.close(); }
+});
+
+test('повторная отправка той же награды (вторая вкладка, потерянный ответ) засчитывается один раз', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50 } });
+  try {
+    const first = client(s.port, 'QC');
+    assert.ok(await until(() => first.S.status() === 'server'));
+    first.W.reward('blackjack', 400, Date.now());
+    assert.ok(await until(() => s.wallet.balanceOf('QC') === 5400));
+    const item = JSON.parse(first.data['platform:wallet-queue:QC'] || '[]');
+    assert.deepStrictEqual(item, [], 'очередь пуста после ответа');
+    // «вторая вкладка» шлёт тот же запрос ещё раз (с тем же rid)
+    const r1 = await s.wallet.act('QC', { op: 'reward', source: 'blackjack', kind: 'blackjack', rid: 'dup-rid-123456' });
+    const r2 = await s.wallet.act('QC', { op: 'reward', source: 'blackjack', kind: 'blackjack', rid: 'dup-rid-123456' });
+    assert.strictEqual(r1.state.balance, 5800); assert.strictEqual(r2.state.balance, 5800);
   } finally { await s.close(); }
 });

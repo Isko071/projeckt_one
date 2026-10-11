@@ -359,3 +359,52 @@ test('holdShown: пополнение на экране начинается п�
   run(t + 4000);
   assert.strictEqual(W.shownBalance(), 5610);
 });
+
+test('holdShown: «крайний срок», а не одноразовая отметка: неиспользованная задержка чужое пополнение не тормозит', () => {
+  let t = 0, cb = null;
+  const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
+  W.add(10, 'x');
+  W.holdShown(3000);                          // раздача кончилась проигрышем, пополнения не было
+  t = 4000;
+  W.add(100, 'bonus');
+  run(t + 500);
+  assert.strictEqual(W.shownBalance(), 5010, 'обычные 0,6 с: ещё не началось');
+  run(t + 4000);
+  assert.strictEqual(W.shownBalance(), 5110);
+});
+
+test('серверный режим: списание после hold тоже доезжает с задержкой, а не сразу', () => {
+  let t = 0, cb = null;
+  const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
+  W.add(10, 'x');
+  W.setServer({ active: () => true, queueing: () => true, claim() {} });
+  W.holdShown(2000);
+  W.applyServer(Object.assign({}, W.exportState(), { balance: 4500 }));      // ответ сервера: штраф
+  assert.strictEqual(W.getBalance(), 4500);
+  run(1900);
+  assert.strictEqual(W.shownBalance(), 5010, 'число держится до конца анимации игры');
+  run(6000);
+  assert.strictEqual(W.shownBalance(), 4500);
+});
+
+test('серверный режим: выплаты и пределы покера в браузере не работают (копию баланса не раздувают)', () => {
+  const W = load({ localStorage: fakeBackend() });
+  W.setServer({ active: () => true, queueing: () => true, claim() {} });
+  const before = W.getBalance();
+  assert.strictEqual(W.capPayout('poker-simple', 500, 100, Date.now()).paid, 0);
+  assert.strictEqual(W.onlineWin('poker-simple', 500, Date.now()).granted, 0);
+  W.capStart(Date.now());
+  assert.strictEqual(W.getBalance(), before);
+});
+
+test('день игрока: setDayShift сдвигает календарный день, а не время записей', () => {
+  const W = load({ localStorage: fakeBackend() });
+  const t = Date.UTC(2026, 2, 10, 20, 0);                         // 20:00 UTC
+  const base = W.markPlayed(t); assert.strictEqual(base.counted, true);
+  assert.strictEqual(W.dailyStatus(t).playedToday, true);
+  W.setDayShift(6 * 3600000);                                      // у игрока уже следующий день
+  assert.strictEqual(W.dailyStatus(t).playedToday, false);
+  W.setDayShift(0);
+});

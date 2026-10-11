@@ -127,8 +127,8 @@ function sitDown() {
 function seatOnline(t) {
   if (app.entering) return;
   app.entering = true;
-  var build = function () { app.entering = false; if (T !== t) return; app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
-  if (window.PlatformLoader && window.PlatformLoader.cover) window.PlatformLoader.cover({ build: build }); else build();
+  var show = function () { app.entering = false; if (T !== t) return; app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
+  if (window.PlatformLoader && window.PlatformLoader.cover) window.PlatformLoader.cover({ reveal: show }); else show();       // стол и раздача появляются, когда загрузка тает
 }
 function bindTable() {
   T.subscribe(function (t) {
@@ -221,7 +221,7 @@ function startHtml() {
     '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr(online ? 'start.onlineSub' : 'sub')) + '</div>' + modes +
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
-    (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : 'server.connecting')) + '</div></div>' : '') +
+    (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : (window.PlatformWalletSync.unreachable && window.PlatformWalletSync.unreachable() ? 'server.unreachable' : 'server.connecting'))) + '</div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth || walletBlocked() ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
     '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div></div>';
@@ -576,6 +576,8 @@ document.addEventListener('keydown', function (e) {
   render();
 });
 window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
+// Вернулись кнопкой «Назад»/«Вперёд» из кеша страницы: стол, с которого мы «ушли», остановлен, поэтому возвращаем игрока на стартовый экран
+window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; render(); } });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
 W.onShown(function (v) {
   var els = appEl.querySelectorAll('[data-bal]');

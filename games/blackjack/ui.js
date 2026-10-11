@@ -382,7 +382,15 @@ function onView(v) {
       if (!window.PlatformLoader || !window.PlatformLoader.cover) { app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); }
       else {
         // Садимся за стол под загрузкой: комната ожидания остаётся на экране, стол собирается на закрытом экране, карты появляются, когда экран открылся
-        if (!G.entering) { G.entering = true; window.PlatformLoader.cover({ build: function () { if (!G || G.mode !== 'online') return; G.entering = false; app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null; if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000); render(); } }); }
+        if (!G.entering) {
+          G.entering = true;
+          window.PlatformLoader.cover({ reveal: function () {
+            if (!G || G.mode !== 'online') return;
+            G.entering = false; app.screen = 'game'; app.seen = {}; app.fx = {}; app.banner = null;
+            if (isOwner() && !G.ctrl.server) notify(tr('notice.creator'), 6000);
+            if (G.view) onView(G.view); else render();        // последний вид стола обрабатывается заново: ставка и отметки, пришедшие под загрузкой, не теряются
+          } });
+        }
         return;
       }
     }

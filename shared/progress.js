@@ -19,6 +19,8 @@
     if (root.PlatformProfile && root.PlatformProfile.forget) root.PlatformProfile.forget();
   }
 
+  // При серверном балансе кошелёк в браузере это копия: в сравнении «что изменилось» и при замене снимком он не участвует (иначе на втором устройстве возникал бы ложный конфликт)
+  function walletIsServer() { return !!(root.PlatformWallet && root.PlatformWallet.serverOn && root.PlatformWallet.serverOn()); }
   function snapshot() {
     var data = {};
     allKeys().forEach(function (k) {
@@ -33,8 +35,9 @@
   function applySnapshot(snap) {
     if (!valid(snap)) throw fail('bad-snapshot');
     if (!storage().available()) throw fail('no-storage'); // без хранилища замена стёрла бы прогресс безвозвратно
-    allKeys().forEach(function (k) { storage().remove(k); });
-    Object.keys(snap.data).forEach(function (k) { if (isSyncKey(k)) storage().set(k, snap.data[k]); });
+    var keep = walletIsServer() ? 'platform:wallet' : null;
+    allKeys().forEach(function (k) { if (k !== keep) storage().remove(k); });
+    Object.keys(snap.data).forEach(function (k) { if (isSyncKey(k) && k !== keep) storage().set(k, snap.data[k]); });
     forgetMemory();
   }
 
@@ -42,6 +45,7 @@
 
   function fingerprint(snap) {
     var s = snap || snapshot(), data = s.data, keys = Object.keys(data).sort(), h = 5381;
+    if (walletIsServer()) keys = keys.filter(function (k) { return k !== 'platform:wallet'; });
     var text = keys.map(function (k) { return k + '=' + JSON.stringify(data[k]); }).join('|');
     for (var i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
     return (h >>> 0).toString(16);

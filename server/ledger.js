@@ -12,6 +12,7 @@ class MemLedger {
     this.data = new Map();                 // 'coll/id' → объект
     this.seeds = (o && o.seeds) || {};     // uid → стартовый баланс (для проверок)
     this.failNext = 0;                     // для проверок: сколько ближайших записей завершить ошибкой
+    this.failAfterApply = 0;               // для проверок: сколько ближайших записей применить, но сообщить об ошибке
   }
   async get(coll, id) { const v = this.data.get(coll + '/' + id); return v ? JSON.parse(JSON.stringify(v)) : null; }
   async commit(writes) {
@@ -20,6 +21,7 @@ class MemLedger {
       const key = w.coll + '/' + w.id;
       if (w.op === 'delete') this.data.delete(key); else this.data.set(key, JSON.parse(JSON.stringify(w.data)));
     });
+    if (this.failAfterApply > 0) { this.failAfterApply--; throw new Error('ledger-lost-response'); }     // для проверок: запись прошла, а ответ потерялся
   }
   async list(coll) {
     const out = [];
@@ -37,10 +39,16 @@ class FirestoreLedger {
     this.fetch = o.fetch || globalThis.fetch;
     this.now = o.now || Date.now;
     this.base = 'https://firestore.googleapis.com/v1/projects/' + this.projectId + '/databases/(default)/documents';
-    this.token = null; this.tokenUntil = 0;
+    this.token = null; this.tokenUntil = 0; this.tokenPending = null;
+    this.timeoutMs = o.timeoutMs || 15000; this.retryMs = o.retryMs !== undefined ? o.retryMs : 400;
   }
-  async accessToken() {
-    if (this.token && this.now() < this.tokenUntil - 60000) return this.token;
+  // Токен берётся один раз для всех одновременных запросов
+  accessToken() {
+    if (this.token && this.now() < this.tokenUntil - 60000) return Promise.resolve(this.token);
+    if (!this.tokenPending) this.tokenPending = this.fetchToken().finally(() => { this.tokenPending = null; });
+    return this.tokenPending;
+  }
+  async fetchToken() {
     const key = await importPKCS8(String(this.account.private_key).replace(/\\n/g, '\n'), 'RS256');
     const iat = Math.floor(this.now() / 1000);
     const jwt = await new SignJWT({ scope: 'https://www.googleapis.com/auth/datastore' })
@@ -55,16 +63,32 @@ class FirestoreLedger {
     this.token = body.access_token; this.tokenUntil = this.now() + (Number(body.expires_in) || 3600) * 1000;
     return this.token;
   }
+  // Запрос с таймаутом и повторами: сеть и 429/5xx повторяются до трёх раз с паузой, 401 один раз с новым токеном (записи в commit абсолютные, повтор безопасен)
   async call(method, url, body) {
-    const res = await this.fetch(url, { method, headers: { Authorization: 'Bearer ' + await this.accessToken(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-    if (res.status === 404 && method === 'GET') return null;
-    if (!res.ok) throw new Error('ledger-http-' + res.status);
-    return res.json();
+    let last = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null, timer = ctl ? setTimeout(() => ctl.abort(), this.timeoutMs) : null;
+        let res;
+        try { res = await this.fetch(url, { method, headers: { Authorization: 'Bearer ' + await this.accessToken(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: ctl ? ctl.signal : undefined }); }
+        finally { if (timer) clearTimeout(timer); }
+        if (res.status === 404 && method === 'GET') return null;
+        if (res.status === 401) { this.token = null; last = new Error('ledger-http-401'); continue; }
+        if (res.status === 429 || res.status >= 500) { last = new Error('ledger-http-' + res.status); await new Promise((r) => setTimeout(r, this.retryMs * (attempt + 1))); continue; }
+        if (!res.ok) throw new Error('ledger-http-' + res.status);
+        return await res.json();
+      } catch (e) {
+        if (/^ledger-http-4/.test(String(e && e.message)) && !/401/.test(e.message)) throw e;
+        last = e;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, this.retryMs * (attempt + 1)));
+      }
+    }
+    throw last || new Error('ledger-failed');
   }
   // Документ хранится как одна строка json (всё состояние) и число balance для просмотра в консоли
   encode(coll, id, data) {
     const fields = { json: { stringValue: JSON.stringify(data) } };
-    if (typeof data.balance === 'number') fields.balance = { integerValue: String(data.balance) };
+    if (Number.isSafeInteger(data.balance)) fields.balance = { integerValue: String(data.balance) };
     return { name: 'projects/' + this.projectId + '/databases/(default)/documents/' + coll + '/' + id, fields };
   }
   decode(doc) { try { return JSON.parse(doc.fields.json.stringValue); } catch (e) { return null; } }

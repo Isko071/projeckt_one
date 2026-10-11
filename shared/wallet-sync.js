@@ -18,11 +18,23 @@
   var queue = [];
   var SERVER_GAMES = ['mines'];              // игры, которые уже умеют работать на серверном балансе
 
-  function setStatus(s) { if (status === s) return; status = s; fns.forEach(function (fn) { try { fn(s); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
+  var connectingSince = 0, UNREACHABLE_MS = 45000;
+  function setStatus(s) {
+    if (status === s) return;
+    status = s;
+    if (s === 'connecting') { connectingSince = Date.now(); setTimeout(function () { if (status === 'connecting') fns.forEach(function (fn) { try { fn(status); } catch (e) { /* подписчик не должен ломать остальных */ } }); }, UNREACHABLE_MS + 100); }
+    fns.forEach(function (fn) { try { fn(s); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
   function store(k, d) { try { return Store ? Store.get(k, d) : d; } catch (e) { return d; } }
   function save(k, v) { try { if (Store) Store.set(k, v); } catch (e) { /* без хранилища очередь живёт до перезагрузки */ } }
-  function loadQueue() { var q = store(QKEY, []); queue = Array.isArray(q) ? q.filter(function (x) { return x && typeof x.op === 'string'; }).slice(-200) : []; }
-  function saveQueue() { save(QKEY, queue); }
+  // Очередь лежит под ключом игрока: вошёл другой аккаунт в том же браузере, награды предыдущего не уйдут на его счёт
+  function qkey() { return QKEY + ':' + uid; }
+  function loadQueue() { var q = store(qkey(), []); queue = Array.isArray(q) ? q.filter(function (x) { return x && typeof x.op === 'string'; }).slice(-200) : []; }
+  function saveQueue() { if (uid) save(qkey(), queue); }
+  // Идентификатор запроса: сервер не применит один и тот же запрос дважды (вторая вкладка, потерянный ответ, повтор из очереди)
+  function newRid() {
+    try { var a = new Uint32Array(3); root.crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return x.toString(36); }).join('') + Date.now().toString(36); }
+    catch (e) { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+  }
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
   // ---------- Соединение ----------
@@ -31,8 +43,10 @@
 
   function connect() {
     if (ws || !running) return;
+    var forUid = uid;
     Cloud.getToken().then(function (token) {
-      if (!running || ws) return;
+      var cur = Cloud.getState().user;
+      if (!running || ws || !cur || cur.uid !== forUid) return;       // за время получения токена игрок мог смениться
       var sock;
       try { sock = new root.WebSocket(url()); } catch (e) { scheduleRetry(); return; }
       ws = sock;
@@ -88,18 +102,26 @@
       if (!item) return Promise.resolve();
       withSync = false;
       return rawCall(item).then(function (r) {
-        if (queue[0] === item || (queue[0] && JSON.stringify(queue[0]) === JSON.stringify(item))) { queue.shift(); saveQueue(); }
+        if (queue[0] === item) { queue.shift(); saveQueue(); }
         lastState = r.state;
         return next();
       }, function (e) {
-        if (e && e.code === 'bad-request') { queue.shift(); saveQueue(); return next(); }      // сервер такой запрос не принимает: выбрасываем, не зацикливаемся
+        var code = e && e.code;
+        if (code === 'bad-request') { if (queue[0] === item) { queue.shift(); saveQueue(); } return next(); }      // сервер такой запрос не принимает: выбрасываем, не зацикливаемся
+        // Ошибка самого сервера (не обрыв связи): после нескольких попыток запрос выбрасывается, иначе он блокировал бы всю очередь
+        if (code !== 'offline' && code !== 'timeout' && item.rid) { item.tries = (item.tries || 0) + 1; if (item.tries >= 5 && queue[0] === item) { queue.shift(); saveQueue(); return next(); } saveQueue(); }
         throw e;
       });
     }
     return next().then(function () {
       flushing = false;
       if (lastState) { W.applyServer(lastState); setStatus('server'); }
-    }, function () { flushing = false; if (status === 'server') setStatus('connecting'); });
+    }, function () {
+      flushing = false;
+      if (status === 'server') setStatus('connecting');
+      // Соединение закрываем: сработает обычное переподключение с паузой и всё продолжится (без этого статус «ждём сервер» оставался бы навсегда)
+      try { ws && ws.close(); } catch (e) { /* уже закрыт */ }
+    });
   }
 
   // ---------- Для кошелька ----------
@@ -108,8 +130,8 @@
   // (пока неизвестно, включён ли серверный баланс, add/spend ещё запрещать рано)
   var driver = {
     active: function () { return status === 'server'; },
-    queueing: function () { return status !== 'local'; },
-    claim: function (msg) { queue.push(msg); if (queue.length > 200) queue.shift(); saveQueue(); if (status === 'server') flush(false); }
+    queueing: function () { return running || status !== 'local'; },
+    claim: function (msg) { msg.rid = newRid(); msg.tries = 0; queue.push(msg); if (queue.length > 200) queue.shift(); saveQueue(); if (status === 'server') flush(false); }
   };
   function applyDriver() { W.setServer(status === 'local' ? null : driver); }
 
@@ -136,6 +158,8 @@
     status: function () { return status; },
     onStatus: function (fn) { fns.push(fn); },
     start: start, stop: stop,
+    // Сервер не отвечает дольше 45 с: игры, которым он нужен, показывают «сервер недоступен» вместо вечного «подключаемся»
+    unreachable: function () { return status === 'connecting' && connectingSince > 0 && Date.now() - connectingSince > UNREACHABLE_MS; },
     // Игры, которые пока считают аконы в браузере (покер), при серверном балансе (и пока он неизвестен) недоступны; «Мины» работают на сервере и ждут только ответа
     blocked: function (game) { if (status === 'server') return SERVER_GAMES.indexOf(game) < 0; return status !== 'local'; },
     // holdFor(ответ) → через сколько мс показать на экране новый баланс (игра сначала доигрывает анимацию); 0 или не задано — как обычно

@@ -33,12 +33,17 @@ function balanceNow() { return W.shownBalance(); }
 function balanceHtml() {
   var b = balanceNow(), rw = app.fresh && app.rw ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
   var delta = rw ? (rw.granted > 0 ? '+' + fmt(rw.granted) : (rw.lost > 0 ? '−' + fmt(rw.lost) : '')) : '';
-  return '<div class="bal' + cls + '" role="status" aria-label="' + esc(tr('balance', { n: fmt(W.getBalance()), unit: unit(W.getBalance()) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
+  return '<div class="bal' + cls + '" aria-label="' + esc(tr('balance', { n: fmt(W.getBalance()), unit: unit(W.getBalance()) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
     (delta ? '<i class="delta" aria-hidden="true" style="animation-delay:' + (app.hold || 700) + 'ms">' + delta + '</i>' : '') + '</div>';
 }
 
 // ===== Старт =====
 var LOGO = '<svg viewBox="0 0 120 80" width="96" height="64" aria-hidden="true"><rect x="2" y="2" width="116" height="76" rx="14" class="logo-bg"/><g transform="translate(14 14)"><path d="M10 0h20l8 12-18 22L2 12z" class="gm-body"/></g><g transform="translate(66 22) scale(1.3)"><circle cx="16" cy="17" r="8" class="mi-body"/><path d="M16 5v5M16 24v5M4 17h5M23 17h5" class="mi-spike"/></g></svg>';
+function errHtml() {
+  if (!app.err) return '';
+  var key = app.err === 'nofunds' ? 'start.need' : (app.err === 'noround' ? 'err.noround' : 'start.err.offline');
+  return '<div class="muted-text" role="alert">' + esc(tr(key, { n: M.lossFor(app.round ? app.round.mines : app.count) })) + '</div>';
+}
 function startHtml() {
   var chips = [1, 3, 5, 10, 15, 24].map(function (n) {
     return '<button class="chipbtn" data-act="count" data-n="' + n + '" aria-pressed="' + (app.count === n) + '">' + n + '</button>';
@@ -52,7 +57,7 @@ function startHtml() {
       '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr('start.perCellGrow', { n: M.cellReward(app.count) })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
-    (app.err === 'offline' ? '<div class="muted-text" role="alert">' + esc(tr('start.err.offline')) + '</div>' : '') +
+    errHtml() +
     (walletBlocked() ? '<div class="muted-text" role="status">' + esc(tr(blockedKey())) + '</div>' : (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>')) +
     '<div class="start-actions"><button class="btn-play" data-act="play"' + (canPlay() && !app.busy ? '' : ' disabled') + '>' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
@@ -68,6 +73,7 @@ function startRound() {
     }, function (e) { app.busy = false; app.err = srvError(e); app.screen = 'start'; render(); });
     return;
   }
+  if (app.busy) return;
   app.srv = false;
   app.round = M.init(app.count); app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game';
   render();
@@ -80,7 +86,7 @@ function finish(v) {
 }
 // Пока баланс на сервере (или ждём его), игра, которая считает аконы в браузере, недоступна: подделать серверный баланс через неё было бы можно
 function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked('mines')); }
-function blockedKey() { return 'server.connecting'; }
+function blockedKey() { return window.PlatformWalletSync && window.PlatformWalletSync.unreachable && window.PlatformWalletSync.unreachable() ? 'server.unreachable' : 'server.connecting'; }
 // При серверном балансе раунд ведёт сервер (мины раскладывает он, награду и штраф считает он); app.round тогда хранит вид раунда от сервера
 function srvOn() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server'); }
 function curView() { return app.srv ? app.round : M.view(app.round); }
@@ -88,7 +94,18 @@ function srvCall(op, args, hold) { return window.PlatformWalletSync.call(op, arg
 // Раунд закончен: число на плашке меняется, когда на поле доиграна анимация (взрыв, остальные мины по очереди, итог), а не сразу
 function holdMs(v) { return v.status === 'lost' ? 350 + Math.max(0, v.mines - 1) * 90 + 700 : 1200; }
 function srvHold(r) { var v = r.result && r.result.mines; return v && v.status !== 'playing' ? holdMs(v) : 0; }
-function srvError(e) { return e && e.code === 'no-funds' ? 'nofunds' : 'offline'; }
+function srvError(e) { var c = e && e.code; return c === 'no-funds' ? 'nofunds' : (c === 'no-round' ? 'noround' : 'offline'); }
+// После ошибки хода раунд не бросаем: сервер мог уже применить ход или раунд жив — спрашиваем у него, что с раундом
+function resync(note) {
+  if (!srvOn()) { app.busy = false; app.err = note || 'offline'; render(); return; }
+  srvCall('minesState').then(function (r) {
+    var v = r.result && r.result.mines;
+    app.busy = false;
+    if (v) { app.srv = true; app.round = v; app.screen = v.status === 'playing' ? 'game' : app.screen; app.err = note || ''; }
+    else { app.srv = false; app.round = null; app.screen = 'start'; app.err = note || ''; }
+    render();
+  }, function () { app.busy = false; app.err = 'offline'; render(); });
+}
 function canPlay(mines) { return !walletBlocked() && W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
 function act(action) {
   if (app.srv) {
@@ -98,7 +115,7 @@ function act(action) {
     render();
     srvCall(action.type === 'open' ? 'minesOpen' : 'minesCash', { index: action.index }, srvHold).then(function (r) {
       app.busy = false; app.round = r.result.mines; app.rw = r.result.rw; app.hold = srvHold(r); if (idx >= 0) app.last = idx; app.fresh = true; render();
-    }, function (e) { app.busy = false; app.err = srvError(e); app.srv = false; app.round = null; app.screen = 'start'; render(); });
+    }, function (e) { resync(srvError(e)); });
     return;
   }
   var r = M.reduce(app.round, action);
@@ -136,7 +153,7 @@ function gameHtml() {
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('earned')) + '</small><b' + (app.fresh && v.earned ? ' class="bump"' : '') + '>' + fmt(v.earned) + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('next')) + '</small><b>' + esc(tr('plus', { n: v.next })) + '</b></div></div>' +
-    '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + result + take + '</div>';
+    errHtml() + '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + result + take + '</div>';
 }
 
 function modalHtml() {
@@ -162,13 +179,14 @@ appEl.addEventListener('click', function (e) {
     case 'plus': app.count = M.clampMines(app.count + 1); render(); break;
     case 'count': app.count = M.clampMines(Number(el.getAttribute('data-n'))); render(); break;
     case 'play': if (canPlay(app.count)) startRound(); break;
-    case 'again': if (canPlay(app.round ? app.round.mines : app.count)) { app.count = app.round ? app.round.mines : app.count; startRound(); } break;
+    case 'again': if (app.busy) break; if (canPlay(app.round ? app.round.mines : app.count)) { app.count = app.round ? app.round.mines : app.count; startRound(); } break;
     case 'take': act({ type: 'cashout' }); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
-    case 'exit': if (app.round && app.round.status === 'playing' && app.round.openedCount > 0) { app.confirm = true; render(); } else { app.screen = 'start'; render(); } break;
+    case 'exit': if (app.busy) break; if (app.round && app.round.status === 'playing' && app.round.openedCount > 0) { app.confirm = true; render(); } else { app.screen = 'start'; render(); } break;
     case 'stay': app.confirm = false; render(); break;
     case 'menu':
+      if (app.busy) break;
       // выход из раунда на сервере: раунд там удаляется (накопленное сгорает, штрафа за выход нет)
       if (app.srv && app.round && app.round.status === 'playing' && srvOn()) srvCall('minesAbandon').catch(function () { /* сервер удалит раунд при следующем старте */ });
       app.confirm = false; app.screen = 'start'; app.round = null; render(); break;
@@ -178,6 +196,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { if (app.rules) app.rules = false; else if (app.confirm) app.confirm = false; else return; render(); }
 });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function (s) {
+  if (s === 'server' && app.err === 'offline' && app.screen === 'start') app.err = '';
   if (app.screen === 'start') render();
   // Страницу перезагрузили посреди раунда: сервер помнит его, продолжаем
   if (s === 'server' && !app.round && !app.busy) {

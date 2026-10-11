@@ -45,11 +45,23 @@
   // ---------- Ставка за столом (серверный баланс, shared/wallet-sync.js) ----------
   var MIN_STAKE = 25;
   function stakeOn() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server'); }
-  function stakeValue() { var n = Math.floor(Number(on.stake)); return isFinite(n) && n > 0 ? n : 0; }
-  function stakeProblem() { var n = stakeValue(); if (!n) return ''; if (n < MIN_STAKE) return 'min'; if (n > window.PlatformWallet.getBalance()) return 'low'; return ''; }
+  var MAX_STAKE = 100000;
+  function stakeRaw() { return String(on.stake === undefined || on.stake === null ? '' : on.stake).trim(); }
+  function stakeValue() { var n = Number(stakeRaw()); return stakeRaw() !== '' && isFinite(n) && n > 0 ? Math.floor(n) : 0; }
+  // Что не так со ставкой: int (не целое или не больше нуля), min, max, low (не хватает аконов), offline (нет связи с сервером)
+  function stakeProblem() {
+    var raw = stakeRaw(), n = Number(raw);
+    if (raw === '') return '';
+    if (!isFinite(n) || n <= 0 || n % 1 !== 0) return 'int';
+    if (n < MIN_STAKE) return 'min';
+    if (n > MAX_STAKE) return 'max';
+    if (!stakeOn()) return 'offline';
+    if (n > window.PlatformWallet.getBalance()) return 'low';
+    return '';
+  }
   function stakeNote() {
     var p = stakeProblem(), n = stakeValue();
-    return p === 'min' ? tr('o.stake.min', { n: MIN_STAKE }) : (p === 'low' ? tr('o.stake.low') : (n ? tr('o.stake.bank', { n: n * 2 }) : tr('o.stake.none')));
+    return p === 'int' ? tr('o.stake.int') : (p === 'max' ? tr('o.stake.max') : (p === 'offline' ? tr('o.stake.offline') : (p === 'min' ? tr('o.stake.min', { n: MIN_STAKE }) : (p === 'low' ? tr('o.stake.low') : (n ? tr('o.stake.bank', { n: n * 2 }) : tr('o.stake.none'))))));
   }
   function stakeFieldHtml() {
     var bal = window.PlatformWallet.getBalance(), p = stakeProblem();
@@ -173,10 +185,10 @@
 
   function createTable() {
     var api = getRooms();
-    if (!api || on.busy || (stakeOn() && stakeProblem())) { if (!api) { on.tableError = 'missing'; render(); } return; }
+    if (!api || on.busy || stakeProblem()) { if (!api) { on.tableError = 'missing'; render(); } return; }
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: 2, private: on.private, stake: stakeOn() ? stakeValue() : 0, name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
+    api.createRoom({ size: 2, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
       function (e) { on.busy = false; on.tableError = errorKey(e); on.screen = 'tables'; render(); });
   }
   function joinTable(code) {
@@ -257,9 +269,9 @@
   function createHtml() {
     return '<div class="o-page">' + pageHead('toTables', tr('o.create.title')) +
       '<button class="mode-btn o-mode" data-act="private" aria-pressed="' + on.private + '"><b>' + esc(tr('o.create.private')) + '</b><small>' + esc(tr(on.private ? 'o.create.privateSub' : 'o.create.privateOff')) + '</small></button>' +
-      (stakeOn() ? stakeFieldHtml() : '') +
+      (stakeOn() || stakeRaw() !== '' ? stakeFieldHtml() : '') +
       tableErrorHtml() +
-      '<button class="btn-play" data-act="create"' + (on.busy || (stakeOn() && stakeProblem()) ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'o.create.busy' : 'o.create.btn')) + '</button>' +
+      '<button class="btn-play" data-act="create"' + (on.busy || stakeProblem() ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'o.create.busy' : 'o.create.btn')) + '</button>' +
       '<button class="btn-secondary wide" data-act="toTables">' + esc(tr('o.back')) + '</button></div>';
   }
   function lobbyHtml() {
@@ -368,6 +380,7 @@
   });
   appEl.addEventListener('keydown', function (e) { if (e.target.id === 'ocode' && e.key === 'Enter') { e.preventDefault(); joinTable(on.code); } });
   window.addEventListener('pagehide', function () { if (G) { try { G.room.leave(); } catch (e) { /* закрываем страницу */ } } });
+  if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'online' && on.screen === 'create') render(); });
   Cloud.onChange(function () {
     if (app.screen !== 'online') return;
     if (on.screen === 'login' && Cloud.getState().status === 'signedIn' && !on.busy) { openTables(); consumeInvite(); }
