@@ -66,7 +66,9 @@ function catalogLinkHtml(cls) {
 function headHtml(act, title, label) {
   return '<div class="o-head" data-key="head"><button class="theme-btn" data-act="' + act + '" data-key="back" aria-label="' + esc(label) + '">←</button><h2>' + esc(title) + '</h2>' + themeButtonHtml('theme-btn') + '</div>';
 }
-function balHtml() { return '<div class="bal" data-key="bal">' + esc(fmt(W.getBalance()) + ' ' + tr('unitShort')) + '</div>'; }
+// В игре против ботов стек равен балансу кошелька: после выигрыша он тоже доезжает постепенно
+function barSmooth(m) { return m.mode === 'bots' && m.me.stack === W.getBalance(); }
+function balHtml() { return '<div class="bal" data-key="bal" data-bal="short">' + esc(fmt(W.shownBalance()) + ' ' + tr('unitShort')) + '</div>'; }
 function bannerHtml() {
   if (!app.banner) return '';
   var k = { wake: 'net.wake', lost: 'net.lost', back: 'net.back' }[app.banner];
@@ -208,7 +210,7 @@ function startHtml() {
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
-    '<div class="bal-line" data-key="bal">' + esc(tr('balance', { n: fmt(W.getBalance()) + ' ' + unit(W.getBalance()) })) + '</div></div>';
+    '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div></div>';
 }
 function segHtml(items, sel, act) {
   return '<div class="seg">' + items.map(function (it) { return '<button data-act="' + act + '" data-v="' + it.v + '" data-key="' + act + it.v + '" aria-pressed="' + (it.v === sel) + '">' + esc(it.t) + '</button>'; }).join('') + '</div>';
@@ -220,7 +222,7 @@ function setupHtml() {
     '<div><div class="lbl">' + esc(tr('setup.players')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.n, 'size') + '</div>' +
     '<div class="prev" data-key="prev"><div class="felt"></div>' + dots + '</div>' +
     '<div><div class="lbl">' + esc(tr('setup.ante')) + '</div>' + segHtml(ANTES.map(function (n) { return { v: n, t: String(n) }; }), pr.ante, 'ante') + '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(tr('setup.minNote', { n: pr.ante * 2 })) + '</div></div>' +
-    '<div class="stackline">' + esc(tr('setup.stack', { n: fmt(bal) + ' ' + unit(bal) })) + '</div>' +
+    '<div class="stackline" data-bal="stack">' + esc(tr('setup.stack', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div>' +
     '<div class="capline">' + esc(tr('setup.cap', { n: fmt(cap.left) })) + '</div>' +
     (broke ? '<div class="warnbox">' + esc(tr('setup.broke', { n: pr.ante })) + '</div>' : '') +
     '<div style="display:flex"><button class="btn primary full" data-act="sit" data-key="sit"' + (broke ? ' disabled' : '') + '>' + esc(tr('setup.sit')) + '</button></div></div>';
@@ -335,7 +337,7 @@ function tableHtml(m) {
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
   var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
-  var top = '<div class="bar wide" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal">' + esc(fmt(m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
+  var top = '<div class="bar wide" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal"' + (barSmooth(m) ? ' data-bal="short"' : '') + '>' + esc(fmt(barSmooth(m) ? W.shownBalance() : m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
   return top + (notice || toasts ? '<div class="toast" role="status" data-key="toast">' + (notice ? '<div>' + esc(notice) + '</div>' : '') + toasts + '</div>' : '') +
     '<div class="area" data-key="area"><div class="felt"></div><div class="center"><div class="round">' + esc(tr('round.' + m.roundKey)) + '</div><div class="board">' + board + '</div>' +
     '<div class="pot"><span class="pot-dot"></span>' + esc(tr('pot', { n: fmt(m.pot) })) + '</div>' + (cap ? '<div class="cap" role="status">' + esc(cap) + '</div>' : '') + '</div>' + seatsHtml + betsHtml + '</div>' +
@@ -560,6 +562,13 @@ document.addEventListener('keydown', function (e) {
   render();
 });
 window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
+W.onShown(function (v) {
+  var els = appEl.querySelectorAll('[data-bal]');
+  for (var i = 0; i < els.length; i++) {
+    var kind = els[i].getAttribute('data-bal');
+    els[i].textContent = kind === 'short' ? fmt(v) + ' ' + tr('unitShort') : tr(kind === 'line' ? 'balance' : 'setup.stack', { n: fmt(v) + ' ' + unit(v) });
+  }
+});
 window.PlatformTheme.onChange(function () { render(); });
 window.PlatformWallet.onChange(function () { render(); });
 Cloud.onChange(function () { consumeInvite(); if (app.screen === 'start') render(); });

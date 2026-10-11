@@ -475,13 +475,14 @@ function leaveGame(toScreen) {
 }
 
 // ===== Вёрстка экранов =====
+function balChipText(bal, narrow) { return narrow ? tr('balanceShort', { n: fmt(bal) }) : tr('balanceFull', { n: fmt(bal), unit: unit(bal) }); }
 function topbarHtml() {
-  var L = layout(), bal = W.getBalance();
-  var balText = L.narrow ? tr('balanceShort', { n: fmt(bal) }) : tr('balanceFull', { n: fmt(bal), unit: unit(bal) });
+  var L = layout();
+  var balText = balChipText(W.shownBalance(), L.narrow);
   return '<div class="topbar">' + catalogButtonHtml() +
     '<div class="title">' + (L.narrow ? '' : esc(window.I18n.t('games.blackjack.title'))) + '</div>' +
     '<button class="icon-btn" data-act="rules" data-key="rules" aria-label="' + esc(tr('rulesBtn')) + '">?</button>' +
-    (G && G.mode === 'online' && app.screen === 'game' ? chat.buttonHtml() : '') + themeButtonHtml('') + '<div class="bal-chip" data-key="bal">' + esc(balText) + '</div></div>';
+    (G && G.mode === 'online' && app.screen === 'game' ? chat.buttonHtml() : '') + themeButtonHtml('') + '<div class="bal-chip" data-key="bal" data-narrow="' + !!L.narrow + '">' + esc(balText) + '</div></div>';
 }
 
 var LOGO = '<div class="logo" aria-hidden="true"><div class="lc"><span>A</span><i>♠</i></div><div class="lc red"><span>10</span><i>♥</i></div></div>';
@@ -495,7 +496,7 @@ function startHtml() {
     '<div class="muted-text">' + esc(tr('tagline')) + '</div>' + modes +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play">' + esc(tr('start.play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
-    '<div class="bal-line">' + esc(tr('balance', { n: fmt(bal), unit: unit(bal) })) + '</div></div>';
+    '<div class="bal-line" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()), unit: unit(W.shownBalance()) })) + '</div></div>';
 }
 
 function loginHtml() {
@@ -920,6 +921,11 @@ document.addEventListener('keydown', function (e) {
 window.addEventListener('resize', function () { if (app.screen === 'game') render(); });
 window.addEventListener('pagehide', function () { if (G && G.mode === 'online') { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
 
+W.onShown(function (v) {
+  var chips = document.querySelectorAll('.bal-chip'), lines = document.querySelectorAll('.bal-line[data-bal]'), i;
+  for (i = 0; i < chips.length; i++) chips[i].textContent = balChipText(v, chips[i].getAttribute('data-narrow') === 'true');
+  for (i = 0; i < lines.length; i++) lines[i].textContent = tr('balance', { n: fmt(v), unit: unit(v) });
+});
 window.PlatformTheme.onChange(render);
 W.onChange(function () { if (app.screen === 'start' || app.screen === 'game') render(); });
 Cloud.onChange(function () {

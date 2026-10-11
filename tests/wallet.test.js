@@ -51,8 +51,8 @@ test('бонус дня: только после игры; 500, потом +250 
   }
   assert.deepEqual(amounts, [500, 750, 1000, 1250, 1500, 1750, 2000, 2000, 2000]);
   assert.equal(W.claimDaily().claimed, false, 'второй раз за день нельзя');
-  // разовые бонусы серии: 3 дня +250, 7 дней +1000
-  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b) + 250 + 1000);
+  // разовый бонус серии: 7 дней +1000
+  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b) + 1000);
 });
 
 test('серия: вторая игра в тот же день её не продлевает; бонус дня один', () => {
@@ -76,7 +76,7 @@ test('серия: пропущенный день сжигает её, лучш�
   const st = W.dailyStatus(D(2027, 1, 3));
   assert.equal(st.best, 3);
   assert.equal(st.nextAmount, 750);
-  assert.equal(st.nextMilestone, 3);
+  assert.equal(st.nextMilestone, 7);
 });
 
 test('неполученный бонус не пропадает: выплачивается при следующей игре', () => {
@@ -87,7 +87,7 @@ test('неполученный бонус не пропадает: выплач�
   assert.equal(W.dailyStatus(D(2026, 4, 2)).pending.amount, 750);
 });
 
-test('длинные серии: разовые бонусы на 14, 30, 60 и 100 дни', () => {
+test('длинные серии: разовые бонусы только на 7 и 14 дни', () => {
   const W = load({ localStorage: fakeBackend() });
   const bonuses = {};
   for (let d = 0; d < 100; d++) {
@@ -95,7 +95,7 @@ test('длинные серии: разовые бонусы на 14, 30, 60 и 
     if (m.bonus) bonuses[m.streak] = m.bonus;
     W.claimDaily();
   }
-  assert.deepEqual(bonuses, { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 });
+  assert.deepEqual(bonuses, { 7: 1000, 14: 2000 });
 });
 
 test('награды за одиночные игры: дневной лимит 1500, на следующий день снова', () => {
@@ -315,4 +315,29 @@ test('награды: «Морской бой» 500 за победу над б�
     assert.equal(total, cap); assert.equal(last.granted, 0); assert.equal(last.capped, true);
     assert.equal(W.reward(src, 500, D(2026, 5, 2, 10)).granted, 500);
   });
+});
+
+test('показываемый баланс: пополнение доезжает постепенно, ставка списывается сразу, штраф «Мин» плавно', () => {
+  let t = 0, cb = null;
+  const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  const seen = [];
+  W.onShown((v) => seen.push(v));
+  const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
+  W.add(1000, 'x');                                   // первая запись только запоминает баланс
+  W.add(500, 'win');
+  assert.equal(W.getBalance(), 6500);
+  assert.equal(W.shownBalance(), 6000, 'сразу после выигрыша на экране ещё старое число');
+  run(300);
+  assert.equal(W.shownBalance(), 6000, 'в паузе число не меняется');
+  run(5000);
+  assert.equal(W.shownBalance(), 6500);
+  assert.ok(seen.some((v) => v > 6000 && v < 6500), 'по пути были промежуточные числа');
+  assert.ok(seen.every((v, i) => i === 0 || v >= seen[i - 1]), 'число только растёт');
+  W.spend(100, 'poker-simple');
+  assert.equal(W.shownBalance(), 6400, 'ставка списывается сразу');
+  W.spend(100, 'mines');
+  assert.equal(W.getBalance(), 6300);
+  assert.equal(W.shownBalance(), 6400, 'штраф «Мин» тоже плавный');
+  run(10000);
+  assert.equal(W.shownBalance(), 6300);
 });

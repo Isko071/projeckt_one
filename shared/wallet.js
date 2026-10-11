@@ -1,6 +1,7 @@
 // Общий кошелёк платформы: виртуальные «аконы», только в этом браузере (platform:wallet), настоящих денег нет.
 // Все игры работают с аконами только через этот модуль:
 //   PlatformWallet.getBalance()            → число
+//   PlatformWallet.shownBalance()          → число для показа на экране: после выигрыша плавно доезжает до настоящего баланса; onShown(fn) — подписка на каждый кадр
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
 //   PlatformWallet.add(n, source)          → пополнение (выигрыш в игре на аконы)
@@ -29,7 +30,7 @@
     capShare: 0.5,      // в игре с ботом за день можно выиграть не больше этой доли баланса (на начало дня)
     rewardCaps: { blackjack: 3000, 'battleship-easy': 2500, 'battleship-expert': 5000 }, // игры без ставок: сколько наград можно получить за день (по играм)
     earnDailyCap: 1500, // сколько можно заработать в одиночных играх за день
-    milestones: { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 }, // разовые бонусы за длину серии
+    milestones: { 7: 1000, 14: 2000 }, // разовые бонусы за длину серии: дальше только бонус дня
     logSize: 20
   };
 
@@ -98,10 +99,40 @@
     var stored = root.PlatformStorage ? root.PlatformStorage.get(KEY, null) : null;
     return sanitize(stored || memory);
   }
+  // Показываемый баланс: пополнения (и штраф «Мин») доезжают до нового числа постепенно, остальные списания (ставки) сразу
+  var lastBal = null, shown = 0, anim = null, rafId = 0, shownFns = [], smoothDown = false;
+  var SHOWN_DELAY = 600;
+  function emitShown() { shownFns.forEach(function (fn) { try { fn(shown); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
+  function stopShown() { if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId); rafId = 0; anim = null; }
+  function tickShown(now) {
+    if (!anim) return;
+    var k = Math.min(1, Math.max(0, (now - anim.t0 - SHOWN_DELAY) / anim.dur)), e = 1 - Math.pow(1 - k, 3);
+    shown = Math.round(anim.from + (anim.to - anim.from) * e);
+    if (k >= 1) { shown = anim.to; anim = null; rafId = 0; } else rafId = requestAnimationFrame(tickShown);
+    emitShown();
+  }
+  function startShown(from, to) {
+    if (typeof requestAnimationFrame !== 'function' || typeof performance === 'undefined') return;
+    stopShown();
+    shown = from;
+    anim = { from: from, to: to, t0: performance.now(), dur: Math.min(1800, Math.max(700, 500 + Math.abs(to - from) * 0.8)) };
+    rafId = requestAnimationFrame(tickShown);
+  }
+  function shownBalance() { return anim ? shown : getBalance(); }
+  function onShown(fn) { shownFns.push(fn); }
+  function trackShown(b) {
+    if (lastBal !== null && b !== lastBal) {
+      if (b > lastBal || smoothDown) startShown(anim ? shown : lastBal, b);
+      else if (anim) { stopShown(); shown = b; emitShown(); }
+    }
+    lastBal = b; smoothDown = false;
+  }
+
   function save(state) {
     if (state.balance > state.peak) state.peak = state.balance;
     memory = state;
     if (root.PlatformStorage) root.PlatformStorage.set(KEY, state);
+    trackShown(state.balance);
     listeners.forEach(function (fn) { try { fn(state.balance); } catch (e) { /* подписчик не должен ломать остальных */ } });
     return state;
   }
@@ -132,6 +163,7 @@
     if (num(n, -1) < 1 || s.balance < n) return false;
     s.balance -= n;
     record(s, source || 'spend', -n, now);
+    smoothDown = source === 'mines';
     save(s);
     return true;
   }
@@ -308,11 +340,11 @@
   }
   function onChange(fn) { listeners.push(fn); }
   // Забыть копию в памяти (после смены или очистки прогресса из другого модуля)
-  function forget() { memory = null; }
+  function forget() { memory = null; stopShown(); lastBal = null; }
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
+    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget
