@@ -28,6 +28,10 @@
       titleKey: 'games.battleship.title', descriptionKey: 'games.battleship.description'
     },
     {
+      id: 'mines', status: 'available', path: 'games/mines/', cover: 'games/mines/cover.svg',
+      titleKey: 'games.mines.title', descriptionKey: 'games.mines.description'
+    },
+    {
       id: 'next', status: 'soon', path: 'games/next/', cover: 'assets/covers/soon.svg',
       titleKey: 'games.next.title', descriptionKey: 'games.next.description'
     }
