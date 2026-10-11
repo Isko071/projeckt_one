@@ -123,3 +123,74 @@ test('кошелёк: отказ ledger не меняет баланс и не �
   assert.strictEqual((await wallet.act('A', { op: 'sync' })).state.balance, 5000);
   assert.strictEqual((await ledger.list('holds')).length, 0);
 });
+
+// ---------- «Мины» на сервере ----------
+const plainJ = (x) => JSON.parse(JSON.stringify(x));
+async function minesSvc(seeds) { const ledger = new MemLedger({ seeds: seeds || {} }), svc = new WalletService({ ledger }); await svc.init(); return { svc, ledger }; }
+const mineCell = (svc, uid) => svc.rounds.get(uid).layout.findIndex((x) => x);
+const safeCell = (svc, uid) => { const r = svc.rounds.get(uid); return r.layout.findIndex((x, i) => !x && !r.opened[i]); };
+
+test('«Мины» на сервере: клетки, «Забрать» и награда по правилам игры, мины клиенту не видны', async () => {
+  const { svc } = await minesSvc();
+  const st = await svc.act('A', { op: 'minesStart', mines: 3 });
+  assert.strictEqual(st.result.mines.layout, null, 'пока раунд идёт, мин не видно');
+  const o1 = await svc.act('A', { op: 'minesOpen', index: safeCell(svc, 'A') });
+  assert.strictEqual(o1.result.mines.earned, 65);
+  assert.strictEqual(o1.result.mines.layout, null);
+  const o2 = await svc.act('A', { op: 'minesOpen', index: safeCell(svc, 'A') });
+  assert.strictEqual(o2.result.mines.earned, 140);
+  const cash = await svc.act('A', { op: 'minesCash' });
+  assert.deepStrictEqual(plainJ(cash.result.rw), { granted: 140, lost: 0 });
+  assert.strictEqual(cash.state.balance, 5140);
+  assert.strictEqual(cash.result.mines.status, 'cashed');
+  assert.strictEqual(cash.result.mines.layout.length, 25, 'после конца раунда мины показаны');
+  assert.strictEqual(svc.rounds.has('A'), false);
+  assert.strictEqual(cash.state.wins.mines, 1);
+  assert.strictEqual(cash.state.plays.mines, 1);
+});
+
+test('«Мины» на сервере: мина сжигает накопленное и списывает штраф', async () => {
+  const { svc } = await minesSvc();
+  await svc.act('A', { op: 'minesStart', mines: 5 });
+  await svc.act('A', { op: 'minesOpen', index: safeCell(svc, 'A') });
+  const boom = await svc.act('A', { op: 'minesOpen', index: mineCell(svc, 'A') });
+  assert.deepStrictEqual(plainJ(boom.result.rw), { granted: 0, lost: 500 });
+  assert.strictEqual(boom.state.balance, 4500);
+  assert.strictEqual(boom.result.mines.status, 'lost');
+  await assert.rejects(svc.act('A', { op: 'minesOpen', index: 0 }), /no-round/);
+});
+
+test('«Мины» на сервере: нельзя играть без аконов на штраф, штраф не больше баланса, подделка запросов отклоняется', async () => {
+  const { svc } = await minesSvc({ P: 300 });
+  await assert.rejects(svc.act('P', { op: 'minesStart', mines: 3 }), /no-funds/);
+  await svc.act('P', { op: 'minesStart', mines: 20 });                  // 20 мин: штраф 200, хватает
+  await assert.rejects(svc.act('P', { op: 'minesCash' }), /bad-request/, 'забрать до первой клетки нельзя');
+  await assert.rejects(svc.act('P', { op: 'minesOpen', index: 99 }), /bad-request/);
+  await svc.act('P', { op: 'minesOpen', index: mineCell(svc, 'P') });
+  assert.strictEqual(svc.balanceOf('P'), 100);
+  const { svc: s2 } = await minesSvc();
+  await s2.act('Q', { op: 'minesStart', mines: 1 });
+  const i = safeCell(s2, 'Q');
+  await s2.act('Q', { op: 'minesOpen', index: i });
+  await assert.rejects(s2.act('Q', { op: 'minesOpen', index: i }), /bad-request/, 'повторная клетка');
+  await assert.rejects(s2.act('Q', { op: 'minesOpen' }), /bad-request/);
+  await assert.rejects(s2.act('Q', { op: 'mines', mines: 1 }), /bad-request/);
+});
+
+test('«Мины» на сервере: раунд переживает перезапуск, все безопасные клетки открыты — выплата сама, «Выйти» ничего не списывает', async () => {
+  const { svc, ledger } = await minesSvc();
+  await svc.act('A', { op: 'minesStart', mines: 24 });
+  const svc2 = new WalletService({ ledger });
+  await svc2.init();
+  const again = await svc2.act('A', { op: 'minesState' });
+  assert.strictEqual(again.result.mines.mines, 24);
+  assert.strictEqual(again.result.mines.layout, null);
+  const last = await svc2.act('A', { op: 'minesOpen', index: safeCell(svc2, 'A') });
+  assert.strictEqual(last.result.mines.status, 'cleared');
+  assert.strictEqual(last.state.balance, 5000 + 4560);
+  assert.strictEqual(await ledger.get('rounds', 'A'), null);
+  await svc2.act('B', { op: 'minesStart', mines: 5 });
+  const ab = await svc2.act('B', { op: 'minesAbandon' });
+  assert.strictEqual(ab.state.balance, 5000);
+  assert.strictEqual((await svc2.act('B', { op: 'minesState' })).result.mines, null);
+});

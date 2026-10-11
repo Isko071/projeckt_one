@@ -6,7 +6,7 @@ var M = window.Mines, W = window.PlatformWallet;
 var tr = function (key, params) { return window.I18n.t('games.mines.' + key, params); };
 var appEl = document.getElementById('app');
 
-var app = { screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, fresh: false };
+var app = { busy: false, err: '', srv: false, screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, fresh: false };
 
 function loadCount() { return M.clampMines(window.PlatformStorage.get(MINES_KEY, 3)); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -52,13 +52,23 @@ function startHtml() {
       '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr('start.perCellGrow', { n: M.cellReward(app.count) })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
+    (app.err === 'offline' ? '<div class="muted-text" role="alert">' + esc(tr('start.err.offline')) + '</div>' : '') +
     (walletBlocked() ? '<div class="muted-text" role="status">' + esc(tr(blockedKey())) + '</div>' : (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>')) +
-    '<div class="start-actions"><button class="btn-play" data-act="play"' + (canPlay() ? '' : ' disabled') + '>' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
+    '<div class="start-actions"><button class="btn-play" data-act="play"' + (canPlay() && !app.busy ? '' : ' disabled') + '>' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
 // ===== Раунд =====
 function startRound() {
   window.PlatformStorage.set(MINES_KEY, app.count);
+  if (srvOn()) {
+    if (app.busy) return;
+    app.busy = true; app.err = ''; render();
+    srvCall('minesStart', { mines: app.count }).then(function (r) {
+      app.busy = false; app.srv = true; app.round = r.result.mines; app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game'; render();
+    }, function (e) { app.busy = false; app.err = srvError(e); app.screen = 'start'; render(); });
+    return;
+  }
+  app.srv = false;
   app.round = M.init(app.count); app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game';
   render();
 }
@@ -68,10 +78,25 @@ function finish(v) {
   else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
 }
 // Пока баланс на сервере (или ждём его), игра, которая считает аконы в браузере, недоступна: подделать серверный баланс через неё было бы можно
-function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked()); }
-function blockedKey() { return window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : 'server.connecting'; }
+function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked('mines')); }
+function blockedKey() { return 'server.connecting'; }
+// При серверном балансе раунд ведёт сервер (мины раскладывает он, награду и штраф считает он); app.round тогда хранит вид раунда от сервера
+function srvOn() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server'); }
+function curView() { return app.srv ? app.round : M.view(app.round); }
+function srvCall(op, args) { return window.PlatformWalletSync.call(op, args); }
+function srvError(e) { return e && e.code === 'no-funds' ? 'nofunds' : 'offline'; }
 function canPlay(mines) { return !walletBlocked() && W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
 function act(action) {
+  if (app.srv) {
+    if (app.busy || !app.round || app.round.status !== 'playing') return;
+    app.busy = true; app.err = '';
+    var idx = action.type === 'open' ? action.index : -1;
+    render();
+    srvCall(action.type === 'open' ? 'minesOpen' : 'minesCash', { index: action.index }).then(function (r) {
+      app.busy = false; app.round = r.result.mines; app.rw = r.result.rw; if (idx >= 0) app.last = idx; app.fresh = true; render();
+    }, function (e) { app.busy = false; app.err = srvError(e); app.srv = false; app.round = null; app.screen = 'start'; render(); });
+    return;
+  }
   var r = M.reduce(app.round, action);
   if (!r.ok) return;
   if (action.type === 'open') { app.last = action.index; if (app.round.openedCount === 0) { W.markPlayed(); W.countPlay('mines'); } }
@@ -88,10 +113,10 @@ function cellHtml(v, i, order) {
   else if (open && mine) { cls += ' boom' + (app.fresh ? ' blast' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); }
   else if (over && mine) { cls += ' mine' + (app.fresh ? ' reveal' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); if (app.fresh) style = ' style="animation-delay:' + (350 + order * 90) + 'ms"'; }
   else if (over) cls += ' dim';
-  return '<button class="' + cls + '" data-cell="' + i + '"' + style + ' aria-label="' + esc(label) + '"' + (open || over ? ' disabled' : '') + '>' + inner + '</button>';
+  return '<button class="' + cls + '" data-cell="' + i + '"' + style + ' aria-label="' + esc(label) + '"' + (open || over || app.busy ? ' disabled' : '') + '>' + inner + '</button>';
 }
 function gameHtml() {
-  var v = M.view(app.round), over = v.status !== 'playing', cells = '';
+  var v = curView(), over = v.status !== 'playing', cells = '';
   var order = 0, shake = app.fresh && v.status === 'lost';
   for (var i = 0; i < M.CONFIG.cells; i++) cells += cellHtml(v, i, v.layout && v.layout[i] && !v.opened[i] ? order++ : 0);
   var result = '';
@@ -101,7 +126,7 @@ function gameHtml() {
   }
   var take = over
     ? '<div class="row"><button class="btn primary" data-act="again"' + (canPlay(app.round.mines) ? '' : ' disabled') + '>' + esc(tr('again')) + '</button><button class="btn" data-act="menu">' + esc(tr('menu')) + '</button></div>'
-    : '<button class="btn primary full take" data-act="take"' + (v.openedCount ? '' : ' disabled') + '>' + esc(v.openedCount ? tr('take', { n: fmt(v.earned) }) : tr('take.none')) + '</button>';
+    : '<button class="btn primary full take" data-act="take"' + (v.openedCount && !app.busy ? '' : ' disabled') + '>' + esc(v.openedCount ? tr('take', { n: fmt(v.earned) }) : tr('take.none')) + '</button>';
   return '<div class="page"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit.aria')) + '">←</button><h2>' + esc(window.I18n.t('games.mines.title')) + '</h2>' + balanceHtml() +
     '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml() + '</div>' +
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
@@ -139,13 +164,25 @@ appEl.addEventListener('click', function (e) {
     case 'closeRules': app.rules = false; render(); break;
     case 'exit': if (app.round && app.round.status === 'playing' && app.round.openedCount > 0) { app.confirm = true; render(); } else { app.screen = 'start'; render(); } break;
     case 'stay': app.confirm = false; render(); break;
-    case 'menu': app.confirm = false; app.screen = 'start'; app.round = null; render(); break;
+    case 'menu':
+      // выход из раунда на сервере: раунд там удаляется (накопленное сгорает, штрафа за выход нет)
+      if (app.srv && app.round && app.round.status === 'playing' && srvOn()) srvCall('minesAbandon').catch(function () { /* сервер удалит раунд при следующем старте */ });
+      app.confirm = false; app.screen = 'start'; app.round = null; render(); break;
   }
 });
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { if (app.rules) app.rules = false; else if (app.confirm) app.confirm = false; else return; render(); }
 });
-if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
+if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function (s) {
+  if (app.screen === 'start') render();
+  // Страницу перезагрузили посреди раунда: сервер помнит его, продолжаем
+  if (s === 'server' && !app.round && !app.busy) {
+    srvCall('minesState').then(function (r) {
+      var v = r.result && r.result.mines;
+      if (v && v.status === 'playing' && !app.round) { app.srv = true; app.round = v; app.rw = null; app.last = -1; app.screen = 'game'; render(); }
+    }, function () { /* без возобновления */ });
+  }
+});
 W.onShown(function (v) { var els = appEl.querySelectorAll('.bal b'); for (var i = 0; i < els.length; i++) els[i].textContent = fmt(v); });
 window.PlatformTheme.onChange(function () { render(); });
 render();

@@ -7,12 +7,15 @@
 //   await svc.hold(uid, code, amount)            → { ok } | { ok:false, error:'no-funds' }   залог ставки за столом
 //   await svc.release(uid, code, payout)         → вернуть залог/выплатить выигрыш (payout может быть 0 — залог сгорел)
 //   svc.balanceOf(uid)                           → баланс из кеша (после sync/act)
+//   «Мины» целиком на сервере (act: minesState | minesStart | minesOpen | minesCash | minesAbandon): мины раскладывает сервер, клиент видит только открытые клетки,
+//   награду и штраф считает сервер по правилам games/mines/logic.js → { state, result: { mines: вид раунда, rw: { granted, lost } } }
 //
 // Предел защиты: победу в одиночной игре клиент объявляет сам (сервер не видит партию), поэтому ограничивают её дневные пределы наград.
 // Сервер рассчитан на один работающий экземпляр: состояние игроков кешируется в памяти.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
 
 const SEED_CAP = 10000;                 // новому игроку выдаётся не больше этого, даже если в облаке опубликован больший баланс
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
@@ -29,11 +32,14 @@ class WalletService {
     this.cache = new Map();             // uid → состояние кошелька
     this.holds = new Map();             // 'uid_код' → { uid, code, amount }
     this.queues = new Map();            // uid → хвост очереди операций (на игрока они идут по одной)
+    this.rounds = new Map();            // uid → раунд «Мин» (с расположением мин: клиенту оно не отдаётся до конца раунда)
+    this.rng = o.rng || (() => crypto.randomInt(0, 4294967296) / 4294967296);
     const ctx = vm.createContext({ JSON, Math, Date, Object, Array, Number, String, isFinite, parseInt });
     ctx.cur = null; ctx.out = null;
     vm.runInContext('var PlatformStorage = { get: function (k, d) { return cur ? JSON.parse(JSON.stringify(cur)) : d; }, set: function (k, v) { cur = JSON.parse(JSON.stringify(v)); out = cur; return true; } };', ctx);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'shared', 'wallet.js'), 'utf8'), ctx, { filename: 'shared/wallet.js' });
-    this.ctx = ctx; this.W = ctx.PlatformWallet;
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'games', 'mines', 'logic.js'), 'utf8'), ctx, { filename: 'games/mines/logic.js' });
+    this.ctx = ctx; this.W = ctx.PlatformWallet; this.M = ctx.Mines;
   }
 
   // При запуске возвращает залоги, оставшиеся от столов, которые пропали вместе с прошлым запуском сервера
@@ -107,12 +113,61 @@ class WalletService {
           if (!kinds || !kinds[kind]) throw fail('bad-request');
           return this.mutate(uid, (W) => W.reward(m.source, kinds[kind], now));
         }
+        case 'minesState': case 'minesStart': case 'minesOpen': case 'minesCash': case 'minesAbandon': return this.minesOp(uid, m, now);
         case 'countPlay': case 'countWin':
           if (COUNT_SOURCES.indexOf(m.source) < 0) throw fail('bad-request');
           return this.mutate(uid, (W) => (m.op === 'countPlay' ? W.countPlay(m.source) : W.countWin(m.source)));
         default: throw fail('bad-request');
       }
     });
+  }
+
+  // ---------- «Мины» ----------
+  async loadRound(uid) {
+    if (this.rounds.has(uid)) return this.rounds.get(uid);
+    const r = await this.ledger.get('rounds', uid);
+    if (r) this.rounds.set(uid, r);
+    return r || null;
+  }
+  async minesOp(uid, m, now) {
+    const M = this.M;
+    const view = (round) => JSON.parse(JSON.stringify(M.view(round)));
+    if (m.op === 'minesState') {
+      const round = await this.loadRound(uid), s = await this.load(uid);
+      return { state: s, result: { mines: round ? view(round) : null, rw: null } };
+    }
+    if (m.op === 'minesAbandon') {
+      const s = await this.load(uid);
+      if (await this.loadRound(uid)) {
+        try { await this.ledger.commit([{ op: 'delete', coll: 'rounds', id: uid }]); } catch (e) { throw fail('ledger'); }
+        this.rounds.delete(uid);
+      }
+      return { state: s, result: { mines: null, rw: null } };
+    }
+    if (m.op === 'minesStart') {
+      const mines = M.clampMines(m.mines), s = await this.load(uid);
+      if (s.balance < M.lossFor(mines)) throw fail('no-funds');
+      const round = JSON.parse(JSON.stringify(M.init(mines, this.rng)));
+      try { await this.ledger.commit([{ op: 'set', coll: 'rounds', id: uid, data: round }]); } catch (e) { throw fail('ledger'); }
+      this.rounds.set(uid, round);
+      return { state: s, result: { mines: view(round), rw: null } };
+    }
+    // открыть клетку или забрать накопленное
+    const round = await this.loadRound(uid);
+    if (!round || round.status !== 'playing') throw fail('no-round');
+    const action = m.op === 'minesCash' ? { type: 'cashout' } : { type: 'open', index: m.index };
+    const r = M.reduce(round, action);
+    if (!r.ok) throw fail('bad-request');
+    const next = JSON.parse(JSON.stringify(r.state)), over = next.status !== 'playing', first = action.type === 'open' && round.openedCount === 0;
+    let rw = { granted: 0, lost: 0 };
+    const res = await this.mutate(uid, (W) => {
+      if (first) { W.markPlayed(now); W.countPlay('mines'); }
+      if (!over) return;
+      if (next.payout > 0) { W.add(next.payout, 'mines', now); W.countWin('mines'); rw = { granted: next.payout, lost: 0 }; }
+      else { const take = Math.min(M.lossFor(next.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', now); rw = { granted: 0, lost: take }; }
+    }, () => [over ? { op: 'delete', coll: 'rounds', id: uid } : { op: 'set', coll: 'rounds', id: uid, data: next }]);
+    if (over) this.rounds.delete(uid); else this.rounds.set(uid, next);
+    return { state: res.state, result: { mines: view(next), rw } };
   }
 
   // ---------- Залоги ставок ----------
