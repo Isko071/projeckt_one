@@ -49,7 +49,7 @@ function startHtml() {
     '<div class="balrow">' + balanceHtml() + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.count')) + '</div>' +
       '<div class="stepper"><button class="stepbtn" data-act="minus" aria-label="' + esc(tr('start.minus')) + '"' + (app.count <= M.CONFIG.minMines ? ' disabled' : '') + '>−</button>' +
-      '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr(app.count <= M.CONFIG.flatMax ? 'start.perCell' : 'start.perCellGrow', { n: M.cellReward(app.count), step: M.CONFIG.cellStep })) + '</small></div>' +
+      '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr('start.perCellGrow', { n: M.cellReward(app.count) })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
     (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>') +
