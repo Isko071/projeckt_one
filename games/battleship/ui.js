@@ -55,7 +55,7 @@ function shipSvg(sh, cls, key, style) {
   var t = sh.dir === 'v' ? 'translate(' + (px + C) + ',' + py + ') rotate(90)' : 'translate(' + px + ',' + py + ')';
   return '<g class="ship ' + (cls || '') + '" transform="' + t + '" filter="url(#wob-' + key + ')"' + (style || '') + '>' + shipG(sh.len) + '</g>';
 }
-function miniShip(len) { return '<svg viewBox="0 0 ' + (len * C) + ' ' + C + '" aria-hidden="true" class="board-mini"><g class="ship">' + shipG(len) + '</g></svg>'; }
+function miniShip(len) { return '<svg viewBox="0 0 ' + (len * C) + ' ' + C + '" preserveAspectRatio="xMinYMid meet" aria-hidden="true" class="board-mini"><g class="ship">' + shipG(len) + '</g></svg>'; }
 // Потопленные корабли соперника восстанавливаются по отметкам «потоплен» (3): связные клетки в линию
 function sunkShips(marks) {
   var seen = {}, out = [];

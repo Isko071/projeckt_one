@@ -278,6 +278,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
   .pl-board { grid-column: 2; grid-row: 1 / span 2; }
   .pl-ships { grid-column: 3; grid-row: 1; }
   .pl-ready { grid-column: 3; grid-row: 2; align-self: end; }
-  .pl-ships .tray { display: grid; grid-template-columns: 1fr 1fr; }
-  .pl-ships .row { flex-direction: column; }
+  /* Корабли списком, как топ рейтинга: строка — значок корабля и сколько осталось; кнопки компактно под списком */
+  .pl-ships .tray { display: flex; flex-direction: column; gap: 4px; }
+  .pl-ships .tray-ship { flex: none; flex-direction: row; justify-content: space-between; gap: 10px; min-width: 0; padding: 4px 12px; border-radius: 12px; }
+  .pl-ships .tray-ship svg { width: 96px; max-width: none; height: 24px; }
+  .pl-ships .tray-ship span { font-weight: 700; }
+  .pl-ships .row { flex-wrap: wrap; gap: 6px; }
+  .pl-ships .row .btn { min-height: 38px; font-size: 14px; }
+  .pl-ships .row .btn:first-child { flex: 1 1 100%; }
 }
