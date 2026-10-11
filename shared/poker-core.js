@@ -119,9 +119,13 @@
     this.cfg = cfg; this.W = cfg.wallet; this.source = cfg.source || 'poker';
     this.holdMs = cfg.holdMs !== undefined ? cfg.holdMs : (reduced() ? 400 : HOLD_MS); this.flipMs = cfg.flipMs !== undefined ? cfg.flipMs : (reduced() ? 600 : FLIP_MS);
     this.listeners = []; this.stage = null; this.holdUntil = 0; this.dealUntil = 0; this.prevBoardLen = 0; this.caption = ''; this.notice = null; this.timer = null; this.spent = 0; this.stopped = false;
+    // Серверный баланс: раздачу ведёт сервер (колода, боты, ставки и выплаты), здесь только показ и темп игры
+    this.srv = !!(this.W.serverOn && this.W.serverOn() && root.PlatformWalletSync); this.busy = false; this.started = false; this.failures = 0;
     var balance = this.W.getBalance(), n = cfg.size;
-    this.W.capStart(now());
-    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(botSeats(n).map(function (b) { return Object.assign(b, { chips: Math.min(balance, BOT_STACK) }); }));
+    if (!this.srv) this.W.capStart(now());
+    var bots = botSeats(n);
+    this.styles = bots.map(function (b) { return b.style; });
+    var seats = [{ id: 'me', name: cfg.name || '', kind: 'human', chips: balance }].concat(bots.map(function (b) { return Object.assign(b, { chips: Math.min(balance, BOT_STACK) }); }));
     var gopts = { variant: cfg.variant, tableSize: n };
     if (cfg.variant === 'simple') { gopts.ante = cfg.ante; gopts.minBet = cfg.minBet || cfg.ante * 2; } else { gopts.bigBlind = cfg.bigBlind; gopts.smallBlind = cfg.smallBlind || Math.floor(cfg.bigBlind / 2); }
     this.st = PK.init(seats, gopts, null);
@@ -134,6 +138,7 @@
   Solo.prototype.minToPlay = function () { return this.st.variant === 'simple' ? this.st.ante : this.st.bigBlind; };
   Solo.prototype.begin = function () { this.startHand(); };
   Solo.prototype.startHand = function () {
+    if (this.srv) { this.srvStep(this.started ? 'pokerNext' : 'pokerStart', this.started ? {} : { size: this.cfg.size, ante: this.cfg.ante, name: this.cfg.name || '', styles: this.styles }); return; }
     var st = this.st, W = this.W, self = this;
     // Достигнут дневной предел выигрыша против ботов: играем без аконов (ничего не списывается и не начисляется)
     if (W.serverOn && W.serverOn()) { this.stage = 'broke'; this.emit(); return; }     // баланс ушёл на сервер посреди игры: играть в браузере на аконы нельзя
@@ -154,7 +159,63 @@
     var total = this.st.seats[0].total;
     if (total > this.spent) { if (!this.free) this.W.spend(total - this.spent, this.source, now()); this.spent = total; }
   };
+  // ---- Серверный режим: каждое действие — запрос серверу, ответ заменяет состояние стола ----
+  Solo.prototype.srvStep = function (op, args) {
+    var self = this, before = this.st;
+    if (this.busy || this.stopped) return false;
+    this.busy = true; clearTimeout(this.timer);
+    // баланс на экране меняется после вскрытия карт: сервер уже начислил итог, показ задерживаем
+    var holdFor = function (r) { var p = r.result && r.result.poker; return p && p.st.phase === 'settled' && before.phase !== 'settled' ? (p.st.result && p.st.result.showdown ? self.flipMs : 0) + 300 : 0; };
+    root.PlatformWalletSync.call(op, args, holdFor).then(function (r) { self.busy = false; self.failures = 0; if (!self.stopped) self.srvApply(op, r.result || {}, before); }, function (e) { self.busy = false; if (!self.stopped) self.srvFail(op, e); });
+    return true;
+  };
+  Solo.prototype.srvApply = function (op, res, before) {
+    var self = this, p = res.poker;
+    if (!p) { this.stage = 'broke'; this.emit(); return; }                                    // на начальную ставку не хватает
+    var st = p.st, fresh = op === 'pokerStart' || op === 'pokerNext' || op === 'pokerState' && !this.started;
+    this.st = st; this.free = p.free; this.spent = p.spent; this.started = true; this.stage = null;
+    if (fresh) {
+      this.holdUntil = 0; this.prevBoardLen = 0; this.caption = '';
+      var dm = dealTime(this.cfg, countInHand(st)); this.dealUntil = now() + dm;
+      if (dm > 0) setTimeout(function () { if (!self.stopped) self.emit(); }, dm + 30);
+      if (this.free) this.notice = { k: 'free', until: now() + 6000 };
+    } else if (before && st.round === before.round && st.board.length > before.board.length && st.phase !== 'settled') {
+      this.prevBoardLen = before.board.length; this.holdUntil = now() + this.holdMs; this.caption = 'next';
+      setTimeout(function () { if (!self.stopped) self.emit(); }, this.holdMs + 20);
+    }
+    if (st.phase === 'settled') { this.srvSettled(p.rw); return; }
+    this.emit(); this.pump();
+  };
+  Solo.prototype.srvSettled = function (rw) {
+    var st = this.st, self = this;
+    if (rw && rw.capped) this.notice = { k: rw.granted > 0 ? 'capCut' : 'capReached', n: rw.granted, until: now() + 6000 };
+    this.caption = '';
+    if (st.result && st.result.showdown) {
+      this.stage = 'flip'; this.emit();
+      setTimeout(function () { if (!self.stopped && self.stage === 'flip') { self.stage = 'summary'; self.emit(); } }, this.flipMs);
+    } else { this.stage = 'short'; this.emit(); }
+  };
+  // Не вышло (обрыв связи, сервер ещё просыпается): стол показывает сообщение и сверяется с сервером, пока не получится
+  Solo.prototype.srvFail = function (op, e) {
+    var self = this;
+    this.failures++;
+    this.notice = { k: 'srvErr', until: now() + 4000 }; this.emit();
+    clearTimeout(this.timer);
+    this.timer = setTimeout(function () {
+      if (self.stopped || self.busy) return;
+      self.busy = true;
+      root.PlatformWalletSync.call('pokerState', {}).then(function (r) {
+        self.busy = false; if (self.stopped) return;
+        var p = r.result && r.result.poker;
+        if (!p) { if (op === 'pokerStart' || op === 'pokerNext') { self.started = false; self.srvStep(op === 'pokerNext' && self.st ? 'pokerStart' : op, { size: self.cfg.size, ante: self.cfg.ante, name: self.cfg.name || '', styles: self.styles }); } else { self.stage = 'broke'; self.emit(); } return; }
+        self.failures = 0; self.st = p.st; self.free = p.free; self.spent = p.spent; self.started = true; self.stage = null;
+        if (p.st.phase === 'settled') self.srvSettled(null); else { self.emit(); self.pump(); }
+      }, function () { self.busy = false; self.srvFail(op, e); });
+    }, Math.min(8000, 1500 * self.failures));
+  };
+
   Solo.prototype.apply = function (action) {
+    if (this.srv) { if (this.st.current !== 0) return false; return this.srvStep('pokerAct', { action: action }); }
     var before = this.st, r = PK.reduce(before, action, Math.random), self = this;
     if (!r.ok) return false;
     this.st = r.state; this.spendSync();
@@ -173,6 +234,7 @@
     var wait = Math.max(0, this.holdUntil - now(), this.dealLeft()) + (this.cfg.botMs !== undefined ? this.cfg.botMs : (reduced() ? 200 : 1300 + Math.random() * 700));
     this.timer = setTimeout(function () {
       if (self.stopped || self.stage || self.st.current <= 0) return;
+      if (self.srv) { if (self.busy) self.pump(); else self.srvStep('pokerBot', {}); return; }
       var a = Bots.nextBotAction(self.st, Math.random), cur = self.st.current;
       if (!a || !self.apply(a)) self.apply({ type: self.st.currentBet > self.st.seats[cur].bet ? 'fold' : 'check', seat: cur });
     }, wait);
@@ -192,16 +254,19 @@
     } else { this.stage = 'short'; this.emit(); }
   };
   Solo.prototype.act = function (type, extra) {
-    if (this.stopped || this.stage || this.st.current !== 0 || this.holding() || this.dealLeft() > 0) return false;
+    if (this.stopped || this.busy || this.stage || this.st.current !== 0 || this.holding() || this.dealLeft() > 0) return false;
     return this.apply(Object.assign({ type: type, seat: 0 }, extra || {}));
   };
   Solo.prototype.back = function () { this.stage = null; this.startHand(); };
   Solo.prototype.inHand = function () { var st = this.st; return ['preflop', 'flop', 'turn', 'river'].indexOf(st.phase) >= 0 && !st.seats[0].folded; };
-  Solo.prototype.leave = function () { this.stopped = true; clearTimeout(this.timer); };
+  Solo.prototype.leave = function () {
+    this.stopped = true; clearTimeout(this.timer);
+    if (this.srv && this.started && root.PlatformWalletSync && root.PlatformWalletSync.status() === 'server') root.PlatformWalletSync.call('pokerLeave', {}).then(null, function () { /* партия на сервере доживёт до следующего стола */ });
+  };
   Solo.prototype.tick = function () { if (this.notice && now() > this.notice.until) { this.notice = null; this.emit(); } };
   Solo.prototype.model = function () {
     var me = this.st.seats[0];
-    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), dealMs: this.dealLeft(), prevBoardLen: this.prevBoardLen, caption: this.caption, stack: this.free ? me.chips : this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
+    return Object.assign(buildModel({ mode: 'bots', st: this.st, me: 0, stage: this.stage, holding: this.holding(), dealMs: this.dealLeft(), prevBoardLen: this.prevBoardLen, caption: this.caption, pending: this.busy, stack: this.free ? me.chips : this.W.getBalance(), notice: this.notice && now() <= this.notice.until ? this.notice : null }), { mode: 'bots', canLeaveFree: !this.inHand(), myChips: me.chips });
   };
 
   // ===== Онлайн-стол =====
@@ -263,6 +328,7 @@
     this.emit();
   };
   Online.prototype.spendSync = function (mine) {
+    if (this.W.serverOn && this.W.serverOn()) { this.spent = Math.max(this.spent, mine.total); return; }     // стек лежит залогом на сервере, он сам вернёт итог
     if (mine.total > this.spent) { this.W.spend(mine.total - this.spent, this.source, now()); this.spent = mine.total; }
   };
   Online.prototype.onSettled = function (st, mine) {
@@ -270,7 +336,7 @@
     if (this.W.holdShown) this.W.holdShown((st.result && st.result.showdown ? (reduced() ? 600 : FLIP_MS) : 0) + 300);
     if (mine && mine.inHand) {
       var payout = mine.total + mine.net;                  // онлайн дневного предела выигрыша нет
-      if (payout > 0) this.W.add(payout, this.source, now());
+      if (payout > 0 && !(this.W.serverOn && this.W.serverOn())) this.W.add(payout, this.source, now());
       if (mine.net > 0) this.W.countWin(this.source);
       if (mine.net > 0 && st.result && st.result.showdown && this.cfg.onWin) { try { this.cfg.onWin(); } catch (e) { /* рейтинг не должен ломать стол */ } }   // победа онлайн только на вскрытии
     }

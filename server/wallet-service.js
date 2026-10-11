@@ -22,6 +22,7 @@ const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // нагр�
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
 const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
+const POKER_SRC = 'poker-simple', BOT_STACK = 5000, PK_PHASES = ['preflop', 'flop', 'turn', 'river'];
 const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple'];
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -49,7 +50,9 @@ class WalletService {
     vm.runInContext('var PlatformStorage = { get: function (k, d) { return cur ? JSON.parse(JSON.stringify(cur)) : d; }, set: function (k, v) { cur = JSON.parse(JSON.stringify(v)); out = cur; return true; } };', ctx);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'shared', 'wallet.js'), 'utf8'), ctx, { filename: 'shared/wallet.js' });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'games', 'mines', 'logic.js'), 'utf8'), ctx, { filename: 'games/mines/logic.js' });
-    this.ctx = ctx; this.W = ctx.PlatformWallet; this.M = ctx.Mines;
+    ['logic.js', 'bots.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'games', 'poker', f), 'utf8'), ctx, { filename: 'games/poker/' + f }));
+    this.ctx = ctx; this.W = ctx.PlatformWallet; this.M = ctx.Mines; this.PK = ctx.Poker; this.Bots = ctx.PokerBots;
+    this.pokers = new Map();            // uid → партия «Покера» против ботов (с колодой и картами ботов: клиенту отдаётся только то, что видит игрок)
   }
 
   // Залоги, оставшиеся в хранилище (от столов, которые пропали вместе с прошлым запуском сервера), читаются при запуске, но возвращаются позже и не здесь:
@@ -140,7 +143,7 @@ class WalletService {
 
   // После неоднозначной ошибки записи забываем кеш игрока: кошелёк, раунд «Мин» и залоги перечитаются из хранилища
   forget(uid) {
-    this.cache.delete(uid); this.rounds.delete(uid);
+    this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid);
     Array.from(this.holds.entries()).forEach(([k, h]) => { if (h.uid === uid) this.holds.delete(k); });
     this.holdsLoaded = false;
   }
@@ -186,6 +189,7 @@ class WalletService {
           if (!kinds || typeof kind !== 'string' || !has(kinds, kind)) throw fail('bad-request');
           return this.mutate(uid, (W) => W.reward(m.source, kinds[kind], now), null, rid);
         }
+        case 'pokerState': case 'pokerStart': case 'pokerAct': case 'pokerBot': case 'pokerNext': case 'pokerLeave': return this.pokerOp(uid, m, now);
         case 'minesState': case 'minesStart': case 'minesOpen': case 'minesCash': case 'minesAbandon': return this.minesOp(uid, m, now, rid);
         case 'countPlay': case 'countWin':
           if (typeof m.source !== 'string' || COUNT_SOURCES.indexOf(m.source) < 0) throw fail('bad-request');
@@ -241,6 +245,110 @@ class WalletService {
     }, () => [over ? { op: 'delete', coll: 'rounds', id: uid } : { op: 'set', coll: 'rounds', id: uid, data: next }], rid);
     if (over) this.rounds.delete(uid); else this.rounds.set(uid, next);
     return { state: res.state, result: { mines: view(next), rw } };
+  }
+
+  // ---------- «Покер: Чожук» против ботов ----------
+  // Раздачу ведёт сервер: колода и карты ботов клиенту не уходят, ставки списываются с баланса сразу (одной записью с состоянием партии),
+  // выигрыш начисляется по итогу с дневным пределом против ботов. Боты ходят по одному запросу pokerBot: так экран сам держит темп игры.
+  async loadPoker(uid) {
+    if (this.pokers.has(uid)) return this.pokers.get(uid);
+    const r = await this.ledger.get('rounds', uid + '_pk');
+    if (r) this.pokers.set(uid, r);
+    return r || null;
+  }
+  pokerView(r, rw) {
+    const st = JSON.parse(JSON.stringify(this.PK.view(r.st, 0)));
+    return { st, free: !!r.free, spent: r.spent, size: r.size, ante: r.ante, rw: rw || null };
+  }
+  // Новая раздача за столом: места и ставки; false, если играть не на что
+  pokerDeal(r, W, now) {
+    const PK = this.PK, st = r.st, min = st.ante;
+    r.free = W.capStatus(now).left <= 0;
+    const balance = W.getBalance();
+    if (!r.free && balance < min) return false;
+    st.seats[0].chips = r.free ? Math.max(balance, min * 20) : balance;
+    st.seats.forEach((s, i) => { if (i > 0) { s.chips = r.botStack; s.sitOut = false; } });
+    const res = PK.reduce(st, { type: 'deal', seat: 0 }, () => this.rng());
+    if (!res.ok) return false;
+    r.st = JSON.parse(JSON.stringify(res.state)); r.spent = 0;
+    W.markPlayed(now); W.countPlay(POKER_SRC);
+    return this.pokerSpend(r, W, now);
+  }
+  // Ставки игрока этой раздачи списываются с баланса по мере роста его вклада в банк
+  pokerSpend(r, W, now) {
+    const total = r.st.seats[0].total;
+    if (total > r.spent) {
+      if (!r.free && !W.spend(total - r.spent, POKER_SRC, now)) return false;
+      r.spent = total;
+    }
+    return true;
+  }
+  // Итог раздачи: выплата (с дневным пределом выигрыша против ботов) и победа в счётчик
+  pokerSettle(r, W, now) {
+    const me = r.st.seats[0], payout = me.total + me.net;
+    let rw = { capped: false, granted: 0 };
+    if (payout > 0 && !r.free) { const cr = W.capPayout(POKER_SRC, payout, r.spent, now); rw = { capped: cr.capped, granted: cr.granted }; }
+    if (me.net > 0 && !r.free) W.countWin(POKER_SRC);
+    r.spent = 0;
+    return rw;
+  }
+  async pokerOp(uid, m, now) {
+    const PK = this.PK, rng = () => this.rng(), key = uid + '_pk';
+    const intIn = (v, lo, hi, def) => { v = Math.floor(Number(v)); return v >= lo && v <= hi ? v : def; };
+    let r = await this.loadPoker(uid);
+    if (m.op === 'pokerState') return { state: await this.load(uid), result: { poker: r ? this.pokerView(r) : null } };
+    if (m.op === 'pokerLeave') {
+      // Уход из-за стола посреди раздачи равен сбросу: поставленное остаётся в банке
+      const s = await this.load(uid);
+      if (r) { try { await this.ledger.commit([{ op: 'delete', coll: 'rounds', id: key }]); } catch (e) { this.forget(uid); throw fail('ledger'); } this.pokers.delete(uid); }
+      return { state: s, result: { poker: null } };
+    }
+    let next = null, rw = null, dealt = true;
+    if (m.op === 'pokerStart') {
+      const size = intIn(m.size, 2, 6, 4), ante = intIn(m.ante, 1, 10000, 50), seats = [{ id: 'me', name: String(m.name || '').slice(0, 20), kind: 'human', chips: 0 }];
+      // Характеры ботов: экран мог выбрать их заранее (чтобы имена за столом не менялись после раздачи), иначе случайные
+      const order = this.Bots.ORDER.slice();
+      for (let k = order.length - 1; k > 0; k--) { const j = Math.floor(rng() * (k + 1)), t = order[k]; order[k] = order[j]; order[j] = t; }
+      const picked = Array.isArray(m.styles) && m.styles.length === size - 1 && m.styles.every((x) => typeof x === 'string' && has(this.Bots.STYLES, x)) ? m.styles : null;
+      for (let i = 1; i < size; i++) { const bot = this.Bots.makeBot(i), style = picked ? picked[i - 1] : order[(i - 1) % order.length]; bot.style = style; bot.name = this.Bots.STYLES[style].name; bot.chips = 0; seats.push(JSON.parse(JSON.stringify(bot))); }
+      const st = JSON.parse(JSON.stringify(PK.init(seats, { variant: 'simple', tableSize: size, ante, minBet: ante * 2 }, rng)));
+      const bal = (await this.load(uid)).balance;
+      next = { st, size, ante, free: false, spent: 0, botStack: Math.min(bal, BOT_STACK) };
+    } else {
+      if (!r) throw fail('no-round');
+      next = JSON.parse(JSON.stringify(r));
+    }
+    const st0 = next.st;
+    const res = await this.mutate(uid, (W) => {
+      if (m.op === 'pokerStart' || m.op === 'pokerNext') {
+        if (m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
+        if (m.op === 'pokerStart') W.capStart(now);
+        dealt = this.pokerDeal(next, W, now);
+        if (!dealt && m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
+        return;
+      }
+      if (PK_PHASES.indexOf(st0.phase) < 0) throw fail('bad-request');
+      let action;
+      if (m.op === 'pokerAct') {
+        const a = m.action || {}, type = String(a.type);
+        if (['fold', 'check', 'call', 'raise', 'allin'].indexOf(type) < 0 || st0.current !== 0) throw fail('bad-request');
+        action = { type, seat: 0 };
+        if (type === 'raise') action.amount = intIn(a.amount, 1, 1e9, 0);
+      } else {
+        if (st0.current <= 0) throw fail('bad-request');
+        action = this.Bots.nextBotAction(st0, rng);
+        const cur = st0.current;
+        if (!action || !PK.reduce(st0, action, rng).ok) action = { type: st0.currentBet > st0.seats[cur].bet ? 'fold' : 'check', seat: cur };
+      }
+      const out = PK.reduce(st0, action, rng);
+      if (!out.ok) throw fail('bad-request');
+      next.st = JSON.parse(JSON.stringify(out.state));
+      if (!this.pokerSpend(next, W, now)) throw fail('no-funds');
+      if (next.st.phase === 'settled') rw = this.pokerSettle(next, W, now);
+    }, () => (dealt ? [{ op: 'set', coll: 'rounds', id: key, data: next }] : (r ? [{ op: 'delete', coll: 'rounds', id: key }] : [])));
+    if (!dealt) { this.pokers.delete(uid); return { state: res.state, result: { poker: null, broke: true } }; }
+    this.pokers.set(uid, next);
+    return { state: res.state, result: { poker: this.pokerView(next, rw) } };
   }
 
   // ---------- Залоги ставок ----------
