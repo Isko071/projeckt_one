@@ -113,20 +113,30 @@ function ringStyle(timer) {
 // Пока баланс на сервере (или ждём его), покер, который считает аконы в браузере, недоступен
 function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked()); }
 function sitDown() {
-  if (walletBlocked()) return;
+  if (walletBlocked() || app.sitting) return;
   var ante = app.prefs.ante;
   if (W.getBalance() < ante && W.capStatus(now()).left > 0) return;
   var prof = P.getProfile();
-  T = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
-  bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = [];
-  T.begin();
+  var table = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
+  function seat() { T = table; bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = []; render(); }
+  // Садимся за стол под загрузкой; когда экран полностью открылся, игрок какое-то время просто сидит за столом, и только потом раздают карты
+  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: seat, done: function () { app.sitting = false; setTimeout(function () { if (T === table) table.begin(); }, 300); } }); }
+  else { seat(); table.begin(); }
+}
+// Стол онлайн: из комнаты ожидания садимся под загрузкой, раздача на экране начинается, когда экран открылся
+function seatOnline(t) {
+  if (app.entering) return;
+  app.entering = true;
+  var build = function () { app.entering = false; if (T !== t) return; app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
+  if (window.PlatformLoader && window.PlatformLoader.cover) window.PlatformLoader.cover({ build: build }); else build();
 }
 function bindTable() {
   T.subscribe(function (t) {
     if (T !== t) return;
     var m = t.model();
     if (m.closed && !app.err) { app.err = { k: 'closed' }; closeTable(); app.screen = 'err'; }
-    else if (!m.lobby && app.screen === 'wait' || (m.lobby && app.screen === 'game')) app.screen = m.lobby ? 'wait' : 'game';
+    else if (!m.lobby && app.screen === 'wait') { seatOnline(t); return; }
+    else if (m.lobby && app.screen === 'game') app.screen = 'wait';
     if (m.stage === 'summary' || m.stage === 'short' || m.stage === 'broke' || m.phase === 'settled') { app.sheet = null; app.bet = []; }
     if (!m.lobby && !m.me.la) { app.sheet = null; app.bet = []; }
     render();
@@ -174,8 +184,8 @@ function enterTable(promise) {
     T = Core.createOnline({ ctrl: ctrl, wallet: W, source: SOURCE, uid: user().uid, variant: 'simple', onWin: function () { if (window.PlatformRating) window.PlatformRating.reportWin('poker-simple'); } });
     T.ctrl = ctrl; bindTable();
     var m = T.model();
-    app.screen = m && !m.lobby && !m.loading ? 'game' : 'wait'; app.err = null; app.copied = false;
-    render();
+    app.err = null; app.copied = false;
+    if (m && !m.lobby && !m.loading) { app.screen = 'wait'; seatOnline(T); } else { app.screen = 'wait'; render(); }
   }, function (e) { app.busy = false; app.err = { k: errKey(e) }; app.screen = 'err'; render(); });
 }
 function createOnlineTable() {

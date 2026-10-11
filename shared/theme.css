@@ -79,13 +79,9 @@ button { font-family: inherit; }
 .pl.show { opacity: 1; }
 .pl-box { display: flex; flex-direction: column; align-items: center; gap: 18px; width: min(260px, 70vw); }
 .pl-logo { width: 84px; height: 84px; animation: pl-float 1.6s ease-in-out infinite; }
-.pl-bar { width: 100%; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.pl-bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--accent); animation: pl-fill 5s cubic-bezier(.1, .6, .3, 1) forwards; }
-.pl.done .pl-bar i { animation: none; width: 100%; transition: width .25s ease; }
-.pl-text { margin: 0; font-size: 15px; font-weight: 600; color: var(--muted); }
+.pl.done .pl-text { margin: 0; font-size: 15px; font-weight: 600; color: var(--muted); }
 .pl-text::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: pl-dots 1.2s steps(4, end) infinite; }
 @keyframes pl-float { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.06); } }
-@keyframes pl-fill { from { width: 0; } to { width: 100%; } }
 @keyframes pl-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 html.pl-arrive::after { content: ""; position: fixed; inset: 0; z-index: 2000; background: var(--bg); pointer-events: none; animation: pl-out .5s ease .1s forwards; }
 @keyframes pl-out { to { opacity: 0; visibility: hidden; } }
