@@ -6,7 +6,7 @@ var M = window.Mines, W = window.PlatformWallet;
 var tr = function (key, params) { return window.I18n.t('games.mines.' + key, params); };
 var appEl = document.getElementById('app');
 
-var app = { screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, anim: {} };
+var app = { screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, fresh: false };
 
 function loadCount() { return M.clampMines(window.PlatformStorage.get(MINES_KEY, 3)); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -48,7 +48,7 @@ function startHtml() {
 // ===== Раунд =====
 function startRound() {
   window.PlatformStorage.set(MINES_KEY, app.count);
-  app.round = M.init(app.count); app.rw = null; app.last = -1; app.anim = {}; app.confirm = false; app.screen = 'game';
+  app.round = M.init(app.count); app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game';
   render();
 }
 // Раунд закончен: награда без дневного предела; мина списывает штраф (700 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
@@ -60,27 +60,30 @@ function canPlay(mines) { return W.getBalance() >= M.lossFor(mines === undefined
 function act(action) {
   var r = M.reduce(app.round, action);
   if (!r.ok) return;
-  if (action.type === 'open') { app.last = action.index; app.anim[action.index] = true; if (app.round.openedCount === 0) { W.markPlayed(); W.countPlay('mines'); } }
-  app.round = r.state;
+  if (action.type === 'open') { app.last = action.index; if (app.round.openedCount === 0) { W.markPlayed(); W.countPlay('mines'); } }
+  app.round = r.state; app.fresh = true;
   if (r.state.status !== 'playing') finish(M.view(r.state));
   render();
 }
 
-function cellHtml(v, i) {
-  var open = v.opened[i], over = v.status !== 'playing', mine = v.layout && v.layout[i], cls = 'cell', inner = '', label = tr('cell.aria', { n: i + 1 });
-  if (open && !mine) { cls += ' safe' + (app.anim[i] ? ' pop' : ''); inner = GEM_SVG; label += ', ' + tr('cell.safe'); }
-  else if (open && mine) { cls += ' boom pop'; inner = MINE_SVG; label += ', ' + tr('cell.mine'); }
-  else if (over && mine) { cls += ' mine'; inner = MINE_SVG; label += ', ' + tr('cell.mine'); }
+// Анимируется только то, что изменилось этим ходом: последняя клетка, а при конце раунда — остальные мины по очереди
+function cellHtml(v, i, order) {
+  var open = v.opened[i], over = v.status !== 'playing', mine = v.layout && v.layout[i], cls = 'cell', inner = '', style = '', label = tr('cell.aria', { n: i + 1 });
+  var fresh = app.fresh && i === app.last;
+  if (open && !mine) { cls += ' safe' + (fresh ? ' pop gleam' : ''); inner = GEM_SVG; label += ', ' + tr('cell.safe'); }
+  else if (open && mine) { cls += ' boom' + (app.fresh ? ' blast' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); }
+  else if (over && mine) { cls += ' mine' + (app.fresh ? ' reveal' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); if (app.fresh) style = ' style="animation-delay:' + (350 + order * 90) + 'ms"'; }
   else if (over) cls += ' dim';
-  return '<button class="' + cls + '" data-cell="' + i + '" aria-label="' + esc(label) + '"' + (open || over ? ' disabled' : '') + '>' + inner + '</button>';
+  return '<button class="' + cls + '" data-cell="' + i + '"' + style + ' aria-label="' + esc(label) + '"' + (open || over ? ' disabled' : '') + '>' + inner + '</button>';
 }
 function gameHtml() {
   var v = M.view(app.round), over = v.status !== 'playing', cells = '';
-  for (var i = 0; i < M.CONFIG.cells; i++) cells += cellHtml(v, i);
+  var order = 0, shake = app.fresh && v.status === 'lost';
+  for (var i = 0; i < M.CONFIG.cells; i++) cells += cellHtml(v, i, v.layout && v.layout[i] && !v.opened[i] ? order++ : 0);
   var result = '';
   if (over) {
     var rw = app.rw || { granted: 0, lost: 0 }, text = v.status === 'lost' ? tr('result.lost', { n: fmt(rw.lost) }) : tr(v.status === 'cleared' ? 'result.cleared' : 'result.cashed', { n: fmt(rw.granted) });
-    result = '<div class="result ' + (v.status === 'lost' ? 'lose' : 'win') + '" role="status"><b>' + esc(text) + '</b></div>';
+    result = '<div class="result rise ' + (v.status === 'lost' ? 'lose' : 'win') + '" role="status"><b>' + esc(text) + '</b></div>';
   }
   var take = over
     ? '<div class="row"><button class="btn primary" data-act="again"' + (canPlay(app.round.mines) ? '' : ' disabled') + '>' + esc(tr('again')) + '</button><button class="btn" data-act="menu">' + esc(tr('menu')) + '</button></div>'
@@ -88,9 +91,9 @@ function gameHtml() {
   return '<div class="page"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit.aria')) + '">←</button><h2>' + esc(window.I18n.t('games.mines.title')) + '</h2>' +
     '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml() + '</div>' +
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
-    '<div class="stat"><small>' + esc(tr('earned')) + '</small><b>' + fmt(v.earned) + '</b></div>' +
+    '<div class="stat"><small>' + esc(tr('earned')) + '</small><b' + (app.fresh && v.earned ? ' class="bump"' : '') + '>' + fmt(v.earned) + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('next')) + '</small><b>' + esc(tr('plus', { n: v.next })) + '</b></div></div>' +
-    '<div class="board" role="group">' + cells + '</div>' + result + take + '</div>';
+    '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + result + take + '</div>';
 }
 
 function modalHtml() {
@@ -102,6 +105,7 @@ function modalHtml() {
 }
 function render() {
   appEl.innerHTML = '<div class="screen">' + (app.screen === 'game' && app.round ? gameHtml() : startHtml()) + '</div>' + modalHtml();
+  app.fresh = false;
 }
 
 appEl.addEventListener('click', function (e) {
