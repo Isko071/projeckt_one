@@ -2,6 +2,7 @@
 // Все игры работают с аконами только через этот модуль:
 //   PlatformWallet.getBalance()            → число
 //   PlatformWallet.serverOn() — включён ли серверный баланс (wallet-sync.js); в нём add/spend запрещены, награды уходят серверу, applyServer(state) принимает его ответ
+//   PlatformWallet.holdShown(ms) — следующее пополнение на экране начнёт доезжать через ms (пока игра доигрывает анимацию)
 //   PlatformWallet.shownBalance()          → число для показа на экране: после выигрыша плавно доезжает до настоящего баланса; onShown(fn) — подписка на каждый кадр
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
@@ -102,12 +103,17 @@
   }
   // Показываемый баланс: пополнения (и штраф «Мин») доезжают до нового числа постепенно, остальные списания (ставки) сразу
   var lastBal = null, shown = 0, anim = null, rafId = 0, shownFns = [], smoothDown = false;
-  var SHOWN_DELAY = 600;
+  var SHOWN_DELAY = 600, holdFor = null;
+  // Следующее пополнение на экране начнёт доезжать не через обычные 0,6 с, а через ms: игра сначала доигрывает анимацию (раздача, вскрытие карт), потом показывает итог
+  function holdShown(ms) {
+    holdFor = Math.max(0, Math.floor(ms) || 0);
+    if (typeof setTimeout === 'function') { var mine = holdFor; setTimeout(function () { if (holdFor === mine) holdFor = null; }, 5000); }   // не задержит чужое пополнение, если пополнения так и не было
+  }
   function emitShown() { shownFns.forEach(function (fn) { try { fn(shown); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
   function stopShown() { if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId); rafId = 0; anim = null; }
   function tickShown(now) {
     if (!anim) return;
-    var k = Math.min(1, Math.max(0, (now - anim.t0 - SHOWN_DELAY) / anim.dur)), e = 1 - Math.pow(1 - k, 3);
+    var k = Math.min(1, Math.max(0, (now - anim.t0 - anim.delay) / anim.dur)), e = 1 - Math.pow(1 - k, 3);
     shown = Math.round(anim.from + (anim.to - anim.from) * e);
     if (k >= 1) { shown = anim.to; anim = null; rafId = 0; } else rafId = requestAnimationFrame(tickShown);
     emitShown();
@@ -116,7 +122,8 @@
     if (typeof requestAnimationFrame !== 'function' || typeof performance === 'undefined') return;
     stopShown();
     shown = from;
-    anim = { from: from, to: to, t0: performance.now(), dur: Math.min(1800, Math.max(700, 500 + Math.abs(to - from) * 0.8)) };
+    anim = { from: from, to: to, delay: holdFor !== null ? holdFor : SHOWN_DELAY, t0: performance.now(), dur: Math.min(1800, Math.max(700, 500 + Math.abs(to - from) * 0.8)) };
+    holdFor = null;
     rafId = requestAnimationFrame(tickShown);
   }
   function shownBalance() { return anim ? shown : getBalance(); }
@@ -362,7 +369,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, setServer: setServer, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
+    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, holdShown: holdShown, setServer: setServer, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget

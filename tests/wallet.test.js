@@ -341,3 +341,21 @@ test('показываемый баланс: пополнение доезжае
   run(10000);
   assert.equal(W.shownBalance(), 6300);
 });
+
+test('holdShown: пополнение на экране начинается позже, а потом снова с обычной задержкой', () => {
+  let t = 0, cb = null;
+  const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
+  W.add(10, 'x');
+  W.holdShown(3000);
+  W.add(500, 'win');
+  run(2900);
+  assert.strictEqual(W.shownBalance(), 5010, 'пока идёт раздача, число не меняется');
+  run(8000);
+  assert.strictEqual(W.shownBalance(), 5510);
+  W.add(100, 'win');
+  run(t + 400);
+  assert.strictEqual(W.shownBalance(), 5510, 'следующее пополнение снова ждёт обычные 0,6 с');
+  run(t + 4000);
+  assert.strictEqual(W.shownBalance(), 5610);
+});

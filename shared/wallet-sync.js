@@ -8,7 +8,7 @@
 //   PlatformWalletSync.status()    → 'local' (кошелёк в браузере) | 'connecting' (ждём сервер) | 'server' (серверный баланс работает)
 //   PlatformWalletSync.onStatus(fn)
 //   PlatformWalletSync.start() / stop()   — вызываются сами по входу и выходу из аккаунта
-//   PlatformWalletSync.call(op, args)     → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server')
+//   PlatformWalletSync.call(op, args, holdFor) → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server'); holdFor(ответ) — через сколько мс показать новый баланс
 //   PlatformWalletSync.blocked(game)      → true, если игра сейчас недоступна: пока ждём сервер, а при серверном балансе — игры, которые пока считают аконы в браузере (покер)
 (function (root) {
   var W = root.PlatformWallet, Cloud = root.PlatformCloud, Store = root.PlatformStorage;
@@ -135,9 +135,15 @@
     start: start, stop: stop,
     // Игры, которые пока считают аконы в браузере (покер), при серверном балансе (и пока он неизвестен) недоступны; «Мины» работают на сервере и ждут только ответа
     blocked: function (game) { if (status === 'server') return SERVER_GAMES.indexOf(game) < 0; return status !== 'local'; },
-    call: function (op, args) {
+    // holdFor(ответ) → через сколько мс показать на экране новый баланс (игра сначала доигрывает анимацию); 0 или не задано — как обычно
+    call: function (op, args, holdFor) {
       if (status !== 'server') return Promise.reject(fail('offline'));
-      return rawCall(Object.assign({ op: op }, args || {})).then(function (r) { W.applyServer(r.state); return r; });
+      return rawCall(Object.assign({ op: op }, args || {})).then(function (r) {
+        var ms = holdFor ? holdFor(r) : 0;
+        if (ms > 0 && W.holdShown) W.holdShown(ms);
+        W.applyServer(r.state);
+        return r;
+      });
     }
   };
   fns.push(applyDriver);

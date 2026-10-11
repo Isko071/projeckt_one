@@ -237,6 +237,8 @@ function scheduleSeq(st) {
 // ===== Сессия «С ботом» =====
 // Награда за раздачу: победа 250, блэкджек 400, ничья и проигрыш без награды; за день не больше предела (W.rewardStatus)
 function rewardOf(outcome) { return REWARD[outcome] || 0; }
+// Итог раздачи известен сразу, но на экране идёт неторопливая раздача: число на плашке меняется только после неё (app.resultAt)
+function holdBalance() { W.holdShown(Math.max(0, (app.resultAt || now()) - now()) + 300); }
 function grantReward(outcome) {
   var want = rewardOf(outcome), r = want ? W.reward('blackjack', want, now()) : { granted: 0, capped: false, left: W.rewardStatus('blackjack', now()).left };
   G.rw = { round: G.state.round, want: want, granted: r.granted, capped: r.capped, left: r.left };
@@ -274,8 +276,9 @@ function lDispatch(action) {
     G.settledRound = st.round;
     var mine = seatHand(st.seats[0]);
     G.rw = null;
-    if (mine) grantReward(mine.outcome);
     scheduleSeq(st);
+    holdBalance();                                  // баланс изменится на экране только когда раздача доиграна (карты дилера, итог)
+    if (mine) grantReward(mine.outcome);
   }
   return true;
 }
@@ -398,10 +401,11 @@ function onView(v) {
       G.settledRound = st.round; app.settledAt = now();
       var h = seatHand(seat);
       G.rw = null;
+      scheduleSeq(st);
+      holdBalance();
       if (h) grantReward(h.outcome);
       // победа онлайн в рейтинг: раздача выиграна у дилера, за столом не меньше двух игроков
       if (h && (h.outcome === 'win' || h.outcome === 'blackjack') && window.PlatformRating && G.view && (G.view.members || []).length >= 2) window.PlatformRating.reportWin('blackjack');
-      scheduleSeq(st);
     }
     // Ставок нет: в начале раздачи отправляем условную ставку сами
     if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.fx = {}; if (!seat.sitOut && !(seat.bet > 0)) onlineSend({ type: 'bet', amount: FLAT_BET }); }
