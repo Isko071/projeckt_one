@@ -26,7 +26,7 @@
     document.addEventListener('keydown', onKey, true);
     scrim.addEventListener('click', function (e) {
       if (e.target === scrim || e.target.classList.contains('leave-stay')) close();
-      else if (e.target.classList.contains('leave-ok')) { close(); root.location.href = url; }
+      else if (e.target.classList.contains('leave-ok')) { close(); if (root.PlatformLoader) root.PlatformLoader.go(url); else root.location.href = url; }
     });
     document.body.appendChild(scrim);
     scrim.querySelector('.leave-stay').focus();

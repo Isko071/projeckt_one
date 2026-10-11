@@ -894,7 +894,7 @@ appEl.addEventListener('click', function (e) {
       else window.PlatformLeave.ask(CATALOG_URL);
       break;
     case 'confirmLeave':
-      if (v === 'catalog') window.location.href = CATALOG_URL;
+      if (v === 'catalog') window.PlatformLoader.go(CATALOG_URL);
       else leaveGame(v === 'closeTable' ? 'tables' : 'tables');
       break;
   }
