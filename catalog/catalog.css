@@ -142,11 +142,6 @@
   .btn-play { flex: 1 1 100%; max-width: none; min-height: 48px; }
 }
 
-/* Игра прямо в постере (например, «Мины»): занимает всю ширину под названием */
-.poster.has-inline { flex-wrap: wrap; }
-.poster-inline { flex: 1 1 100%; min-width: 0; }
-.poster-inline[hidden] { display: none; }
-
 /* Профиль: аватар в шапке, меню и окно редактирования */
 .avatar-btn {
   width: var(--tap); height: var(--tap); padding: 0; cursor: pointer;

@@ -3,7 +3,6 @@
 //   id            — латиницей; для настоящих игр совпадает с именем папки games/<id>/
 //   status        — 'available' (можно играть) или 'soon' (в списке с пометкой «Скоро»)
 //   path          — папка игры; кнопка «Играть» ведёт на path + 'index.html'
-//   inline        — необязательно: имя виджета (window[inline].mount(элемент)); игра играется прямо в постере каталога, без перехода на страницу
 //   cover         — картинка обложки (пропорции 4:5)
 //   titleKey, descriptionKey — ключи словаря с названием и описанием
 (function (root) {
@@ -29,7 +28,7 @@
       titleKey: 'games.battleship.title', descriptionKey: 'games.battleship.description'
     },
     {
-      id: 'mines', status: 'available', path: 'games/mines/', cover: 'games/mines/cover.svg', inline: 'MinesWidget',
+      id: 'mines', status: 'available', path: 'games/mines/', cover: 'games/mines/cover.svg',
       titleKey: 'games.mines.title', descriptionKey: 'games.mines.description'
     },
     {

@@ -25,10 +25,9 @@ test('реестр: все обязательные поля заполнены,
 test('реестр: файлы обложек и страниц игр существуют', () => {
   GAMES.forEach((g) => {
     assert.ok(fs.existsSync(path.join(root, g.cover)), 'нет обложки: ' + g.cover);
-    if (g.status === 'available' && !g.inline) {                 // игра в постере каталога (inline) отдельной страницы не имеет
+    if (g.status === 'available') {
       assert.ok(fs.existsSync(path.join(root, L.playHref(g))), 'нет страницы игры: ' + L.playHref(g));
     }
-    if (g.inline) assert.ok(fs.existsSync(path.join(root, g.path, 'widget.js')), 'нет виджета игры: ' + g.path + 'widget.js');
   });
 });
 
