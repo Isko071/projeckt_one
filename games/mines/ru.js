@@ -3,7 +3,6 @@
   root.LOCALES = root.LOCALES || {};
   var p = 'games.mines.';
   var texts = {
-    'toCatalog': 'В каталог',
     'sub': 'Открывайте клетки и не наступите на мину. Чем больше мин, тем выше награда.',
     'start.count': 'Сколько мин',
     'start.perCell': '+{n} за клетку',
@@ -13,7 +12,6 @@
     'start.play': 'Играть',
     'start.need': 'Для игры нужно не меньше {n} аконов.',
     'rules.button': 'Правила',
-    'rules.title': 'Правила',
     'rules.close': 'Понятно',
     'rules.step1': 'Поле из 25 клеток. Вы выбираете, сколько на нём мин: от 1 до 24.',
     'rules.step2': 'Открывайте клетки по одной. При 1–4 минах каждая безопасная клетка приносит 50 аконов. При 5–24 минах первая клетка приносит больше (60 при 5 минах, 250 при 24), и каждая следующая на 20 дороже предыдущей.',
@@ -33,12 +31,7 @@
     'result.cleared': 'Все клетки открыты! +{n}',
     'result.lost': 'Мина! Накопленное сгорело, −{n}',
     'again': 'Ещё раз',
-    'menu': 'В меню',
-    'exit.aria': 'Выйти в меню',
-    'confirm.title': 'Выйти из раунда?',
-    'confirm.text': 'Накопленное за раунд сгорит. Чтобы его получить, нажмите «Забрать».',
-    'confirm.stay': 'Остаться',
-    'confirm.ok': 'Выйти'
+    'menu': 'В меню'
   };
   Object.keys(texts).forEach(function (k) { root.LOCALES.ru = root.LOCALES.ru || {}; root.LOCALES.ru[p + k] = texts[k]; });
 })(typeof window !== 'undefined' ? window : globalThis);

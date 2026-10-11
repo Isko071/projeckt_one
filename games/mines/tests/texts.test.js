@@ -1,5 +1,5 @@
 // Запуск: node --test games/mines/tests/texts.test.js
-// Проверяет словарь игры и отсутствие вшитых русских строк в интерфейсе.
+// Проверяет словарь игры и отсутствие вшитых русских строк в виджете.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,12 +14,12 @@ function load(files) {
   return ctx;
 }
 const dict = load(['locales/ru.js', 'games/mines/ru.js']).LOCALES.ru;
-const ui = fs.readFileSync(path.join(gameDir, 'ui.js'), 'utf8');
+const ui = fs.readFileSync(path.join(gameDir, 'widget.js'), 'utf8');
 
-test('словарь игры: все ключи tr(...) из ui.js существуют', () => {
+test('словарь игры: все ключи tr(...) из widget.js существуют', () => {
   const keys = new Set();
   ui.replace(/\btr\('([\w.]+)'\s*[,)]/g, (m, k) => { keys.add(k); return m; });
-  assert.ok(keys.size > 20, 'ключей найдено мало: ' + keys.size);
+  assert.ok(keys.size > 15, 'ключей найдено мало: ' + keys.size);
   keys.forEach((k) => assert.ok(('games.mines.' + k) in dict, 'нет в словаре: ' + k));
   [1, 2, 3, 4, 5].forEach((k) => assert.ok(dict['games.mines.rules.step' + k]));
   ['title', 'description'].forEach((k) => assert.ok(dict['games.mines.' + k], 'каталог: ' + k));

@@ -13,6 +13,7 @@
     title: document.getElementById('poster-title'),
     desc: document.getElementById('poster-desc'),
     actions: document.getElementById('poster-actions'),
+    inline: document.getElementById('poster-inline'),
     close: document.getElementById('poster-close')
   };
 
@@ -76,7 +77,14 @@
     el.title.textContent = t(game.titleKey);
     el.desc.textContent = t(game.descriptionKey);
     el.actions.textContent = '';
-    if (L.isPlayable(game)) {
+    // Игра прямо в постере (без перехода на страницу): виджет создаётся один раз и остаётся, пока открыта страница
+    var inline = game.inline && window[game.inline] ? window[game.inline] : null;
+    el.inline.hidden = !inline;
+    el.poster.classList.toggle('has-inline', !!inline);
+    if (inline) { el.desc.hidden = true; inline.mount(el.inline); }
+    else el.desc.hidden = false;
+    if (inline) { /* кнопка «Играть» не нужна: игра ниже */ }
+    else if (L.isPlayable(game)) {
       var link = document.createElement('a');
       link.className = 'btn-play';
       link.href = L.playHref(game);
