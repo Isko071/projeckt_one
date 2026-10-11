@@ -120,7 +120,7 @@ function sitDown() {
   var table = Core.createSolo({ variant: 'simple', size: app.prefs.n, ante: ante, name: prof.name || tr('you'), wallet: W, source: SOURCE });
   function seat() { T = table; bindTable(); app.screen = 'game'; app.menu = false; app.modal = null; app.sheet = null; app.bet = []; render(); }
   // Садимся за стол под загрузкой; когда экран полностью открылся, игрок какое-то время просто сидит за столом, и только потом раздают карты
-  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: seat, done: function () { app.sitting = false; setTimeout(function () { if (T === table) table.begin(); }, 1500); } }); }
+  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: seat, done: function () { app.sitting = false; setTimeout(function () { if (T === table) table.begin(); }, 300); } }); }
   else { seat(); table.begin(); }
 }
 // Стол онлайн: из комнаты ожидания садимся под загрузкой, раздача на экране начинается, когда экран открылся

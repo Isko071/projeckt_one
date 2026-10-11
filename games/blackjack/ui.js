@@ -256,8 +256,8 @@ function startLocal() {
   var mine = G;
   function seat() { app.screen = 'game'; app.modal = null; app.resultAt = 0; app.seq = null; app.seen = {}; app.fx = {}; app.pending = false; render(); }
   // Садимся за стол под загрузкой; когда экран полностью открылся, игрок какое-то время просто сидит за столом, и только потом раздают
-  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: function () { if (G === mine) seat(); }, done: function () { app.sitting = false; if (G === mine) later(localDeal, 1500); } }); }
-  else { seat(); later(localDeal, 1500); }
+  if (window.PlatformLoader && window.PlatformLoader.cover) { app.sitting = true; window.PlatformLoader.cover({ build: function () { if (G === mine) seat(); }, done: function () { app.sitting = false; if (G === mine) later(localDeal, 300); } }); }
+  else { seat(); later(localDeal, 300); }
 }
 function later(fn, ms) {
   var token = gameToken;
