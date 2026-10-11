@@ -2,6 +2,9 @@
 // Интерфейс как у shared/rooms.js и shared/rooms-turns.js:
 //   create({ fetch, getToken, uid, projectId, db, game: Poker, gameId, gameOptions: { variant }, now?, rng?, options? })
 //   .createRoom({ size, ante, minBet, smallBlind, bigBlind, private, owner: { uid, name, avatar, chips } }) → { code, host }
+//   env.gate(code, [{ uid, chips }]) → Promise<{ chips: { uid: сколько фишек взято под раздачу }, retry: [uid], rejected: [uid] }>  (необязательно, для серверного баланса)
+//     вызывается перед каждой раздачей: игроки, которых сервер не смог обеспечить, выходят из-за стола, остальным стек урезается до взятого
+//   env.onSettle(code, [{ uid, chips }], voided) — раздача закончена (или отменена, voided): сколько фишек у каждого, чтобы сервер вернул их на баланс
 //   .joinRoom(code, { name, avatar, chips }) → контроллер игрока (poll, send, leave, stop, onChange, getView)
 // Скрытые карты: в документе комнаты общее состояние (`state`, чужие карты скрыты) и карты всех игроков (`hole`, только для сервера):
 // сервер перед отправкой убирает `hole` и каждому клиенту кладёт его карты в `mine`.
@@ -102,7 +105,7 @@
         return true;
       }
       var readyAt = 0;                 // момент последнего входа или выхода при 2+ игроках: от него идёт отсчёт до начала игры
-      var processed = {}, idle = {}, strikes = {}, ready = {}, settledAt = 0, dealAt = 0;
+      var processed = {}, idle = {}, strikes = {}, ready = {}, settledAt = 0, dealAt = 0, gating = false, gateAt = 0, gateTries = 0;
       var em = emitter();
 
       function passOwner(leavingUid) {
@@ -153,7 +156,10 @@
         var r = game.reduce(full, action, rng);
         if (!r.ok) return false;
         full = r.state; dirty = true;
-        if (full.phase === 'settled' && !settledAt) { settledAt = now(); ready = {}; idle = {}; }
+        if (full.phase === 'settled' && !settledAt) {
+          settledAt = now(); ready = {}; idle = {};
+          if (env.onSettle) { try { env.onSettle(code, full.seats.filter(function (x) { return x.inHand; }).map(function (x) { return { uid: x.id, chips: x.chips }; })); } catch (e) { /* расчёт не должен ломать стол */ } }
+        }
         return true;
       }
       function memberBySeat(seat) { return members.filter(function (m) { return m.seat === seat; })[0]; }
@@ -163,11 +169,46 @@
         settledAt = 0; ready = {}; idle = {}; dealAt = 0;
         return true;
       }
+      // Раздача под присмотром сервера баланса (env.gate): сначала у игроков берётся залог на стек, и только потом карты раздаются
+      function dealGated(cand) {
+        if (!env.gate) { dealHand(); return; }
+        if (gating || now() < gateAt) return;
+        gating = true;
+        var asks = cand.map(function (m) { return { uid: m.uid, chips: full.seats[m.seat].chips }; });
+        function finish(res) {
+          gating = false; res = res || {};
+          var got = res.chips || {}, retry = res.retry || [], rejected = (res.rejected || []).slice();
+          if (retry.length && ++gateTries < 8) { gateAt = now() + 1000; return; }             // залог ещё не оформлен: повторим через секунду
+          retry.forEach(function (u) { if (rejected.indexOf(u) < 0) rejected.push(u); });
+          gateTries = 0;
+          var back = [];                                                                       // залоги тех, кто за столом уже не сидит: возвращаются
+          asks.forEach(function (a) {
+            var m = members.filter(function (x) { return x.uid === a.uid; })[0], held = got[a.uid];
+            if (!held) return;
+            if (!m || !full.seats[m.seat] || !full.seats[m.seat].active || rejected.indexOf(a.uid) >= 0) { back.push({ uid: a.uid, chips: held }); return; }
+            full.seats[m.seat].chips = Math.min(full.seats[m.seat].chips, held);
+          });
+          rejected.forEach(function (u) {
+            var m = members.filter(function (x) { return x.uid === u; })[0];
+            if (!m) return;
+            sys('leave', m.name); if (full) apply({ type: 'leave', seat: m.seat }); removeMember(m);
+          });
+          full.seats.forEach(function (x, i) { if (x.active && !x.sitOut && x.chips > 0 && !got[x.id]) apply({ type: 'sitout', seat: i, value: true }); });     // сел за стол, пока шёл залог: эту раздачу пропускает
+          var ok = full.seats.filter(function (x) { return x.active && !x.sitOut && x.chips > 0 && got[x.id]; });
+          if (ok.length >= 2 && apply({ type: 'next', seat: 0 })) { settledAt = 0; ready = {}; idle = {}; dealAt = 0; }
+          else {                                                                               // играть некому: залоги возвращаются, ждём игроков
+            ok.forEach(function (x) { back.push({ uid: x.id, chips: got[x.id] }); ready[x.id] = true; });
+          }
+          if (back.length && env.onSettle) { try { env.onSettle(code, back, true); } catch (e) { /* расчёт не должен ломать стол */ } }
+          dirty = true;
+        }
+        Promise.resolve(env.gate(code, asks)).then(finish, function () { gating = false; gateAt = now() + 1000; });
+      }
       function start() {
         if (!canStart()) return Promise.resolve();
         full = game.init(members.map(function (m, i) { m.seat = i; return { id: m.uid, name: m.name, kind: 'human', chips: m.chips }; }), gopts, rng);
         status = 'playing'; sys('start', '');
-        dealHand();
+        if (env.gate) { members.forEach(function (m) { ready[m.uid] = true; }); dealGated(members); } else dealHand();
         dirty = true;
         return publish();
       }
@@ -235,12 +276,13 @@
       // Таймеры хода, ожидание готовности после итога и новая раздача
       function auto(t) {
         if (status !== 'playing' || !full) return;
-        if (full.phase === 'settled') {
+        if (full.phase === 'settled' || (full.phase === 'waiting' && env.gate)) {
+          if (gating) return;
           var cand = members.filter(function (m) { var s = full.seats[m.seat]; return s && s.active && s.chips > 0; });
           var rdy = cand.filter(function (m) { return ready[m.uid]; });
           if (rdy.length >= 2 && (rdy.length === cand.length || t - settledAt >= cfg.readyWaitMs) && t - settledAt >= cfg.dealDelayMs) {
             cand.forEach(function (m) { if (!ready[m.uid]) apply({ type: 'sitout', seat: m.seat, value: true }); });
-            dealHand();
+            dealGated(rdy);
           }
           return;
         }

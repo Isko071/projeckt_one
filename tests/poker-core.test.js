@@ -144,6 +144,22 @@ test('онлайн-стол: свои действия уходят на сер�
   assert.equal(t.model().ask.k, 'out');
 });
 
+test('онлайн-стол при серверном балансе: в браузере ничего не списывается и не начисляется, сервер сам держит стек', () => {
+  const ctx = load(fakeBackend()), W = ctx.PlatformWallet, P = ctx.Poker;
+  W.setServer({ active: () => true, queueing: () => true, claim() {} });
+  const seats = [{ id: 'me', name: 'Аня', kind: 'human', chips: 4000 }, { id: 'u2', name: 'Борис', kind: 'human', chips: 4000 }];
+  let st = P.reduce(P.init(seats, { variant: 'simple', ante: 50, tableSize: 4 }, null), { type: 'deal', seat: 0 }, () => 0.5).state;
+  const ctrl = fakeCtrl('me');
+  const t = ctx.PokerCore.createOnline({ ctrl, wallet: W, source: 'poker-simple', uid: 'me', variant: 'simple', dealMs: 0 });
+  const before = W.getBalance();
+  ctrl.push(view(ctx, st));
+  const settled = JSON.parse(JSON.stringify(st)); settled.phase = 'settled'; settled.current = -1; settled.result = { showdown: false, rows: [] };
+  settled.seats[0].net = 150; settled.seats[1].net = -150; settled.seats[1].folded = true; settled.pots = [{ amount: 300, eligible: [0], winners: [0] }]; settled.pot = 300;
+  ctrl.push(view(ctx, settled, { rev: 2 }));
+  assert.equal(W.getBalance(), before, 'баланс в браузере не менялся: стек считает сервер');
+  assert.equal(t.model().stage, 'short');
+});
+
 test('онлайн-стол до начала игры отдаёт модель комнаты ожидания', () => {
   const ctx = load(fakeBackend()), W = ctx.PlatformWallet;
   const ctrl = fakeCtrl('me');

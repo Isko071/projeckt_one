@@ -111,7 +111,7 @@ function ringStyle(timer) {
 
 // ===== Партия =====
 // Пока баланс на сервере (или ждём его), покер, который считает аконы в браузере, недоступен
-function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked()); }
+function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked('poker-simple')); }
 function sitDown() {
   if (walletBlocked() || app.sitting) return;
   var ante = app.prefs.ante;
@@ -174,7 +174,7 @@ function refreshRooms() {
 }
 function errKey(e) {
   var c = e && e.code;
-  return { 'not-found': 'notFound', full: 'full', started: 'started', closed: 'closed', 'wrong-game': 'notFound' }[c] || 'other';
+  return { 'not-found': 'notFound', full: 'full', started: 'started', closed: 'closed', 'no-funds': 'noFunds', 'wrong-game': 'notFound' }[c] || 'other';
 }
 function enterTable(promise) {
   app.busy = true; render();
@@ -221,7 +221,7 @@ function startHtml() {
     '<div class="top-actions">' + catalogLinkHtml('theme-btn') + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr(online ? 'start.onlineSub' : 'sub')) + '</div>' + modes +
     (needAuth ? '<div class="note-card" data-key="auth"><div style="font-weight:700">' + esc(tr('login.need')) + '</div><p>' + esc(tr('login.text')) + '</p><div><button class="btn" data-act="signin" data-key="signin">' + esc(tr(app.busy ? 'login.busy' : 'login.btn')) + '</button></div></div>' : '') +
-    (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : (window.PlatformWalletSync.unreachable && window.PlatformWalletSync.unreachable() ? 'server.unreachable' : 'server.connecting'))) + '</div></div>' : '') +
+    (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.unreachable && window.PlatformWalletSync.unreachable() ? 'server.unreachable' : 'server.connecting')) + '</div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth || walletBlocked() ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
     '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div></div>';
@@ -349,7 +349,7 @@ function tableHtml(m) {
   var covered = !!(m.stage && m.stage !== 'flip' || (app.sheet === 'raise' && m.me.la && m.me.la.raise) || m.ask);
   var myAv = avatarOf(me, 0), mine = me.cards.length ? me.cards.map(function (c, ci) { var f = fly(0, ci, 'me:' + ci); return cardHtml(c.code, 'mine-card', f.cls + (c.fold ? 'fold ' : '') + (c.hl ? 'hl ' : '') + (c.dim ? 'dim' : ''), f.attrs); }).join('') : cardHtml('', 'mine-card') + cardHtml('', 'mine-card');
   var cap = m.caption ? tr('cap.next') : (m.ready && m.stage === 'ready' ? tr('ready.wait', { n: m.ready.count, m: m.ready.total }) : '');
-  var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
+  var notice = m.notice ? tr({ capCut: 'cap.cut', free: 'cap.free', srvErr: 'cap.srvErr' }[m.notice.k] || 'cap.reached', { n: fmt(m.notice.n) }) : '';
   var toasts = (m.toasts || []).map(function (t, i) { return '<div data-key="t' + i + '">' + esc(tr('toast.' + t.k, { name: t.name })) + '</div>'; }).join('');
   var top = '<div class="bar wide" data-key="bar"><button class="icon-btn" data-act="menu" data-key="menuBtn" aria-label="' + esc(tr('menu.aria')) + '">⋯</button><div class="title">' + esc(tr('title')) + '</div><div class="right">' + (m.mode === 'online' ? chat.buttonHtml() : '') + themeButtonHtml() + '<div class="bal" data-key="bal"' + (barSmooth(m) ? ' data-bal="short"' : '') + '>' + esc(fmt(barSmooth(m) ? W.shownBalance() : m.me.stack) + ' ' + tr('unitShort')) + '</div></div></div>' + bannerHtml();
   return top + (notice || toasts ? '<div class="toast" role="status" data-key="toast">' + (notice ? '<div>' + esc(notice) + '</div>' : '') + toasts + '</div>' : '') +

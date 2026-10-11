@@ -9,14 +9,14 @@
 //   PlatformWalletSync.onStatus(fn)
 //   PlatformWalletSync.start() / stop()   — вызываются сами по входу и выходу из аккаунта
 //   PlatformWalletSync.call(op, args, holdFor) → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server'); holdFor(ответ) — через сколько мс показать новый баланс
-//   PlatformWalletSync.blocked(game)      → true, если игра сейчас недоступна: пока ждём сервер, а при серверном балансе — игры, которые пока считают аконы в браузере (покер)
+//   PlatformWalletSync.blocked(game)      → true, если игра сейчас недоступна: пока ждём сервер, а при серверном балансе — игры, которые пока считают аконы в браузере (сейчас таких нет)
 (function (root) {
   var W = root.PlatformWallet, Cloud = root.PlatformCloud, Store = root.PlatformStorage;
   var QKEY = 'platform:wallet-queue', KKEY = 'platform:wallet-server';
   var CALL_MS = 20000, CONNECT_MS = 15000;
   var status = 'local', fns = [], ws = null, uid = null, running = false, flushing = false, pend = {}, seq = 0, retry = 0, retryTimer = null, openTimer = null, lastState = null;
   var queue = [];
-  var SERVER_GAMES = ['mines'];              // игры, которые уже умеют работать на серверном балансе
+  var SERVER_GAMES = ['mines', 'poker-simple', 'poker'];              // игры, которые уже умеют работать на серверном балансе
 
   var connectingSince = 0, UNREACHABLE_MS = 45000;
   function setStatus(s) {
@@ -160,7 +160,7 @@
     start: start, stop: stop,
     // Сервер не отвечает дольше 45 с: игры, которым он нужен, показывают «сервер недоступен» вместо вечного «подключаемся»
     unreachable: function () { return status === 'connecting' && connectingSince > 0 && Date.now() - connectingSince > UNREACHABLE_MS; },
-    // Игры, которые пока считают аконы в браузере (покер), при серверном балансе (и пока он неизвестен) недоступны; «Мины» работают на сервере и ждут только ответа
+    // Игры, которые пока считают аконы в браузере, при серверном балансе (и пока он неизвестен) недоступны; «Мины» и «Покер» работают на сервере и ждут только ответа
     blocked: function (game) { if (status === 'server') return SERVER_GAMES.indexOf(game) < 0; return status !== 'local'; },
     // holdFor(ответ) → через сколько мс показать на экране новый баланс (игра сначала доигрывает анимацию); 0 или не задано — как обычно
     call: function (op, args, holdFor) {

@@ -26,8 +26,10 @@ class RoomManager {
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));
-    this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
-    this.apis['poker-simple'] = this.engine.PlatformPokerRooms.create(Object.assign({}, base, { game: this.engine.Poker, gameId: 'poker-simple', gameOptions: { variant: 'simple' } }));
+    // Серверный баланс: стек за покерным столом берётся залогом перед каждой раздачей, а после неё возвращается с итогом
+    const pk = this.wallet ? { gate: (code, asks) => this.pokerGate(code, asks), onSettle: (code, list, voided) => this.pokerSettle(code, list, voided) } : {};
+    this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, pk, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
+    this.apis['poker-simple'] = this.engine.PlatformPokerRooms.create(Object.assign({}, base, pk, { game: this.engine.Poker, gameId: 'poker-simple', gameOptions: { variant: 'simple' } }));
     this.timer = null;
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
@@ -105,10 +107,12 @@ class RoomManager {
       if (!(stake >= this.cfg.minStake && stake <= this.cfg.maxStake)) throw fail('bad-stake');
     }
     this.pendingDoc = null;
+    let chips = o.chips;
+    if (this.wallet && POKER.indexOf(game) >= 0) chips = await this.pokerChips(conn.uid, o.ante);
     const res = await this.apis[game].createRoom({
       stake: stake,
       size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
-      owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: o.chips }
+      owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: chips }
     });
     const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0, stake: stake, holds: new Map(), settled: false, wasPlaying: false };
     if (stake) {
@@ -137,6 +141,7 @@ class RoomManager {
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
       hello = hello || {};
+      if (this.wallet && POKER.indexOf(game) >= 0) hello = Object.assign({}, hello, { chips: await this.pokerChips(conn.uid, d.ante) });
       if (room.stake) { const h = await this.takeStake(room, code, conn.uid); if (!h.ok) throw fail(h.error || 'no-funds'); }
       this.store.addAction(code, conn.uid, JSON.stringify({ type: 'hello', name: hello.name, avatar: hello.avatar, chips: hello.chips }), this.now());
       this.counters.joins++;
@@ -202,6 +207,37 @@ class RoomManager {
     if (room.fields) conn.send({ t: 'doc', code, doc: this.docFor(room.fields, conn.uid) });
   }
 
+  // ---------- Стеки за покерным столом ----------
+  // Стек игрока = его баланс на сервере (то, что приславил браузер, не принимается). Не хватает на начальную ставку: за стол не сесть
+  async pokerChips(uid, ante) {
+    let bal;
+    try { bal = (await this.wallet.load(uid)).balance; } catch (e) { throw fail('ledger'); }
+    if (!(bal >= Math.max(1, Math.floor(Number(ante)) || 1))) throw fail('no-funds');
+    return bal;
+  }
+  // Перед раздачей у каждого берётся залог на стек (весь баланс, а не больше): пока идёт раздача, эти аконы нельзя потратить в другой игре
+  async pokerGate(code, asks) {
+    const room = this.rooms.get(code), out = { chips: {}, retry: [], rejected: [] };
+    if (!room) { out.rejected = asks.map((a) => a.uid); return out; }
+    for (const a of asks) {
+      const old = room.holds.get(a.uid);
+      if (old) { if (old.owed !== undefined) out.retry.push(a.uid); else out.chips[a.uid] = old.amount; continue; }      // прошлая выплата ещё не оформлена: ждём
+      try {
+        const bal = (await this.wallet.load(a.uid)).balance, amount = Math.min(Math.floor(a.chips), bal);
+        if (!(amount >= 1)) { out.rejected.push(a.uid); continue; }
+        const h = await this.takeStake(room, code, a.uid, amount);
+        if (h.ok) out.chips[a.uid] = amount; else if (h.error === 'busy' || h.error === 'ledger') out.retry.push(a.uid); else out.rejected.push(a.uid);
+      } catch (e) { out.retry.push(a.uid); }
+    }
+    return out;
+  }
+  // Раздача закончена (или отменена): стек со всеми выигрышами и проигрышами возвращается на баланс
+  pokerSettle(code, list, voided) {
+    const room = this.rooms.get(code);
+    if (!room) return;
+    list.forEach((x) => { if (room.holds.has(x.uid)) this.queueStake(room, () => this.payStake(room, code, x.uid, Math.max(0, Math.floor(x.chips) || 0), voided ? 'void' : 'hand')); });
+  }
+
   // ---------- Ставки за столом ----------
   // Ставка берётся залогом при входе за стол (и создателем при создании) и до конца партии лежит на сервере; по итогу победитель забирает банк.
   pushWallet(uid, state) { this.conns.forEach((c) => { if (c.uid === uid) c.send({ t: 'wallet', state }); }); }
@@ -209,12 +245,13 @@ class RoomManager {
     room.job = (room.job || Promise.resolve()).then(fn).catch((e) => { this.counters.errors++; this.event('error', { game: room.game, info: 'stake:' + String((e && e.code) || (e && e.message) || 'error').slice(0, 40) }); });
     return room.job;
   }
-  async takeStake(room, code, uid) {
+  async takeStake(room, code, uid, amount) {
+    const sum = amount === undefined ? room.stake : amount, poker = amount !== undefined;
     try {
-      const r = await this.wallet.hold(uid, code, room.stake);
+      const r = await this.wallet.hold(uid, code, sum);
       if (!r.ok) return { ok: false, error: r.error || 'no-funds' };
-      room.holds.set(uid, { amount: room.stake, at: this.now(), seen: false });
-      this.event('stake', { game: room.game, code, uid, info: '-' + room.stake });
+      room.holds.set(uid, { amount: sum, at: this.now(), seen: poker });
+      this.event('stake', { game: room.game, code, uid, info: '-' + sum });
       this.pushWallet(uid, await this.wallet.load(uid));
       return { ok: true };
     } catch (e) { return { ok: false, error: (e && e.code) || 'ledger' }; }
@@ -321,14 +358,14 @@ class RoomManager {
       if (room.host.isEmpty()) { this.remove(code); return; }
       if (!room.subs.size) { if (!room.emptySince) room.emptySince = t; if (t - room.emptySince >= this.cfg.emptyMs) this.remove(code); }
       else room.emptySince = 0;
-      if (room.stake) this.sweepStake(code, room);
+      if (room.stake || room.holds.size) this.sweepStake(code, room);
       this.tickRoom(code);
     });
   }
   remove(code) {
     const room = this.rooms.get(code);
     if (!room) return;
-    if (room.stake) this.refundAll(code, room);
+    if (room.stake || room.holds.size) this.refundAll(code, room);
     this.event('closed', { game: room.game, code });
     room.subs.forEach((c) => { c.send({ t: 'gone', code }); c.rooms && c.rooms.delete(code); });
     this.rooms.delete(code); this.store.drop(code);
