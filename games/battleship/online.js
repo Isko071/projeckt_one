@@ -4,7 +4,7 @@
 // Корабли и оружие соперника до конца партии по сети не приходят: у каждого игрока своя скрытая часть (mine), вид собирает Battleship.withMine.
 (function () {
   var Cloud = window.PlatformCloud, P = window.PlatformProfile;
-  var on = { screen: 'login', rooms: null, private: false, code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
+  var on = { screen: 'login', rooms: null, stake: '', private: false, code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
   var G = null, wsApi = null, pollTimer = null, roomsTimer = null, failing = 0;
 
   function now() { return Date.now(); }
@@ -41,8 +41,38 @@
     }
     return wsApi;
   }
+
+  // ---------- Ставка за столом (серверный баланс, shared/wallet-sync.js) ----------
+  var MIN_STAKE = 25;
+  function stakeOn() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server'); }
+  function stakeValue() { var n = Math.floor(Number(on.stake)); return isFinite(n) && n > 0 ? n : 0; }
+  function stakeProblem() { var n = stakeValue(); if (!n) return ''; if (n < MIN_STAKE) return 'min'; if (n > window.PlatformWallet.getBalance()) return 'low'; return ''; }
+  function stakeNote() {
+    var p = stakeProblem(), n = stakeValue();
+    return p === 'min' ? tr('o.stake.min', { n: MIN_STAKE }) : (p === 'low' ? tr('o.stake.low') : (n ? tr('o.stake.bank', { n: n * 2 }) : tr('o.stake.none')));
+  }
+  function stakeFieldHtml() {
+    var bal = window.PlatformWallet.getBalance(), p = stakeProblem();
+    return '<div class="o-field"><div class="field-title">' + esc(tr('o.stake.title')) + '</div>' +
+      '<input class="name-input" id="ostake" type="number" inputmode="numeric" min="' + MIN_STAKE + '" step="25" value="' + esc(on.stake) + '" placeholder="' + esc(tr('o.stake.placeholder')) + '" aria-label="' + esc(tr('o.stake.title')) + '">' +
+      '<div class="o-seg" role="group" aria-label="' + esc(tr('o.stake.title')) + '">' + [0, 100, 250, 500, 1000].map(function (k) {
+        return '<button data-act="stake" data-v="' + k + '" aria-pressed="' + (stakeValue() === k) + '">' + (k ? k : esc(tr('o.stake.off'))) + '</button>';
+      }).join('') + '</div>' +
+      '<p class="o-hint' + (p ? ' bad' : '') + '" id="ostake-note" role="status">' + esc(stakeNote()) + ' · ' + esc(tr('o.stake.balance', { n: bal })) + '</p></div>';
+  }
+  // Поле ввода не перерисовываем (пропал бы курсор): меняем только подсказку и кнопку «Создать»
+  function refreshStake() {
+    var note = document.getElementById('ostake-note'), btn = appEl.querySelector('[data-act="create"]');
+    if (note) { note.textContent = stakeNote() + ' · ' + tr('o.stake.balance', { n: window.PlatformWallet.getBalance() }); note.classList.toggle('bad', !!stakeProblem()); }
+    if (btn && !on.busy) btn.disabled = !!stakeProblem();
+    appEl.querySelectorAll('[data-act="stake"]').forEach(function (b) { b.setAttribute('aria-pressed', String(stakeValue() === Number(b.getAttribute('data-v')))); });
+  }
+
   function errorKey(e) {
     var c = e && e.code;
+    if (c === 'no-funds') return 'noFunds';
+    if (c === 'bad-stake') return 'badStake';
+    if (c === 'stakes-off') return 'stakesOff';
     if (c === 'not-found') return 'notFound';
     if (c === 'full' || c === 'closed' || c === 'started' || c === 'denied' || c === 'missing') return c;
     if (!c || c === 'network' || c === 'offline' || c === 'timeout' || /^http-/.test(c)) return 'network';
@@ -74,6 +104,11 @@
       send: function (a) { return send(a); },
       subscribe: function () { /* перерисовку запускает online.js при каждом новом виде стола */ },
       reward: function () { return null; },        // в онлайне награды нет (она только за партии с ботом)
+      stake: function () {                         // итог ставки за столом: сколько выиграли (+) или потеряли (−); null, если ставки не было
+        var v = G && G.view, st = v && v.state, n = v ? Number(v.stake) || 0 : 0;
+        if (!n || !st || !st.gameOver) return null;
+        return st.winner === v.seat ? n : -n;
+      },
       again: function () { if (isOwner()) G.room.rematch(); else send({ type: 'again' }); },
       leave: function () { dispose(); }
     };
@@ -138,10 +173,10 @@
 
   function createTable() {
     var api = getRooms();
-    if (!api || on.busy) { if (!api) { on.tableError = 'missing'; render(); } return; }
+    if (!api || on.busy || (stakeOn() && stakeProblem())) { if (!api) { on.tableError = 'missing'; render(); } return; }
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: 2, private: on.private, name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
+    api.createRoom({ size: 2, private: on.private, stake: stakeOn() ? stakeValue() : 0, name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
       function (e) { on.busy = false; on.tableError = errorKey(e); on.screen = 'tables'; render(); });
   }
   function joinTable(code) {
@@ -206,7 +241,7 @@
     if (rooms === null) list = '<div class="card o-box" role="status" aria-label="' + esc(tr('o.tables.loading')) + '">' + [1, 2, 3].map(function () { return '<div class="o-row skel"><i class="av"></i><i class="ln"></i></div>'; }).join('') + '</div>';
     else if (!rooms.length) list = '<div class="o-dashed">' + esc(tr('o.tables.empty')) + '</div>';
     else list = '<div class="card o-box"><h3>' + esc(tr('o.tables.open')) + '</h3>' + rooms.map(function (r) {
-      return '<div class="o-row"><span class="av">' + esc(P.initial(r.hostName)) + '</span><span class="who"><b>' + esc(r.hostName || r.code) + '</b></span>' +
+      return '<div class="o-row"><span class="av">' + esc(P.initial(r.hostName)) + '</span><span class="who"><b>' + esc(r.hostName || r.code) + '</b>' + (r.stake ? '<small>' + esc(tr('o.stake.tag', { n: r.stake })) + '</small>' : '') + '</span>' +
         '<button class="btn-secondary small" data-act="joinRoom" data-v="' + esc(r.code) + '">' + esc(tr('o.tables.join')) + '</button></div>';
     }).join('') + '</div>';
     var prof = P.getProfile();
@@ -222,8 +257,9 @@
   function createHtml() {
     return '<div class="o-page">' + pageHead('toTables', tr('o.create.title')) +
       '<button class="mode-btn o-mode" data-act="private" aria-pressed="' + on.private + '"><b>' + esc(tr('o.create.private')) + '</b><small>' + esc(tr(on.private ? 'o.create.privateSub' : 'o.create.privateOff')) + '</small></button>' +
+      (stakeOn() ? stakeFieldHtml() : '') +
       tableErrorHtml() +
-      '<button class="btn-play" data-act="create"' + (on.busy ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'o.create.busy' : 'o.create.btn')) + '</button>' +
+      '<button class="btn-play" data-act="create"' + (on.busy || (stakeOn() && stakeProblem()) ? ' disabled' : '') + '>' + esc(tr(on.busy ? 'o.create.busy' : 'o.create.btn')) + '</button>' +
       '<button class="btn-secondary wide" data-act="toTables">' + esc(tr('o.back')) + '</button></div>';
   }
   function lobbyHtml() {
@@ -238,6 +274,7 @@
     return '<div class="o-page"><div class="o-head"><button class="theme-btn" data-act="leaveLobby" aria-label="' + esc(tr('o.lobby.leave')) + '">←</button><h2>' + esc(tr('o.lobby.title')) + '</h2>' + themeButtonHtml('theme-btn') + '</div>' +
       '<div class="card o-box o-center"><small>' + esc(tr('o.lobby.code')) + '</small><div class="o-bigcode">' + esc(G ? G.code : '') + '</div>' +
         (v && v.private ? '<div class="o-mode-tag"><b>' + esc(tr('o.lobby.private')) + '</b></div>' : '') +
+        (v && v.stake ? '<div class="o-mode-tag"><b>' + esc(tr('o.stake.tag', { n: v.stake })) + '</b> · ' + esc(tr('o.stake.pot', { n: v.stake * members.length })) + '</div>' : '') +
         '<div class="o-btns"><button class="btn-secondary small" data-act="copyCode">' + esc(tr(on.copied ? 'o.lobby.copied' : 'o.lobby.copy')) + '</button>' +
         '<button class="btn-secondary small" data-act="shareLink">' + esc(tr('o.lobby.share')) + '</button></div></div>' +
       '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) + bannerHtml() +
@@ -298,6 +335,7 @@
       case 'toTables': if (G) dispose(); app.ctrl = null; openTables(); return true;
       case 'toCreate': on.screen = 'create'; on.tableError = null; render(); return true;
       case 'private': on.private = !on.private; render(); return true;
+      case 'stake': on.stake = Number(v) ? String(Number(v)) : ''; render(); return true;
       case 'create': createTable(); return true;
       case 'joinRoom': on.code = v; joinTable(v); return true;
       case 'joinCode': joinTable(on.code); return true;
@@ -321,6 +359,7 @@
   }
 
   appEl.addEventListener('input', function (e) {
+    if (e.target.id === 'ostake') { on.stake = e.target.value; refreshStake(); return; }
     if (e.target.id === 'ocode') {
       var clean = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5);
       on.code = clean; on.codeError = null;

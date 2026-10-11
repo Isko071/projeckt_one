@@ -52,7 +52,7 @@ function startHtml() {
       '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr(app.count <= M.CONFIG.flatMax ? 'start.perCell' : 'start.perCellGrow', { n: M.cellReward(app.count), step: M.CONFIG.cellStep })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
-    (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>') +
+    (walletBlocked() ? '<div class="muted-text" role="status">' + esc(tr(blockedKey())) + '</div>' : (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>')) +
     '<div class="start-actions"><button class="btn-play" data-act="play"' + (canPlay() ? '' : ' disabled') + '>' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
@@ -67,7 +67,10 @@ function finish(v) {
   if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
   else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
 }
-function canPlay(mines) { return W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
+// Пока баланс на сервере (или ждём его), игра, которая считает аконы в браузере, недоступна: подделать серверный баланс через неё было бы можно
+function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked()); }
+function blockedKey() { return window.PlatformWalletSync && window.PlatformWalletSync.status() === 'server' ? 'server.blocked' : 'server.connecting'; }
+function canPlay(mines) { return !walletBlocked() && W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
 function act(action) {
   var r = M.reduce(app.round, action);
   if (!r.ok) return;
@@ -142,6 +145,7 @@ appEl.addEventListener('click', function (e) {
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { if (app.rules) app.rules = false; else if (app.confirm) app.confirm = false; else return; render(); }
 });
+if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
 W.onShown(function (v) { var els = appEl.querySelectorAll('.bal b'); for (var i = 0; i < els.length; i++) els[i].textContent = fmt(v); });
 window.PlatformTheme.onChange(function () { render(); });
 render();

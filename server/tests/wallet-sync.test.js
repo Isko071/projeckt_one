@@ -1,0 +1,84 @@
+// Клиент серверного баланса (shared/wallet-sync.js) против настоящего сервера с хранилищем в памяти
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { startServer } = require('../index');
+const { MemLedger } = require('../ledger');
+
+const root = path.join(__dirname, '..', '..');
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, ms) { const t = Date.now(); while (Date.now() - t < (ms || 3000)) { if (fn()) return true; await wait(20); } return false; }
+
+function client(port, uid) {
+  const data = {};
+  const ctx = vm.createContext({
+    JSON, Promise, Math, Object, Array, Number, String, Error, Date, isFinite, parseInt, setTimeout, clearTimeout, WebSocket,
+    PlatformStorage: { get: (k, d) => (k in data ? JSON.parse(data[k]) : d), set: (k, v) => { data[k] = JSON.stringify(v); return true; } },
+    PlatformCloud: { getState: () => ({ status: 'signedIn', user: { uid } }), onChange: () => {}, getToken: () => Promise.resolve('test:' + uid) },
+    GAME_SERVER_URL: 'ws://localhost:' + port
+  });
+  ['shared/wallet.js', 'shared/wallet-sync.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
+  return { W: ctx.PlatformWallet, S: ctx.PlatformWalletSync, data };
+}
+
+test('серверный баланс: копия берётся с сервера, награды идут серверу, add/spend в браузере запрещены', async () => {
+  const ledger = new MemLedger({ seeds: { A: 7000 } });
+  const s = await startServer({ insecure: true, ledger, config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'A');
+    assert.strictEqual(c.S.status(), 'connecting');
+    assert.ok(await until(() => c.S.status() === 'server'), 'подключились и получили баланс');
+    assert.strictEqual(c.W.getBalance(), 7000, 'баланс с сервера (по рейтингу), а не локальные 5000');
+    assert.strictEqual(c.W.add(1000000, 'win'), false, 'прямое пополнение запрещено');
+    assert.strictEqual(c.W.spend(10, 'x'), false);
+    const r = c.W.reward('blackjack', 250, Date.now());
+    assert.strictEqual(r.granted, 250);
+    assert.strictEqual(c.W.getBalance(), 7250, 'экран отвечает сразу');
+    assert.ok(await until(() => s.wallet.balanceOf('A') === 7250), 'и сервер записал награду');
+    assert.strictEqual((await ledger.get('wallets', 'A')).balance, 7250);
+    c.W.markPlayed(Date.now());
+    c.W.claimDaily();
+    assert.ok(await until(() => s.wallet.balanceOf('A') === 7750), 'бонус дня посчитан сервером (500)');
+    assert.strictEqual(c.W.getBalance(), 7750);
+    const sync = await c.S.call('sync');
+    assert.strictEqual(sync.state.balance, 7750);
+  } finally { await s.close(); }
+});
+
+test('серверный баланс: награда эксперта сапёра и «Ятзи» идут по таблице сервера, подделка суммы не проходит', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'B');
+    assert.ok(await until(() => c.S.status() === 'server'));
+    c.W.earn('minesweeper', 999999, undefined, true, 'expert');      // локально клиент мог написать что угодно, серверу уходит только уровень
+    assert.ok(await until(() => s.wallet.balanceOf('B') === 5300), 'сервер выдал 300 по своей таблице');
+    assert.strictEqual(c.W.getBalance(), 5300, 'и копия исправилась до настоящего числа');
+  } finally { await s.close(); }
+});
+
+test('сервер без серверного баланса: кошелёк остаётся в браузере', async () => {
+  const s = await startServer({ insecure: true, ledger: null, config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'C');
+    assert.ok(await until(() => c.S.status() === 'local'));
+    assert.strictEqual(c.W.add(100, 'win'), true);
+    assert.strictEqual(c.W.getBalance(), 5100);
+    assert.strictEqual(c.S.blocked(), false);
+  } finally { await s.close(); }
+});
+
+test('очередь: награда, полученная до ответа сервера, не теряется', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'D');
+    assert.strictEqual(c.S.status(), 'connecting');
+    c.W.reward('blackjack', 400, Date.now());              // сервер ещё не ответил
+    assert.strictEqual(c.W.getBalance(), 5400);
+    assert.ok(await until(() => c.S.status() === 'server'));
+    assert.ok(await until(() => s.wallet.balanceOf('D') === 5400), 'награда доехала до сервера из очереди');
+    assert.strictEqual(c.W.getBalance(), 5400);
+    assert.deepStrictEqual(JSON.parse(c.data['platform:wallet-queue']), []);
+  } finally { await s.close(); }
+});

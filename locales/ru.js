@@ -222,6 +222,7 @@ root.LOCALES.ru = {
   'leave.text': 'Вы вернётесь в главное меню.',
   'leave.stay': 'Остаться',
   'leave.ok': 'В каталог',
+  'wallet.src.stake': 'Ставка за столом',
   'wallet.src.milestone': 'Бонус за длинную серию',
   'wallet.src.minesweeper': 'Сапёр',
   'wallet.src.yahtzee': 'Ятзи',
