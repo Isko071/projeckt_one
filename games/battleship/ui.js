@@ -55,7 +55,7 @@ function shipSvg(sh, cls, key, style) {
   var t = sh.dir === 'v' ? 'translate(' + (px + C) + ',' + py + ') rotate(90)' : 'translate(' + px + ',' + py + ')';
   return '<g class="ship ' + (cls || '') + '" transform="' + t + '" filter="url(#wob-' + key + ')"' + (style || '') + '>' + shipG(sh.len) + '</g>';
 }
-function miniShip(len) { return '<svg viewBox="0 0 ' + (len * C) + ' ' + C + '" aria-hidden="true" class="board-mini"><g class="ship">' + shipG(len) + '</g></svg>'; }
+function miniShip(len) { return '<svg viewBox="0 0 ' + (len * C) + ' ' + C + '" preserveAspectRatio="xMinYMid meet" aria-hidden="true" class="board-mini"><g class="ship">' + shipG(len) + '</g></svg>'; }
 // Потопленные корабли соперника восстанавливаются по отметкам «потоплен» (3): связные клетки в линию
 function sunkShips(marks) {
   var seen = {}, out = [];
@@ -318,13 +318,14 @@ function placeHtml(v) {
     return '<button class="tray-ship" data-act="pick" data-len="' + len + '" aria-pressed="' + (P2.pick === len) + '" aria-label="' + esc(tr('ship.aria', { len: len, n: rem[len] })) + '"' + (rem[len] > 0 ? '' : ' disabled') + '>' + miniShip(len) + '<span>×' + rem[len] + '</span></button>';
   }).join('');
   var hint = P2.msg ? tr(P2.msg) : (left > 0 ? tr('place.left', { n: left }) : (total < cap ? tr('arsenal.need', { n: cap - total }) : tr('place.hint')));
-  return '<div class="page">' + headHtml('exit', tr('place.title'), tr('exit.aria')) +
-    '<div class="sheet">' + boardSvg({ key: 'p', label: tr('board.mine'), marks: [], ships: P2.ships, interactive: true, ghost: ghost }) + '</div>' +
-    '<div class="hint' + (P2.msg ? ' bad' : '') + '" role="status">' + esc(hint) + '</div>' +
-    '<div class="tray">' + tray + '</div>' +
-    '<div class="row"><button class="btn" data-act="rotate">' + esc(tr('place.rotate')) + '</button><button class="btn" data-act="random">' + esc(tr('place.random')) + '</button><button class="btn" data-act="clear">' + esc(tr('place.clear')) + '</button></div>' +
-    arsenalHtml() +
-    '<button class="btn primary full" data-act="ready"' + (left === 0 && total === cap ? '' : ' disabled') + '>' + esc(tr('place.ready')) + '</button></div>';
+  // На телефоне всё в одну колонку; на широком экране: оружие слева от поля, корабли и «Готов» справа (без прокрутки)
+  return '<div class="page place">' + headHtml('exit', tr('place.title'), tr('exit.aria')) + '<div class="place-grid">' +
+    '<div class="pl-board"><div class="sheet">' + boardSvg({ key: 'p', label: tr('board.mine'), marks: [], ships: P2.ships, interactive: true, ghost: ghost }) + '</div>' +
+    '<div class="hint' + (P2.msg ? ' bad' : '') + '" role="status">' + esc(hint) + '</div></div>' +
+    '<div class="pl-ships"><div class="tray">' + tray + '</div>' +
+    '<div class="row"><button class="btn" data-act="rotate">' + esc(tr('place.rotate')) + '</button><button class="btn" data-act="random">' + esc(tr('place.random')) + '</button><button class="btn" data-act="clear">' + esc(tr('place.clear')) + '</button></div></div>' +
+    '<div class="pl-arsenal">' + arsenalHtml() + '</div>' +
+    '<div class="pl-ready"><button class="btn primary full" data-act="ready"' + (left === 0 && total === cap ? '' : ' disabled') + '>' + esc(tr('place.ready')) + '</button></div></div></div>';
 }
 function waitHtml(v) {
   var me = app.ctrl.seat;
