@@ -140,7 +140,7 @@ function sideWrap(side, inner) {
 }
 // Самолёт пролетает над полем на линии v; возвращает время, когда он над точкой u
 function planeFx(cx, cy) {
-  var W = (N + 1) * C, from = -300, to = W + 300, dur = 1.5, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
+  var W = (N + 1) * C, from = -300, to = W + 300, dur = 2.2, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
   var body = '<g transform="scale(1.7)"><path d="M-2 0 Q2 -6 18 -7 L118 -6 L142 0 L118 6 L18 7 Q2 6 -2 0Z M100 -7 L72 -7 L42 -76 L58 -76Z M100 7 L72 7 L42 76 L58 76Z M10 -6 L-6 -28 L6 -28 L26 -6Z M10 6 L-6 28 L6 28 L26 6Z" class="plane-body"/>' +
     '<path d="M66 -42 H88 M66 42 H88" class="deck"/><path d="M108 -3 L122 0 L108 3Z" class="deck pf"/></g>';
   function path(dx, dy, cls) { return '<g class="' + cls + '" opacity="0" transform="translate(' + from + ',' + cy + ')">' + appear(0) + '<animateTransform attributeName="transform" type="translate" from="' + (from + dx) + ' ' + (cy + dy) + '" to="' + (to + dx) + ' ' + (cy + dy) + '" begin="0s" dur="' + dur + 's" fill="freeze"/>' + body + '</g>'; }
@@ -150,8 +150,8 @@ function planeFx(cx, cy) {
 function subBodyFx(cx, cy) {
   var d = 'M16 35 Q40 6 90 6 L220 6 Q268 8 290 35 Q268 62 220 64 L90 64 Q40 64 16 35Z';
   var x0 = -340, x1 = cx - 150;
-  return '<g class="sub" opacity="0" transform="translate(' + x0 + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.08;.8;1" begin="0s" dur="2.9s" fill="freeze"/>' +
-    '<animateTransform attributeName="transform" type="translate" from="' + x0 + ' ' + (cy - 35) + '" to="' + x1 + ' ' + (cy - 35) + '" begin="0s" dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".2 .6 .4 1"/>' +
+  return '<g class="sub" opacity="0" transform="translate(' + x0 + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.06;.85;1" begin="0s" dur="4s" fill="freeze"/>' +
+    '<animateTransform attributeName="transform" type="translate" from="' + x0 + ' ' + (cy - 35) + '" to="' + x1 + ' ' + (cy - 35) + '" begin="0s" dur="1.6s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".2 .6 .4 1"/>' +
     '<path d="' + d + '" class="hull"/><rect x="118" y="22" width="56" height="26" rx="3" class="deck pf"/><path d="M146 22 V10 H162" class="deck"/><path d="M40 35 H110 M182 35 H260" class="deck thin"/><path d="M-10 26 q-14 9 0 18 M-34 22 q-16 13 0 26" class="deck thin"/></g>';
 }
 // План анимации действия: рисунок и задержки появления итоговых отметок по клеткам
@@ -166,7 +166,7 @@ function fxPlan(fx) {
     var cn = sideCanon(fx.side, p.cx, p.cy), pl = planeFx(cn.u, cn.v);
     svg += sideWrap(fx.side, pl.svg);
     fx.cells.forEach(function (d, k) {
-      var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.1), q = cellXY(d.idx), tIn = t;
+      var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.16), q = cellXY(d.idx), tIn = t;
       svg += impactFx(q.cx, q.cy, d.result, tIn);
       if (d.result !== 'none') delays[d.idx] = tIn + (d.result === 'miss' ? 0.4 : 0.07);
     });
@@ -174,7 +174,7 @@ function fxPlan(fx) {
     var sc = sideCanon(fx.side, p.cx, p.cy);
     svg += sideWrap(fx.side, subBodyFx(sc.u, sc.v));
     fx.torpedoes.forEach(function (tp) {
-      var steps = tp.path.length, t0 = 1.1, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
+      var steps = tp.path.length, t0 = 1.6, dur = Math.max(0.35, steps * 0.13), end = cellXY(tp.path[steps - 1]);
       svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.6) + '</line>';
       svg += '<rect class="torp" x="' + (p.cx - 7) + '" y="' + (p.cy - 20) + '" width="14" height="40" rx="7" opacity="0">' + appear(t0) + anim('y', p.cy - 20, end.cy - 20, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</rect>';
       tp.fresh.forEach(function (ci) { delays[ci] = t0 + dur * (tp.path.indexOf(ci) + 1) / steps + 0.05; });
@@ -183,10 +183,10 @@ function fxPlan(fx) {
     });
   } else if (fx.kind === 'radar') {
     for (i = 0; i < 3; i++) {
-      svg += '<circle class="radar-ring" cx="' + p.cx + '" cy="' + p.cy + '" r="10" opacity="0">' + appear(i * 0.25) + anim('r', 10, 230, i * 0.25, 0.8) + anim('opacity', 0.9, 0, i * 0.25, 0.8) + '</circle>';
+      svg += '<circle class="radar-ring" cx="' + p.cx + '" cy="' + p.cy + '" r="10" opacity="0">' + appear(i * 0.35) + anim('r', 10, 230, i * 0.35, 1.1) + anim('opacity', 0.9, 0, i * 0.35, 1.1) + '</circle>';
     }
-    svg += '<line class="radar-arm" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + (p.cx + 170) + '" y2="' + p.cy + '" opacity="0">' + appear(0) + '<animateTransform attributeName="transform" type="rotate" from="0 ' + p.cx + ' ' + p.cy + '" to="360 ' + p.cx + ' ' + p.cy + '" begin="0s" dur="0.9s" fill="freeze"/>' + anim('opacity', 0.9, 0, 0.6, 0.35) + '</line>';
-    fx.cells.forEach(function (ci) { delays[ci] = 0.9; });
+    svg += '<line class="radar-arm" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + (p.cx + 170) + '" y2="' + p.cy + '" opacity="0">' + appear(0) + '<animateTransform attributeName="transform" type="rotate" from="0 ' + p.cx + ' ' + p.cy + '" to="360 ' + p.cx + ' ' + p.cy + '" begin="0s" dur="1.3s" fill="freeze"/>' + anim('opacity', 0.9, 0, 0.9, 0.4) + '</line>';
+    fx.cells.forEach(function (ci) { delays[ci] = 1.3; });
   }
   return { svg: svg ? '<g class="fx" pointer-events="none">' + svg + '</g>' : '', delays: delays };
 }
