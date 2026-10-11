@@ -9,13 +9,14 @@
 //   PlatformWalletSync.onStatus(fn)
 //   PlatformWalletSync.start() / stop()   — вызываются сами по входу и выходу из аккаунта
 //   PlatformWalletSync.call(op, args)     → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server')
-//   PlatformWalletSync.blocked()          → true, если игра, которая пока считает аконы в браузере (покер, «Мины»), сейчас недоступна
+//   PlatformWalletSync.blocked(game)      → true, если игра сейчас недоступна: пока ждём сервер, а при серверном балансе — игры, которые пока считают аконы в браузере (покер)
 (function (root) {
   var W = root.PlatformWallet, Cloud = root.PlatformCloud, Store = root.PlatformStorage;
   var QKEY = 'platform:wallet-queue', KKEY = 'platform:wallet-server';
   var CALL_MS = 20000, CONNECT_MS = 15000;
   var status = 'local', fns = [], ws = null, uid = null, running = false, flushing = false, pend = {}, seq = 0, retry = 0, retryTimer = null, openTimer = null, lastState = null;
   var queue = [];
+  var SERVER_GAMES = ['mines'];              // игры, которые уже умеют работать на серверном балансе
 
   function setStatus(s) { if (status === s) return; status = s; fns.forEach(function (fn) { try { fn(s); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
   function store(k, d) { try { return Store ? Store.get(k, d) : d; } catch (e) { return d; } }
@@ -132,8 +133,8 @@
     status: function () { return status; },
     onStatus: function (fn) { fns.push(fn); },
     start: start, stop: stop,
-    // «Покер» и «Мины» пока считают аконы в браузере, поэтому при серверном балансе (и пока он неизвестен) недоступны
-    blocked: function () { return status !== 'local'; },
+    // Игры, которые пока считают аконы в браузере (покер), при серверном балансе (и пока он неизвестен) недоступны; «Мины» работают на сервере и ждут только ответа
+    blocked: function (game) { if (status === 'server') return SERVER_GAMES.indexOf(game) < 0; return status !== 'local'; },
     call: function (op, args) {
       if (status !== 'server') return Promise.reject(fail('offline'));
       return rawCall(Object.assign({ op: op }, args || {})).then(function (r) { W.applyServer(r.state); return r; });

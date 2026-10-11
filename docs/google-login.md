@@ -58,6 +58,9 @@ service cloud.firestore {
     match /holds/{id} {
       allow read, write: if false;
     }
+    match /rounds/{uid} {
+      allow read, write: if false;      // раунд «Мин» с расположением мин: только сервер
+    }
 
     // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md
     match /rooms/{code} {
