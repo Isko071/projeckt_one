@@ -14,23 +14,19 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .page { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 24px; width: 100%; max-width: 480px; margin: 0 auto; }
 .o-head { display: flex; align-items: center; gap: 10px; }
 .o-head h2 { margin: 0; font-size: 20px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.o-head .bal { height: 38px; padding: 0 10px 0 8px; gap: 6px; }
-.o-head .bal b { font-size: 15px; }
 .balrow { display: flex; }
 
 /* Баланс */
-.bal { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px 0 10px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bal b { font-size: 16px; }
-.coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, oklch(0.92 0.14 95), oklch(0.74 0.16 80)); box-shadow: inset 0 0 0 2px oklch(0.62 0.14 75); }
+.bal { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 7px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bal b { font-size: 14px; }
+.coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, oklch(0.92 0.14 95), oklch(0.74 0.16 80)); box-shadow: inset 0 0 0 1.5px oklch(0.62 0.14 75); }
 .bal.up { border-color: var(--accent); }
-.bal.up b { animation: balup 1.2s ease; }
+.bal.up b { color: var(--accent); }
 .bal.down { border-color: var(--danger); }
-.bal.down b { color: var(--danger); animation: baldown 1.2s ease; }
-.delta { position: absolute; right: 10px; top: 100%; margin-top: 2px; font-style: normal; font-weight: 800; font-size: 14px; pointer-events: none; animation: delta 1.8s ease both; z-index: 2; }
+.bal.down b { color: var(--danger); }
+.delta { position: absolute; right: 8px; top: 100%; margin-top: 2px; font-style: normal; font-weight: 800; font-size: 13px; pointer-events: none; animation: delta 2s ease .7s both; z-index: 2; }
 .bal.up .delta { color: var(--accent); }
 .bal.down .delta { color: var(--danger); }
-@keyframes balup { 40% { transform: scale(1.25); color: var(--accent); } }
-@keyframes baldown { 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 @keyframes delta { 0% { transform: translateY(-6px); opacity: 0; } 20% { opacity: 1; } 70% { opacity: 1; } 100% { transform: translateY(10px); opacity: 0; } }
 
 /* Кнопки */

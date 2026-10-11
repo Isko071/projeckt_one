@@ -6,7 +6,7 @@ var M = window.Mines, W = window.PlatformWallet;
 var tr = function (key, params) { return window.I18n.t('games.mines.' + key, params); };
 var appEl = document.getElementById('app');
 
-var app = { screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, fresh: false };
+var app = { balShown: -1, balTimer: 0, screen: 'start', count: loadCount(), rules: false, confirm: false, round: null, rw: null, last: -1, fresh: false };
 
 function loadCount() { return M.clampMines(window.PlatformStorage.get(MINES_KEY, 3)); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -28,10 +28,25 @@ var MINE_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="
 var GEM_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 4h16l5 8-13 16L3 12z" class="gm-body"/><path d="M3 12h26M11 4l-3 8 8 16 8-16-3-8" class="gm-edge"/></svg>';
 
 // Плашка с балансом; после раунда рядом всплывает изменение (+награда или −штраф)
+// Баланс на плашке меняется постепенно, а не скачком: после раунда число плавно доезжает до нового значения
+function balanceNow() { return app.balTimer ? app.balShown : W.getBalance(); }
+function animateBalance(from, to) {
+  if (app.balTimer) cancelAnimationFrame(app.balTimer);
+  var delay = 700, dur = 1400, t0 = performance.now();
+  app.balShown = from;
+  function step(now) {
+    var k = Math.min(1, Math.max(0, (now - t0 - delay) / dur)), e = 1 - Math.pow(1 - k, 3);
+    app.balShown = Math.round(from + (to - from) * e);
+    var els = appEl.querySelectorAll('.bal b');
+    for (var i = 0; i < els.length; i++) els[i].textContent = fmt(app.balShown);
+    if (k < 1) app.balTimer = requestAnimationFrame(step); else app.balTimer = 0;
+  }
+  app.balTimer = requestAnimationFrame(step);
+}
 function balanceHtml() {
-  var b = W.getBalance(), rw = app.fresh && app.rw ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
+  var b = balanceNow(), rw = app.fresh && app.rw ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
   var delta = rw ? (rw.granted > 0 ? '+' + fmt(rw.granted) : (rw.lost > 0 ? '−' + fmt(rw.lost) : '')) : '';
-  return '<div class="bal' + cls + '" role="status" aria-label="' + esc(tr('balance', { n: fmt(b), unit: unit(b) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
+  return '<div class="bal' + cls + '" role="status" aria-label="' + esc(tr('balance', { n: fmt(W.getBalance()), unit: unit(W.getBalance()) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
     (delta ? '<i class="delta" aria-hidden="true">' + delta + '</i>' : '') + '</div>';
 }
 
@@ -62,8 +77,10 @@ function startRound() {
 }
 // Раунд закончен: награда без дневного предела; мина списывает штраф (700 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
 function finish(v) {
+  var before = W.getBalance();
   if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
   else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
+  animateBalance(before, W.getBalance());
 }
 function canPlay(mines) { return W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
 function act(action) {
