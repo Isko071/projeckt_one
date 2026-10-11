@@ -60,7 +60,7 @@ var GRID_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/>' +
   '<rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>';
 function catalogLinkHtml(cls) {
-  return '<a class="' + (cls || 'icon-btn') + '" href="' + CATALOG_URL + '" data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
+  return '<a class="' + (cls || 'icon-btn') + '" href="' + CATALOG_URL + '" data-leave data-key="catalog" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>';
 }
 // Шапка экранов выбора, настройки и ожидания: слева назад или выход, посередине название, справа переключатель темы (как в «Ятзи»)
 function headHtml(act, title, label) {

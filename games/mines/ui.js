@@ -44,7 +44,7 @@ function startHtml() {
     return '<button class="chipbtn" data-act="count" data-n="' + n + '" aria-pressed="' + (app.count === n) + '">' + n + '</button>';
   }).join('');
   return '<div class="start"><div class="brand-row"><div class="brand"><div class="logo-mines">' + LOGO + '</div><h1>' + esc(window.I18n.t('games.mines.title')) + '</h1></div>' +
-    '<div class="top-actions"><a class="theme-btn" href="' + CATALOG_URL + '" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>' + themeButtonHtml() + '</div></div>' +
+    '<div class="top-actions"><a class="theme-btn" href="' + CATALOG_URL + '" data-leave aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>' + themeButtonHtml() + '</div></div>' +
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
     '<div class="balrow">' + balanceHtml() + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.count')) + '</div>' +
