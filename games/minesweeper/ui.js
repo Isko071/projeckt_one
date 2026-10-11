@@ -95,6 +95,12 @@ function applyResult(res, wasReady) {
   }
 }
 
+// Баланс игрока в шапке; после победы число меняется, когда открылось окно итога (а не раньше)
+function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function balanceChipHtml() {
+  var W = window.PlatformWallet, now = W.getBalance(), seen = W.shownBalance();
+  return '<div class="bal" data-key="bal" role="status" aria-label="' + esc(tr('balance', { n: fmtNum(now), unit: window.I18n.plural(now, 'wallet.unit') })) + '"><span class="coin" aria-hidden="true"></span><b data-bal>' + fmtNum(seen) + '</b></div>';
+}
 function finish() {
   var token = gameToken, won = game.status === 'won', reduced = prefersReducedMotion();
   app.face = won ? 'won' : 'lost';
@@ -102,6 +108,7 @@ function finish() {
     var rr = MS.recordResult(app.bests, game.level, app.elapsed);
     app.bests = rr.bests;
     window.PlatformStorage.set(BEST_KEY, app.bests);
+    window.PlatformWallet.holdShown(1000);       // окно победы открывается через 0,7 с: число на плашке меняется после него
     var rw = window.PlatformWallet.earn('minesweeper', window.PlatformWallet.CONFIG.rewards.minesweeper[game.level], undefined, game.level === 'expert', game.level);   // награда эксперта без дневного предела; уровень нужен серверу, чтобы выдать награду по своей таблице
     app.result = { won: true, time: app.elapsed, isRecord: rr.isRecord, best: rr.best, granted: rw.granted };
   } else {
@@ -203,7 +210,7 @@ function gameHtml() {
   var over2 = game.status === 'ready' || game.status === 'playing';
   return '<div class="topbar"><div class="top-actions">' + catalogButtonHtml(over2 && game.status === 'playing' ? 'exit' : 'exit') + '</div>' +
       '<div class="game-title">' + esc(tr('level.name', { name: tr('level.' + game.level), c: lv.cols, r: lv.rows })) + '</div>' +
-      '<div class="top-actions"><button class="theme-btn" data-act="rules" data-key="rules" aria-label="' + esc(tr('rules')) + '">?</button>' + themeButtonHtml() + '</div></div>' +
+      '<div class="top-actions">' + balanceChipHtml() + '<button class="theme-btn" data-act="rules" data-key="rules" aria-label="' + esc(tr('rules')) + '">?</button>' + themeButtonHtml() + '</div></div>' +
     '<div class="panel"><div class="hud" aria-label="' + esc(tr('hud.mines', { n: left })) + '"><span aria-hidden="true">✸</span><b>' + left + '</b></div>' +
       '<button class="face" data-act="restart" data-key="face" aria-label="' + esc(tr('face.restart')) + '">' + FACES[app.face] + '</button>' +
       '<div class="hud right"><b data-timer>' + MS.formatTime(secondsNow()) + '</b></div></div>' +
@@ -394,5 +401,6 @@ appEl.addEventListener('dblclick', function (e) {
 
 window.addEventListener('resize', function () { if (app.screen === 'game') render(); });
 if (window.PlatformTheme.onChange) window.PlatformTheme.onChange(render);
+window.PlatformWallet.onShown(function (v) { var els = appEl.querySelectorAll('.bal [data-bal]'); for (var i = 0; i < els.length; i++) els[i].textContent = fmtNum(v); });
 
 render();
