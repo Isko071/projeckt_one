@@ -7,6 +7,7 @@ const { MemStore, decodeFields } = require('./memstore');
 const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede'];
 const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship'];
 const POKER = ['poker', 'poker-simple'];
+const STAKE_GAMES = ['yahtzee', 'battleship'];     // в каких играх за столом бывает ставка
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
 
@@ -14,7 +15,8 @@ class RoomManager {
   constructor(opts) {
     this.engine = opts.engine;
     this.now = opts.now || Date.now;
-    this.cfg = Object.assign({ tickMs: 250, maxRooms: 300, graceMs: 45000, emptyMs: 600000, closedKeepMs: 5000, engineOptions: {} }, opts.config || {});
+    this.wallet = opts.wallet || null;     // серверный кошелёк (server/wallet-service.js); без него ставки за столами выключены
+    this.cfg = Object.assign({ tickMs: 250, maxRooms: 300, graceMs: 45000, emptyMs: 600000, closedKeepMs: 5000, minStake: 25, maxStake: 100000, strayMs: 10000, engineOptions: {} }, opts.config || {});
     this.rooms = new Map();           // код → { game, host, subs: Set, fields, ticking, again, emptySince, closedAt }
     this.conns = new Set();
     this.graces = new Map();          // uid + код → таймер выхода после обрыва связи
@@ -60,7 +62,7 @@ class RoomManager {
   onDoc(code, fields) {
     const room = this.rooms.get(code);
     const doc = decodeFields(fields);
-    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc: this.docFor(doc, c.uid) })); }
+    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc: this.docFor(doc, c.uid) })); if (room.stake) this.watchStake(code, room); }
     else this.pendingDoc = { code, doc };            // документ пришёл раньше, чем комната записана (при создании)
   }
   // Скрытые карты покера: поле `hole` (карты всех игроков) никому не уходит, каждому клиенту кладутся только его карты (`mine`)
@@ -86,7 +88,7 @@ class RoomManager {
     this.rooms.forEach((room, code) => {
       const d = room.fields;
       if (!d || room.game !== game || d.status !== 'lobby' || d.private === true || d.players >= d.size) return;
-      out.push({ code, size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, mode: d.mode || '', game, private: false });
+      out.push({ code, size: d.size, players: d.players, hostName: d.hostName || '', bots: d.fillBots === true, mode: d.mode || '', game, private: false, stake: d.stake || 0 });
     });
     return out.slice(0, 30);
   }
@@ -95,12 +97,24 @@ class RoomManager {
     if (GAMES.indexOf(game) < 0) throw fail('bad-game');
     if (this.rooms.size >= this.cfg.maxRooms) throw fail('busy');
     o = o || {};
+    let stake = 0;
+    if (o.stake !== undefined && o.stake !== null && Number(o.stake) !== 0) {
+      stake = Math.floor(Number(o.stake));
+      if (STAKE_GAMES.indexOf(game) < 0) throw fail('no-stakes');
+      if (!this.wallet) throw fail('stakes-off');
+      if (!(stake >= this.cfg.minStake && stake <= this.cfg.maxStake)) throw fail('bad-stake');
+    }
     this.pendingDoc = null;
     const res = await this.apis[game].createRoom({
+      stake: stake,
       size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
       owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: o.chips }
     });
-    const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0 };
+    const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0, stake: stake, holds: new Map(), settled: false, wasPlaying: false };
+    if (stake) {
+      const h = await this.takeStake(room, res.code, conn.uid);
+      if (!h.ok) { this.store.drop(res.code); throw fail(h.error || 'no-funds'); }
+    }
     this.rooms.set(res.code, room);
     this.counters.created[game]++;
     this.counters.peakRooms = Math.max(this.counters.peakRooms, this.rooms.size);
@@ -123,6 +137,7 @@ class RoomManager {
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
       hello = hello || {};
+      if (room.stake) { const h = await this.takeStake(room, code, conn.uid); if (!h.ok) throw fail(h.error || 'no-funds'); }
       this.store.addAction(code, conn.uid, JSON.stringify({ type: 'hello', name: hello.name, avatar: hello.avatar, chips: hello.chips }), this.now());
       this.counters.joins++;
       this.event('join', { game, code, uid: conn.uid, name: String(hello.name || '').slice(0, 20) });
@@ -178,6 +193,81 @@ class RoomManager {
     if (room.fields) conn.send({ t: 'doc', code, doc: this.docFor(room.fields, conn.uid) });
   }
 
+  // ---------- Ставки за столом ----------
+  // Ставка берётся залогом при входе за стол (и создателем при создании) и до конца партии лежит на сервере; по итогу победитель забирает банк.
+  pushWallet(uid, state) { this.conns.forEach((c) => { if (c.uid === uid) c.send({ t: 'wallet', state }); }); }
+  queueStake(room, fn) {
+    room.job = (room.job || Promise.resolve()).then(fn).catch((e) => { this.counters.errors++; this.event('error', { game: room.game, info: 'stake:' + String((e && e.code) || (e && e.message) || 'error').slice(0, 40) }); });
+    return room.job;
+  }
+  async takeStake(room, code, uid) {
+    try {
+      const r = await this.wallet.hold(uid, code, room.stake);
+      if (!r.ok) return { ok: false, error: r.error || 'no-funds' };
+      room.holds.set(uid, { amount: room.stake, at: this.now(), seen: false });
+      this.event('stake', { game: room.game, code, uid, info: '-' + room.stake });
+      this.pushWallet(uid, await this.wallet.load(uid));
+      return { ok: true };
+    } catch (e) { return { ok: false, error: (e && e.code) || 'ledger' }; }
+  }
+  async payStake(room, code, uid, payout, why) {
+    const h = room.holds.get(uid);
+    if (!h) return;
+    room.holds.delete(uid);
+    const r = await this.wallet.release(uid, code, payout);
+    this.event('stake', { game: room.game, code, uid, info: why + (payout ? ' +' + payout : '') });
+    if (r.ok) this.pushWallet(uid, await this.wallet.load(uid));
+  }
+  refundAll(code, room) {
+    if (!room.holds.size) return;
+    const list = Array.from(room.holds.entries());
+    this.queueStake(room, async () => { for (const [uid, h] of list) await this.payStake(room, code, uid, h.amount, 'refund'); });
+  }
+  // Следим за документом стола: конец партии, новая партия за тем же столом, уход из комнаты ожидания, закрытие стола
+  watchStake(code, room) {
+    const d = room.fields || {}, members = this.members(room), uids = members.map((m) => m.uid);
+    room.holds.forEach((h, uid) => { if (uids.indexOf(uid) >= 0) h.seen = true; });
+    let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
+    if (d.status === 'closed') { if (!room.settled) this.refundAll(code, room); return; }
+    if (d.status === 'playing' && st && st.gameOver && !room.settled) { room.settled = true; this.queueStake(room, () => this.settleStake(code, room, st, members)); return; }
+    if (d.status === 'lobby') {
+      if (room.settled) { room.settled = false; this.queueStake(room, () => this.restake(code, room, uids)); return; }
+      const gone = Array.from(room.holds.entries()).filter(([uid, h]) => h.seen && uids.indexOf(uid) < 0);
+      if (gone.length) this.queueStake(room, async () => { for (const [uid, h] of gone) await this.payStake(room, code, uid, h.amount, 'left'); });
+    }
+  }
+  // Итоги: «Морской бой» — победитель забирает банк; «Ятзи» — банк делят победители среди тех, кто остался за столом (вышедший ставку теряет)
+  async settleStake(code, room, st, members) {
+    const holders = Array.from(room.holds.keys()), pot = Array.from(room.holds.values()).reduce((a, h) => a + h.amount, 0);
+    let winners = [];
+    if (room.game === 'battleship') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);
+    else if (room.game === 'yahtzee') {
+      const rows = this.engine.YahtzeeTable.standings(JSON.parse(JSON.stringify(st))).filter((r) => r.active);
+      const max = Math.max.apply(null, rows.map((r) => r.total));
+      winners = rows.filter((r) => r.total === max).map((r) => (members.filter((m) => m.seat === r.seat)[0] || {}).uid);
+    }
+    winners = winners.filter((u) => u && room.holds.has(u));
+    if (!winners.length) { for (const uid of holders) await this.payStake(room, code, uid, room.holds.get(uid).amount, 'refund'); return; }
+    const share = Math.floor(pot / winners.length), rest = pot - share * winners.length;
+    for (const uid of holders) if (winners.indexOf(uid) < 0) await this.payStake(room, code, uid, 0, 'lost');     // проигравшие первыми: при сбое посреди расчёта аконы не появятся из воздуха
+    for (let i = 0; i < winners.length; i++) await this.payStake(room, code, winners[i], share + (i === 0 ? rest : 0), 'won');
+  }
+  // Новая партия за тем же столом: у всех, кто остался, снова берётся ставка; кому не хватает — тот выходит из-за стола
+  async restake(code, room, uids) {
+    for (const uid of uids) {
+      if (room.holds.has(uid)) continue;
+      const h = await this.takeStake(room, code, uid);
+      if (!h.ok) this.store.addAction(code, uid, JSON.stringify({ type: 'leave' }), this.now());
+    }
+    this.kick(code);
+  }
+  // Залог без места за столом (вход не удался) возвращается
+  sweepStake(code, room) {
+    const uids = this.members(room).map((m) => m.uid), t = this.now();
+    const stray = Array.from(room.holds.entries()).filter(([uid, h]) => !h.seen && uids.indexOf(uid) < 0 && t - h.at >= this.cfg.strayMs);
+    if (stray.length) this.queueStake(room, async () => { for (const [uid, h] of stray) await this.payStake(room, code, uid, h.amount, 'refund'); });
+  }
+
   // ---------- Ход времени ----------
   kick(code) { const room = this.rooms.get(code); if (room) room.again = true, setImmediate(() => this.tickRoom(code)); }
   async tickRoom(code) {
@@ -200,12 +290,14 @@ class RoomManager {
       if (room.host.isEmpty()) { this.remove(code); return; }
       if (!room.subs.size) { if (!room.emptySince) room.emptySince = t; if (t - room.emptySince >= this.cfg.emptyMs) this.remove(code); }
       else room.emptySince = 0;
+      if (room.stake) this.sweepStake(code, room);
       this.tickRoom(code);
     });
   }
   remove(code) {
     const room = this.rooms.get(code);
     if (!room) return;
+    if (room.stake) this.refundAll(code, room);
     this.event('closed', { game: room.game, code });
     room.subs.forEach((c) => { c.send({ t: 'gone', code }); c.rooms && c.rooms.delete(code); });
     this.rooms.delete(code); this.store.drop(code);
