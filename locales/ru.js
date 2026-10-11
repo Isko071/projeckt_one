@@ -218,6 +218,7 @@ root.LOCALES.ru = {
   'wallet.log.title': 'Последние операции',
   'wallet.log.empty': 'Операций пока нет.',
   'wallet.src.daily': 'Бонус дня',
+  'loader.text': 'Загрузка',
   'leave.title': 'Перейти в каталог?',
   'leave.text': 'Вы вернётесь в главное меню.',
   'leave.stay': 'Остаться',
