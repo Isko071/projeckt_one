@@ -43,7 +43,7 @@ test('покер: до конца раздачи баланс сходится �
   r = await playHand(wallet, 'A', r);
   const st = r.result.poker.st, me = st.seats[0];
   assert.strictEqual(st.phase, 'settled');
-  assert.strictEqual(r.state.balance, 5000 + me.net, 'баланс = старт + чистый результат');
+  assert.strictEqual(r.state.balance, 5000 + Math.min(me.net, 2500), 'баланс = старт + чистый результат (выигрыш не больше половины баланса на начало дня)');
   // сумма фишек за столом не меняется
   assert.strictEqual(st.seats.reduce((a, s) => a + s.net, 0), 0);
 });
@@ -87,6 +87,7 @@ test('покер: следующая раздача за тем же столо�
   r = await playHand(wallet, 'A', r);
   const after = r.state.balance;
   r = await op(wallet, 'A', { op: 'pokerNext' });
+  if (!r.result.poker) { assert.strictEqual(r.result.broke, true, 'проигрался до нуля: стол закрыт'); return; }
   assert.strictEqual(r.result.poker.st.round, 2);
   assert.ok(r.state.balance < after || r.result.poker.free, 'ставка новой раздачи списана');
   const left = await op(wallet, 'A', { op: 'pokerLeave' });
