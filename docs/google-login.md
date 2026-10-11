@@ -50,6 +50,15 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() <= 20;
     }
 
+    // Серверный кошелёк (docs/server-wallet.md): свой кошелёк игрок читает, пишет только сервер (ключ сервисного аккаунта обходит правила)
+    match /wallets/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /holds/{id} {
+      allow read, write: if false;
+    }
+
     // Онлайн-столы (блэкджек и другие игры), подробности: online-tables.md
     match /rooms/{code} {
       allow read: if request.auth != null;

@@ -367,7 +367,7 @@ function settleReward() {
   var totals = game.players.map(totalScore);
   var won = app.mode === 'cpu' && totals[0] > totals[1];
   var base = won ? window.PlatformWallet.CONFIG.rewards.yahtzee[app.level] : 0;
-  var res = base ? window.PlatformWallet.earn('yahtzee', base) : { granted: 0, capped: false };
+  var res = base ? window.PlatformWallet.earn('yahtzee', base, undefined, false, app.level) : { granted: 0, capped: false };
   app.reward = { won: won, granted: res.granted, capped: res.capped };
 }
 

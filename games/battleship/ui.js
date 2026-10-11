@@ -423,6 +423,8 @@ function battleHtml(v) {
 // ===== Окна =====
 function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 function rewardHtml() {
+  var sk = app.ctrl && app.ctrl.stake && app.ctrl.stake();
+  if (sk) return '<p class="reward' + (sk > 0 ? '' : ' lost') + '" role="status">' + esc(tr(sk > 0 ? 'o.stake.won' : 'o.stake.lost', { n: fmt(Math.abs(sk)) })) + '</p>';
   var r = app.ctrl && app.ctrl.reward && app.ctrl.reward();
   if (!r) return '';
   var p = { n: fmt(r.granted), unit: window.I18n.plural(r.granted, 'wallet.unit') };

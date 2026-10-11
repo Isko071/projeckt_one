@@ -1,18 +1,24 @@
 // WebSocket-сервер столов. Протокол (JSON):
 //  клиент → сервер: { t:'auth', token } первым сообщением; затем { id, t:'list'|'create'|'join'|'act'|'leave', game, code, ... }
-//  сервер → клиент: { t:'ready' }, { id, ok:true, ... } / { id, ok:false, error }, { t:'doc', code, doc }, { t:'gone', code }
+//  кошелёк (если включён серверный баланс): { id, t:'wallet', op, ... } → { id, ok:true, state, result }; сервер сам присылает { t:'wallet', state } после ставок и выплат
+//  сервер → клиент: { t:'ready', uid, wallet }, { id, ok:true, ... } / { id, ok:false, error }, { t:'doc', code, doc }, { t:'gone', code }
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { loadEngine } = require('./load-engine');
 const { RoomManager } = require('./manager');
 const { makeVerifier } = require('./auth');
+const { makeLedger } = require('./ledger');
+const { WalletService } = require('./wallet-service');
 
-function startServer(o) {
+async function startServer(o) {
   o = o || {};
   const verify = o.verify || makeVerifier({ projectId: o.projectId, insecure: o.insecure });
   const origins = (o.allowedOrigins || []).filter(Boolean);
   const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxMsg = 4000, perSec = 20;
-  const manager = new RoomManager({ engine: loadEngine(), config: o.config || {} }).start();
+  const ledger = o.ledger === undefined ? makeLedger(o.env) : o.ledger;      // null — серверный баланс выключен, ставки за столами недоступны
+  const wallet = ledger ? new WalletService({ ledger, now: o.now }) : null;
+  if (wallet) await wallet.init();                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются
+  const manager = new RoomManager({ engine: loadEngine(), config: o.config || {}, wallet }).start();
   const perIp = new Map();
 
   const admins = (o.adminEmails || []).map((s) => String(s).trim().toLowerCase()).filter(Boolean);
@@ -58,7 +64,7 @@ function startServer(o) {
       if (!conn.uid) {
         if (m.t !== 'auth' || authing) return;
         authing = true;
-        try { conn.uid = (await verify(m.token)).uid; manager.conns.add(conn); manager.counters.connects++; manager.counters.peakConns = Math.max(manager.counters.peakConns, manager.conns.size); conn.send({ t: 'ready', uid: conn.uid }); }
+        try { conn.uid = (await verify(m.token)).uid; manager.conns.add(conn); manager.counters.connects++; manager.counters.peakConns = Math.max(manager.counters.peakConns, manager.conns.size); conn.send({ t: 'ready', uid: conn.uid, wallet: !!wallet }); }
         catch (e) { manager.counters.denied++; manager.event('denied', { info: 'token' }); conn.send({ t: 'denied' }); ws.close(1008, 'auth'); }
         return;
       }
@@ -68,6 +74,7 @@ function startServer(o) {
         else if (m.t === 'join') reply({ code: await manager.join(conn, m.game, m.code, m.hello) });
         else if (m.t === 'act') { manager.act(conn, m.code, m.action); reply({}); }
         else if (m.t === 'leave') { manager.leave(conn, m.code); reply({}); }
+        else if (m.t === 'wallet') { if (!wallet) throw Object.assign(new Error('wallet-off'), { code: 'wallet-off' }); const r = await wallet.act(conn.uid, m); reply({ state: r.state, result: r.result }); }
         else if (m.t === 'ping') reply({});
       } catch (e) { if (!e || !e.code || ['error', 'timeout'].indexOf(e.code) >= 0) { manager.counters.errors++; manager.event('error', { uid: conn.uid, info: String((e && e.code) || 'error') }); } err(e); }
     });
@@ -80,7 +87,7 @@ function startServer(o) {
   });
 
   return new Promise((resolve) => server.listen(o.port || 0, () => resolve({
-    port: server.address().port, manager,
+    port: server.address().port, manager, wallet,
     close: () => { manager.stop(); wss.clients.forEach((c) => c.terminate()); return new Promise((r) => server.close(r)); }
   })));
 }
@@ -94,5 +101,5 @@ if (require.main === module) {
     insecure: process.env.INSECURE_AUTH === '1',
     allowedOrigins: String(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()),
     adminEmails: String(process.env.ADMIN_EMAILS || '').split(',')
-  }).then((s) => console.log('Игротека: сервер столов слушает порт ' + s.port));
+  }).then((s) => console.log('Игротека: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)')), (e) => { console.error(e); process.exit(1); });
 }
