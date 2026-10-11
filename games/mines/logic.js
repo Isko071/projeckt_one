@@ -1,5 +1,5 @@
 // Чистая логика игры «Мины»: поле 5×5 (25 клеток), игрок выбирает число мин от 1 до 24 и открывает клетки по одной.
-// Каждая безопасная клетка приносит аконы: за клетку 10 × число мин (1 мина — 10, 2 — 20, 3 — 30, 4 — 40 и так дальше).
+// Каждая безопасная клетка приносит аконы: при 1 мине 50, и на каждую следующую мину на 20 больше (2 — 70, 3 — 90, 4 — 110 … 24 — 510).
 // Попал на мину — накопленное за раунд сгорает. Забрать накопленное можно в любой момент после первой клетки;
 // если открыты все безопасные клетки, накопленное забирается само.
 // Без window и document: тестируется в node. Мины раскладываются сразу при начале раунда (rng — функция 0..1).
@@ -10,13 +10,13 @@
 //   Mines.cellReward(mines), Mines.safeCells(mines), Mines.maxReward(mines)
 //   status: 'playing' | 'lost' | 'cashed' | 'cleared';  payout — сколько аконов раунд принёс (0 при проигрыше)
 (function (root) {
-  var CONFIG = { size: 5, cells: 25, minMines: 1, maxMines: 24, perMine: 10 };
+  var CONFIG = { size: 5, cells: 25, minMines: 1, maxMines: 24, baseReward: 50, rewardStep: 20 };
 
   function bad(error) { return { ok: false, error: error }; }
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function clampMines(n) { n = Math.floor(Number(n)); return isFinite(n) ? Math.max(CONFIG.minMines, Math.min(CONFIG.maxMines, n)) : CONFIG.minMines; }
 
-  function cellReward(mines) { return CONFIG.perMine * clampMines(mines); }
+  function cellReward(mines) { return CONFIG.baseReward + CONFIG.rewardStep * (clampMines(mines) - 1); }
   function safeCells(mines) { return CONFIG.cells - clampMines(mines); }
   function maxReward(mines) { return cellReward(mines) * safeCells(mines); }
 

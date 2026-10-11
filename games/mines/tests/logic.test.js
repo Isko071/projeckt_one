@@ -14,10 +14,10 @@ const minesOf = (st) => st.layout.reduce((n, m) => n + (m ? 1 : 0), 0);
 const firstSafe = (st) => st.layout.findIndex((m, i) => !m && !st.opened[i]);
 const firstMine = (st) => st.layout.findIndex((m) => m);
 
-test('награда за клетку: 10 × число мин; число мин ограничено 1…24', () => {
-  assert.deepEqual([1, 2, 3, 4, 5, 12, 24].map(M.cellReward), [10, 20, 30, 40, 50, 120, 240]);
-  assert.equal(M.cellReward(0), 10); assert.equal(M.cellReward(99), 240); assert.equal(M.cellReward('x'), 10);
-  assert.equal(M.safeCells(5), 20); assert.equal(M.maxReward(1), 240); assert.equal(M.maxReward(24), 240); assert.equal(M.maxReward(12), 1560);
+test('награда за клетку: 50 при одной мине и +20 за каждую следующую; число мин ограничено 1…24', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 12, 24].map(M.cellReward), [50, 70, 90, 110, 130, 270, 510]);
+  assert.equal(M.cellReward(0), 50); assert.equal(M.cellReward(99), 510); assert.equal(M.cellReward('x'), 50);
+  assert.equal(M.safeCells(5), 20); assert.equal(M.maxReward(1), 1200); assert.equal(M.maxReward(24), 510); assert.equal(M.maxReward(12), 3510);
 });
 
 test('раунд: ровно выбранное число мин на поле 25 клеток, у разных зёрен разные места', () => {
@@ -30,11 +30,11 @@ test('безопасная клетка приносит аконы, раунд 
   assert.equal(M.reduce(st, { type: 'cashout' }).error, 'nothing-to-take');
   let r = M.reduce(st, { type: 'open', index: firstSafe(st) });
   assert.equal(r.ok, true); st = r.state;
-  assert.equal(st.earned, 30); assert.equal(st.openedCount, 1); assert.equal(st.status, 'playing');
+  assert.equal(st.earned, 90); assert.equal(st.openedCount, 1); assert.equal(st.status, 'playing');
   r = M.reduce(st, { type: 'open', index: firstSafe(st) }); st = r.state;
-  assert.equal(st.earned, 60);
+  assert.equal(st.earned, 180);
   r = M.reduce(st, { type: 'cashout' });
-  assert.equal(r.ok, true); assert.equal(r.state.status, 'cashed'); assert.equal(r.state.payout, 60);
+  assert.equal(r.ok, true); assert.equal(r.state.status, 'cashed'); assert.equal(r.state.payout, 180);
   assert.equal(M.reduce(r.state, { type: 'open', index: 0 }).error, 'round-over');
 });
 
@@ -43,17 +43,17 @@ test('мина: накопленное сгорает, раунд проигра
   st = M.reduce(st, { type: 'open', index: firstSafe(st) }).state;
   const r = M.reduce(st, { type: 'open', index: firstMine(st) });
   assert.equal(r.state.status, 'lost'); assert.equal(r.state.payout, 0); assert.equal(r.state.hit, firstMine(st));
-  assert.deepEqual(plain(r.events), [{ type: 'mine', index: firstMine(st), lost: 40 }]);
+  assert.deepEqual(plain(r.events), [{ type: 'mine', index: firstMine(st), lost: 110 }]);
   assert.equal(M.view(r.state).layout.length, 25);
 });
 
 test('все безопасные клетки открыты: раунд заканчивается сам, накопленное засчитано', () => {
   let st = M.init(24, seeded(5));
   const r = M.reduce(st, { type: 'open', index: firstSafe(st) });
-  assert.equal(r.state.status, 'cleared'); assert.equal(r.state.payout, 240);
+  assert.equal(r.state.status, 'cleared'); assert.equal(r.state.payout, 510);
   let big = M.init(1, seeded(9)), n = 0;
   while (big.status === 'playing') { big = M.reduce(big, { type: 'open', index: firstSafe(big) }).state; n++; }
-  assert.equal(n, 24); assert.equal(big.status, 'cleared'); assert.equal(big.payout, 240);
+  assert.equal(n, 24); assert.equal(big.status, 'cleared'); assert.equal(big.payout, 1200);
 });
 
 test('проверки: повторная клетка, выход за поле, неизвестное действие; вид не выдаёт мины до конца', () => {
@@ -63,5 +63,5 @@ test('проверки: повторная клетка, выход за пол�
   [-1, 25, 1.5, 'a'].forEach((x) => assert.equal(M.reduce(st, { type: 'open', index: x }).error, 'bounds'));
   assert.equal(M.reduce(st, { type: 'dig' }).error, 'bad-action'); assert.equal(M.reduce(st, null).error, 'bad-action');
   const v = M.view(st);
-  assert.equal(v.layout, null); assert.equal(v.next, 30); assert.equal(v.left, 21);
+  assert.equal(v.layout, null); assert.equal(v.next, 90); assert.equal(v.left, 21);
 });
