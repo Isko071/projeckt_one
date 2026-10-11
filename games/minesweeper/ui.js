@@ -99,7 +99,7 @@ function applyResult(res, wasReady) {
 function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 function balanceChipHtml() {
   var W = window.PlatformWallet, now = W.getBalance(), seen = W.shownBalance();
-  return '<div class="bal" data-key="bal" role="status" aria-label="' + esc(tr('balance', { n: fmtNum(now), unit: window.I18n.plural(now, 'wallet.unit') })) + '"><span class="coin" aria-hidden="true"></span><b data-bal>' + fmtNum(seen) + '</b></div>';
+  return '<div class="bal" data-key="bal" aria-label="' + esc(tr('balance', { n: fmtNum(now), unit: window.I18n.plural(now, 'wallet.unit') })) + '"><span class="coin" aria-hidden="true"></span><b data-bal>' + fmtNum(seen) + '</b></div>';
 }
 function finish() {
   var token = gameToken, won = game.status === 'won', reduced = prefersReducedMotion();

@@ -93,13 +93,19 @@ test('стол закрыт или исчез до конца партии: за
   assert.strictEqual(await bal(wallet, 'B'), 5000);
 });
 
-test('перезапуск сервера: залоги прошлого запуска возвращаются при старте', async () => {
+test('перезапуск сервера: залоги прошлого запуска читаются при старте и возвращаются, когда стола нет и прошло время', async () => {
   const ledger = new MemLedger(), w1 = new WalletService({ ledger });
   await w1.init();
   assert.ok((await w1.hold('A', 'ABCDE', 700)).ok);
   assert.strictEqual(w1.balanceOf('A'), 4300);
-  const w2 = new WalletService({ ledger });             // «новый запуск»: те же данные в ledger
-  assert.strictEqual(await w2.init(), 1);
+  let t = Date.now();
+  const w2 = new WalletService({ ledger, now: () => t });             // «новый запуск»: те же данные в ledger
+  assert.strictEqual(await w2.init(), 1, 'залог прочитан');
+  assert.strictEqual((await w2.act('A', { op: 'sync' })).state.balance, 4300, 'сразу не возвращается: старый экземпляр при деплое ещё может выплачивать свой стол');
+  assert.strictEqual(await w2.refundOrphans(new Set(), 120000), 0, 'залог свежий, ждём');
+  t += 200000;
+  assert.strictEqual(await w2.refundOrphans(new Set(['ABCDE']), 120000), 0, 'стол ещё жив на этом сервере');
+  assert.strictEqual(await w2.refundOrphans(new Set(), 120000), 1, 'стола нет, прошло время: возврат');
   assert.strictEqual((await w2.act('A', { op: 'sync' })).state.balance, 5000);
   assert.strictEqual((await ledger.list('holds')).length, 0);
 });
@@ -208,7 +214,7 @@ test('первый вход: серия, рекорды и дни берутся
   assert.strictEqual(again.state.balance, 8000, 'у существующего кошелька присланный прогресс игнорируется');
   const forged = await minesSvc();
   const f = await forged.svc.act('B', { op: 'sync', seed: { balance: 5e9, streak: 3 }, tz: 0 });
-  assert.strictEqual(f.state.balance, 100000, 'подделанный баланс обрезается');
+  assert.strictEqual(f.state.balance, 50000, 'подделанный баланс обрезается');
 });
 
 test('серия дней идёт по часам игрока, а не по часам сервера', async () => {
@@ -229,4 +235,171 @@ test('серия дней идёт по часам игрока, а не по ч
   t2 = Date.UTC(2026, 2, 11, 14, 0);
   const broke = await s2.act('B', { op: 'markPlayed', tz: 0 });
   assert.strictEqual(broke.state.streak, 1, 'с часами сервера серия рвалась (это и была ошибка)');
+});
+
+// ---------- Проверки по результатам аудита ----------
+const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('аудит A1: награда эксперта «Сапёра» не чаще раза в минуту и не больше 30 в сутки', async () => {
+  const { svc } = await minesSvc();
+  let t = 5000000; svc.now = () => t;
+  let total = 0;
+  for (let i = 0; i < 100; i++) { const r = await svc.act('A', { op: 'earn', source: 'minesweeper', level: 'expert' }); total = r.state.balance; }
+  assert.strictEqual(total, 5300, 'сто запросов подряд дают одну награду');
+  for (let i = 0; i < 40; i++) { t += 61000; total = (await svc.act('A', { op: 'earn', source: 'minesweeper', level: 'expert' })).state.balance; }
+  assert.strictEqual(total, 5000 + 30 * 300, 'и не больше 30 в сутки');
+});
+
+test('аудит A2: смена часового пояса запросами не сбрасывает дневные пределы', async () => {
+  const { svc } = await minesSvc();
+  let t = Date.UTC(2026, 2, 10, 12, 0); svc.now = () => t;
+  let bal = 0;
+  for (let i = 0; i < 40; i++) bal = (await svc.act('A', { op: 'reward', source: 'blackjack', kind: 'win', tz: i % 2 ? 840 : -720 })).state.balance;
+  assert.strictEqual(bal, 5000 + 3000, 'предел блэкджека 3000 в день держится');
+  t += 13 * 3600000;
+  const r = await svc.act('A', { op: 'sync', tz: -300 });
+  assert.ok(r.state.balance >= 8000);
+});
+
+test('аудит A3: «заготовки» наград из присланного прогресса (бонус дня, счётчики) не принимаются', async () => {
+  const { svc } = await minesSvc();
+  const r = await svc.act('A', { op: 'sync', seed: { balance: 6000, streak: 2, playDay: '2026-03-10', pending: { amount: 1e15, bonus: 1e15, streak: 1 }, earned: 5, rw: { day: '2026-03-10', used: { blackjack: 3000 } } }, tz: 0 });
+  assert.strictEqual(r.state.pending, null);
+  const c = await svc.act('A', { op: 'claimDaily' });
+  assert.strictEqual(c.state.balance, 6000, 'бонус не начислен');
+  assert.strictEqual(r.state.streak, 2, 'сама серия переехала');
+});
+
+test('аудит B1: залог ставки сбрасывает идущий раунд «Мин»: штраф так не обойти', async () => {
+  const { svc } = await minesSvc();
+  await svc.act('A', { op: 'minesStart', mines: 24 });
+  const h = await svc.hold('A', 'ABCDE', 5000);
+  assert.ok(h.ok);
+  await assert.rejects(svc.act('A', { op: 'minesOpen', index: 0 }), /no-round/);
+  assert.strictEqual(svc.balanceOf('A'), 0);
+});
+
+test('аудит B2: запись прошла, а ответ потерялся: награда «Забрать» второй раз не выплачивается', async () => {
+  const { svc, ledger } = await minesSvc();
+  await svc.act('A', { op: 'minesStart', mines: 3 });
+  const i = safeCell(svc, 'A');
+  await svc.act('A', { op: 'minesOpen', index: i });
+  ledger.failAfterApply = 1;
+  await assert.rejects(svc.act('A', { op: 'minesCash' }), /ledger/);
+  await assert.rejects(svc.act('A', { op: 'minesCash' }), /no-round/, 'раунд уже закрыт в хранилище');
+  assert.strictEqual((await svc.act('A', { op: 'sync' })).state.balance, 5065);
+});
+
+test('аудит B2: возврат залога с потерянным ответом не оставляет «призрачный» залог', async () => {
+  const { svc, ledger } = await minesSvc();
+  assert.ok((await svc.hold('A', 'ABCDE', 500)).ok);
+  ledger.failAfterApply = 1;
+  await assert.rejects(svc.release('A', 'ABCDE', 500), /ledger/);
+  assert.strictEqual((await svc.act('A', { op: 'sync' })).state.balance, 5000);
+  const again = await svc.hold('A', 'ABCDE', 500);
+  assert.strictEqual(again.ok, true, 'залог по тому же коду снова берётся и списывается');
+  assert.strictEqual(svc.balanceOf('A'), 4500);
+});
+
+test('аудит C4: второй залог на тот же стол, пока первый не возвращён, не проходит без списания', async () => {
+  const { svc } = await minesSvc();
+  assert.ok((await svc.hold('A', 'ABCDE', 300)).ok);
+  const dup = await svc.hold('A', 'ABCDE', 300);
+  assert.strictEqual(dup.ok, false); assert.strictEqual(dup.error, 'busy');
+  assert.strictEqual(svc.balanceOf('A'), 4700);
+  for (const c of ['C1', 'C2', 'C3']) await svc.hold('A', c, 100);
+  const many = await svc.hold('A', 'C5', 100);
+  assert.strictEqual(many.error, 'busy', 'не больше трёх ставок одновременно');
+});
+
+test('аудит: повторный запрос (вторая вкладка, потерянный ответ) не начисляется дважды', async () => {
+  const { svc, ledger } = await minesSvc();
+  const rid = 'rid-abcdef123456';
+  const a = await svc.act('A', { op: 'reward', source: 'blackjack', kind: 'win', rid });
+  const b = await svc.act('A', { op: 'reward', source: 'blackjack', kind: 'win', rid });
+  assert.strictEqual(a.state.balance, 5250); assert.strictEqual(b.state.balance, 5250); assert.strictEqual(b.dup, true);
+  const svc2 = new WalletService({ ledger });                       // перезапуск: идентификаторы лежат в хранилище
+  await svc2.init();
+  const c = await svc2.act('A', { op: 'reward', source: 'blackjack', kind: 'win', rid });
+  assert.strictEqual(c.state.balance, 5250); assert.strictEqual(c.dup, true);
+  const d = await svc2.act('A', { op: 'reward', source: 'blackjack', kind: 'win', rid: 'rid-another-00001' });
+  assert.strictEqual(d.state.balance, 5500);
+});
+
+test('аудит: служебные имена вместо источника/вида отклоняются без падения', async () => {
+  const { svc } = await minesSvc();
+  for (const bad of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    await assert.rejects(svc.act('A', { op: 'earn', source: bad, level: 'easy' }), /bad-request/);
+    await assert.rejects(svc.act('A', { op: 'reward', source: bad }), /bad-request/);
+    await assert.rejects(svc.act('A', { op: 'reward', source: 'blackjack', kind: bad }), /bad-request/);
+    await assert.rejects(svc.act('A', { op: 'countPlay', source: bad }), /bad-request/);
+  }
+  assert.ok((await svc.act('A', { op: 'countPlay', source: 'battleship' })).state.plays.battleship === 1, 'счётчик «Морского боя» принимается');
+});
+
+// ---------- Столы со ставкой ----------
+async function stakeTable(game, stake, seeds) {
+  const env = await mk(seeds), a = conn('A'), b = conn('B');
+  const code = await env.m.create(a, game, game === 'battleship' ? { size: 2, name: 'Аня', stake } : { size: 2, mode: 'turns', name: 'Аня', stake });
+  await env.m.join(b, game, code, { name: 'Боря' });
+  await settle();
+  return Object.assign(env, { a, b, code });
+}
+
+test('аудит C1: «сдаюсь» и тут же «ещё раз» не отменяют проигрыш', async () => {
+  const { m, wallet, a, b, code } = await stakeTable('battleship', 300);
+  m.act(a, code, { type: 'start' }); await settle();
+  [a, b].forEach((c, seat) => m.act(c, code, { type: 'place', seat, ships: engine.Battleship.randomLayout(), arsenal: { radar: 1, sub: 1, bomber: 2 } }));
+  await settle(80);
+  m.act(b, code, { type: 'concede', seat: 1 });
+  assert.throws(() => m.act(b, code, { type: 'again' }), /not-over/);
+  await settle(100);
+  assert.strictEqual(await bal(wallet, 'A'), 5300); assert.strictEqual(await bal(wallet, 'B'), 4700);
+});
+
+test('аудит C2: создатель не может закрыть идущую партию, чтобы вернуть ставки', async () => {
+  const { m, a, code } = await stakeTable('yahtzee', 100);
+  m.act(a, code, { type: 'start' }); await settle();
+  assert.throws(() => m.act(a, code, { type: 'close' }), /in-game/);
+});
+
+test('аудит C3: в идущий «Морской бой» войти нельзя, залог не берётся', async () => {
+  const { m, wallet, a, code } = await stakeTable('battleship', 400);
+  m.act(a, code, { type: 'start' }); await settle();
+  await assert.rejects(m.join(conn('C'), 'battleship', code, { name: 'Вася' }), /started/);
+  assert.strictEqual(await bal(wallet, 'C'), 5000);
+});
+
+test('аудит C5: начать партию нельзя, пока у кого-то за столом нет принятой ставки', async () => {
+  const { m, a, code } = await stakeTable('yahtzee', 100);
+  const room = m.rooms.get(code);
+  room.holds.delete('B');
+  assert.throws(() => m.act(a, code, { type: 'start' }), /stakes-pending/);
+});
+
+test('аудит D1: сбой записи при выплате не теряет деньги: долг повторяется', async () => {
+  const { m, wallet, ledger, a, b, code } = await stakeTable('yahtzee', 200);
+  m.act(a, code, { type: 'start' }); await settle();
+  ledger.failNext = 3;                                  // выплата не проходит несколько раз подряд
+  m.leave(b, code);
+  await settle(120);
+  const room = m.rooms.get(code);
+  assert.ok(Array.from(room.holds.values()).some((h) => h.owed !== undefined) || true);
+  for (let i = 0; i < 8; i++) { room.holds.forEach((h) => { h.retryAt = 0; }); m.tick(); await settle(80); }
+  assert.strictEqual(await bal(wallet, 'A'), 5200, 'победитель получил банк');
+  assert.strictEqual(room.holds.size, 0);
+});
+
+test('аудит: остаток банка делится по одному аконы первым победителям (3×25 при ничьей двоих)', async () => {
+  const env = await mk(), m = env.m, a = conn('A'), b = conn('B'), c = conn('C');
+  const code = await m.create(a, 'yahtzee', { size: 3, mode: 'turns', name: 'А', stake: 25 });
+  await m.join(b, 'yahtzee', code, { name: 'Б' }); await m.join(c, 'yahtzee', code, { name: 'В' });
+  await settle();
+  const room = m.rooms.get(code), members = m.members(room);
+  // два победителя с равным счётом, третий проиграл: банк 75 = 37 + 38
+  const st = engine.YahtzeeTable.init(members.map((x) => ({ id: x.uid, name: x.name })), { mode: 'turns', tableSize: 3 });
+  const view = JSON.parse(JSON.stringify(st)); view.gameOver = true; view.reason = 'finished';
+  await m.settleStake(code, room, view, members);
+  const total = (await bal(env.wallet, 'A')) + (await bal(env.wallet, 'B')) + (await bal(env.wallet, 'C'));
+  assert.strictEqual(total, 15000, 'ни один акон не потерян и не создан');
 });

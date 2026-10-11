@@ -132,7 +132,7 @@ class RoomManager {
     if (d.status === 'closed') throw fail('closed');
     const member = this.isMember(room, conn.uid);
     if (!member) {
-      if (game === 'yahtzee' && d.status !== 'lobby') throw fail('started');
+      if ((game === 'yahtzee' || game === 'battleship') && d.status !== 'lobby') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.status !== 'lobby' && d.phase !== 'settled' && d.phase !== 'waiting') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
@@ -155,9 +155,18 @@ class RoomManager {
     if (!action || ACTIONS.indexOf(action.type) < 0) throw fail('bad-action');
     const text = JSON.stringify(action);
     if (text.length > 2000) throw fail('too-big');
+    if (room.stake) this.guardStake(room, action);
     this.store.addAction(code, conn.uid, text, this.now());
     if (action.type === 'start') { this.counters.starts++; this.event('start', { game: room.game, code: String(code).toUpperCase(), uid: conn.uid, name: this.nameOf(room, conn.uid) }); }
     this.kick(code);
+  }
+
+  // Стол со ставкой: действия, которыми можно было бы увести партию мимо расчёта, принимаются только в нужный момент
+  guardStake(room, action) {
+    const status = (room.fields || {}).status;
+    if ((action.type === 'again' || action.type === 'rematch') && status !== 'lobby' && !room.settled) throw fail('not-over');      // новую партию можно предложить, только когда прошлая подведена
+    if (action.type === 'close' && status === 'playing' && !room.settled) throw fail('in-game');                                    // закрыть идущую партию нельзя (проигрыш не отменить): можно сдаться или выйти
+    if (action.type === 'start' && (room.restaking || this.members(room).some((m) => !room.holds.has(m.uid) || room.holds.get(m.uid).owed !== undefined))) throw fail('stakes-pending');   // начать можно, когда у всех за столом принята ставка
   }
 
   leave(conn, code) {
@@ -210,13 +219,20 @@ class RoomManager {
       return { ok: true };
     } catch (e) { return { ok: false, error: (e && e.code) || 'ledger' }; }
   }
+  // Выплата или возврат залога; если запись в хранилище не прошла, ставка остаётся за игроком в долгах (h.owed) и повторяется из sweepStake
   async payStake(room, code, uid, payout, why) {
     const h = room.holds.get(uid);
     if (!h) return;
-    room.holds.delete(uid);
-    const r = await this.wallet.release(uid, code, payout);
-    this.event('stake', { game: room.game, code, uid, info: why + (payout ? ' +' + payout : '') });
-    if (r.ok) this.pushWallet(uid, await this.wallet.load(uid));
+    h.owed = payout;
+    try {
+      const r = await this.wallet.release(uid, code, payout);
+      if (room.holds.get(uid) === h) room.holds.delete(uid);
+      this.event('stake', { game: room.game, code, uid, info: why + (payout ? ' +' + payout : '') });
+      if (r.ok) this.pushWallet(uid, await this.wallet.load(uid));
+    } catch (e) {
+      h.retryAt = this.now() + 5000;
+      this.counters.errors++; this.event('error', { game: room.game, code, uid, info: 'pay:' + String((e && e.code) || (e && e.message) || 'error').slice(0, 30) });
+    }
   }
   refundAll(code, room) {
     if (!room.holds.size) return;
@@ -231,14 +247,18 @@ class RoomManager {
     if (d.status === 'closed') { if (!room.settled) this.refundAll(code, room); return; }
     if (d.status === 'playing' && st && st.gameOver && !room.settled) { room.settled = true; this.queueStake(room, () => this.settleStake(code, room, st, members)); return; }
     if (d.status === 'lobby') {
-      if (room.settled) { room.settled = false; this.queueStake(room, () => this.restake(code, room, uids)); return; }
-      const gone = Array.from(room.holds.entries()).filter(([uid, h]) => h.seen && uids.indexOf(uid) < 0);
+      if (room.settled) { room.settled = false; room.restaking = true; this.queueStake(room, () => this.restake(code, room, uids)); return; }
+      const gone = Array.from(room.holds.entries()).filter(([uid, h]) => h.seen && uids.indexOf(uid) < 0 && h.owed === undefined);
       if (gone.length) this.queueStake(room, async () => { for (const [uid, h] of gone) await this.payStake(room, code, uid, h.amount, 'left'); });
     }
   }
-  // Итоги: «Морской бой» — победитель забирает банк; «Ятзи» — банк делят победители среди тех, кто остался за столом (вышедший ставку теряет)
+  // Итоги: «Морской бой» — победитель забирает банк; «Ятзи» — банк делят победители среди тех, кто остался за столом (вышедший ставку теряет).
+  // Банк только из ставок тех, кто сидел за столом; залог того, кто так и не получил место, возвращается ему
   async settleStake(code, room, st, members) {
-    const holders = Array.from(room.holds.keys()), pot = Array.from(room.holds.values()).reduce((a, h) => a + h.amount, 0);
+    const entries = Array.from(room.holds.entries());
+    for (const [uid, h] of entries) if (!h.seen) await this.payStake(room, code, uid, h.amount, 'refund');
+    const seen = entries.filter(([, h]) => h.seen).map(([uid]) => uid), pot = entries.filter(([, h]) => h.seen).reduce((a, [, h]) => a + h.amount, 0);
+    const seatOf = (u) => { const m = members.filter((x) => x.uid === u)[0]; return m ? m.seat : 99; };
     let winners = [];
     if (room.game === 'battleship') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);
     else if (room.game === 'yahtzee') {
@@ -246,26 +266,32 @@ class RoomManager {
       const max = Math.max.apply(null, rows.map((r) => r.total));
       winners = rows.filter((r) => r.total === max).map((r) => (members.filter((m) => m.seat === r.seat)[0] || {}).uid);
     }
-    winners = winners.filter((u) => u && room.holds.has(u));
-    if (!winners.length) { for (const uid of holders) await this.payStake(room, code, uid, room.holds.get(uid).amount, 'refund'); return; }
+    winners = winners.filter((u) => u && seen.indexOf(u) >= 0).sort((a, b) => seatOf(a) - seatOf(b));
+    if (!winners.length) { for (const uid of seen) { const h = room.holds.get(uid); if (h) await this.payStake(room, code, uid, h.amount, 'refund'); } return; }
     const share = Math.floor(pot / winners.length), rest = pot - share * winners.length;
-    for (const uid of holders) if (winners.indexOf(uid) < 0) await this.payStake(room, code, uid, 0, 'lost');     // проигравшие первыми: при сбое посреди расчёта аконы не появятся из воздуха
-    for (let i = 0; i < winners.length; i++) await this.payStake(room, code, winners[i], share + (i === 0 ? rest : 0), 'won');
+    for (const uid of seen) if (winners.indexOf(uid) < 0) await this.payStake(room, code, uid, 0, 'lost');     // проигравшие первыми: при сбое посреди расчёта аконы не появятся из воздуха
+    for (let i = 0; i < winners.length; i++) await this.payStake(room, code, winners[i], share + (i < rest ? 1 : 0), 'won');       // остаток по одному первым победителям (по местам)
   }
   // Новая партия за тем же столом: у всех, кто остался, снова берётся ставка; кому не хватает — тот выходит из-за стола
   async restake(code, room, uids) {
-    for (const uid of uids) {
-      if (room.holds.has(uid)) continue;
-      const h = await this.takeStake(room, code, uid);
-      if (!h.ok) this.store.addAction(code, uid, JSON.stringify({ type: 'leave' }), this.now());
-    }
+    try {
+      for (const uid of uids) {
+        if (room.holds.has(uid)) continue;
+        const h = await this.takeStake(room, code, uid);
+        if (!h.ok) this.store.addAction(code, uid, JSON.stringify({ type: 'leave' }), this.now());
+      }
+    } finally { room.restaking = false; }
     this.kick(code);
   }
-  // Залог без места за столом (вход не удался) возвращается
+  // Залог без места за столом (вход не удался) возвращается; невыплаченные из-за сбоя хранилища выплаты повторяются
   sweepStake(code, room) {
     const uids = this.members(room).map((m) => m.uid), t = this.now();
-    const stray = Array.from(room.holds.entries()).filter(([uid, h]) => !h.seen && uids.indexOf(uid) < 0 && t - h.at >= this.cfg.strayMs);
-    if (stray.length) this.queueStake(room, async () => { for (const [uid, h] of stray) await this.payStake(room, code, uid, h.amount, 'refund'); });
+    const stray = Array.from(room.holds.entries()).filter(([uid, h]) => h.owed === undefined && !h.seen && uids.indexOf(uid) < 0 && t - h.at >= this.cfg.strayMs);
+    const owed = Array.from(room.holds.entries()).filter(([, h]) => h.owed !== undefined && (!h.retryAt || t >= h.retryAt));
+    if (stray.length || owed.length) this.queueStake(room, async () => {
+      for (const [uid, h] of stray) await this.payStake(room, code, uid, h.amount, 'refund');
+      for (const [uid, h] of owed) await this.payStake(room, code, uid, h.owed, 'retry');
+    });
   }
 
   // ---------- Ход времени ----------
@@ -280,6 +306,11 @@ class RoomManager {
   }
   tick() {
     const t = this.now();
+    if (this.wallet && t - (this.lastWalletSweep || 0) >= 60000) {
+      this.lastWalletSweep = t;
+      this.wallet.refundOrphans(new Set(this.rooms.keys()), 120000).catch(() => {});     // залоги столов, которых нет (прошлый запуск сервера), через 2 минуты возвращаются
+      this.wallet.gc();
+    }
     Array.from(this.rooms.keys()).forEach((code) => {
       const room = this.rooms.get(code), d = room.fields || {};
       if (d.status === 'closed') {

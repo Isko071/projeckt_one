@@ -103,12 +103,11 @@
   }
   // Показываемый баланс: пополнения (и штраф «Мин») доезжают до нового числа постепенно, остальные списания (ставки) сразу
   var lastBal = null, shown = 0, anim = null, rafId = 0, shownFns = [], smoothDown = false;
-  var SHOWN_DELAY = 600, holdFor = null;
-  // Следующее пополнение на экране начнёт доезжать не через обычные 0,6 с, а через ms: игра сначала доигрывает анимацию (раздача, вскрытие карт), потом показывает итог
-  function holdShown(ms) {
-    holdFor = Math.max(0, Math.floor(ms) || 0);
-    if (typeof setTimeout === 'function') { var mine = holdFor; setTimeout(function () { if (holdFor === mine) holdFor = null; }, 5000); }   // не задержит чужое пополнение, если пополнения так и не было
-  }
+  var SHOWN_DELAY = 600, holdUntil = 0;
+  function nowMs() { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); }
+  // Следующее пополнение (или списание) на экране начнёт доезжать не раньше чем через ms: игра сначала доигрывает анимацию (раздача, вскрытие карт), потом показывает итог.
+  // Это крайний срок, а не «одноразовая отметка»: если пополнение случилось позже, оно показывается как обычно (через 0,6 с)
+  function holdShown(ms) { holdUntil = nowMs() + Math.max(0, Math.floor(ms) || 0); }
   function emitShown() { shownFns.forEach(function (fn) { try { fn(shown); } catch (e) { /* подписчик не должен ломать остальных */ } }); }
   function stopShown() { if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId); rafId = 0; anim = null; }
   function tickShown(now) {
@@ -122,15 +121,15 @@
     if (typeof requestAnimationFrame !== 'function' || typeof performance === 'undefined') return;
     stopShown();
     shown = from;
-    anim = { from: from, to: to, delay: holdFor !== null ? holdFor : SHOWN_DELAY, t0: performance.now(), dur: Math.min(1800, Math.max(700, 500 + Math.abs(to - from) * 0.8)) };
-    holdFor = null;
+    anim = { from: from, to: to, delay: holdUntil > performance.now() ? holdUntil - performance.now() : SHOWN_DELAY, t0: performance.now(), dur: Math.min(1800, Math.max(700, 500 + Math.abs(to - from) * 0.8)) };
+    holdUntil = 0;
     rafId = requestAnimationFrame(tickShown);
   }
   function shownBalance() { return anim ? shown : getBalance(); }
   function onShown(fn) { shownFns.push(fn); }
   function trackShown(b) {
     if (lastBal !== null && b !== lastBal) {
-      if (b > lastBal || smoothDown) startShown(anim ? shown : lastBal, b);
+      if (b > lastBal || smoothDown || (holdUntil > 0 && holdUntil > nowMs())) startShown(anim ? shown : lastBal, b);
       else if (anim) { stopShown(); shown = b; emitShown(); }
     }
     lastBal = b; smoothDown = false;
@@ -208,12 +207,14 @@
   }
   function capStatus(now) { return capOf(load(), dayOf(now)); }
   function capStart(now) {
+    if (serverOn()) return;
     var s = load(), today = dayOf(now);
     if (s.capDay === today) return;
     s.capDay = today; s.capBase = s.balance; s.capUsed = 0;
     save(s);
   }
   function capPayout(source, payout, bet, now) {
+    if (serverOn()) return { paid: 0, net: -bet, granted: 0, capped: false, left: 0 };     // при серверном балансе выплаты в браузере запрещены
     var s = load(), today = dayOf(now), profit = payout - bet;
     if (s.capDay !== today) { s.capDay = today; s.capBase = s.balance + bet; s.capUsed = 0; } // день сменился посреди раздачи: база — баланс до ставки
     var left = capOf(s, today).left, granted = profit > 0 ? Math.min(profit, left) : 0;
@@ -231,6 +232,7 @@
   }
   // profit — чистый выигрыш раздачи; начисляется не больше остатка предела → { granted, capped, left }
   function onlineWin(source, profit, now) {
+    if (serverOn()) return { granted: 0, capped: false, left: 0 };
     var s = load(), today = dayOf(now);
     if (s.onDay !== today) { s.onDay = today; s.onUsed = 0; }
     var left = Math.max(0, CONFIG.onlineCap - s.onUsed), granted = profit > 0 ? Math.min(Math.floor(profit), left) : 0;
