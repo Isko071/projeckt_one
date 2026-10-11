@@ -267,3 +267,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .o-ask b { font-size: 56px; line-height: 1; }
 .o-ask span { color: var(--muted); }
 .modal .reward { color: var(--ink); font-weight: 700; font-size: 16px; }
+
+/* Расстановка: на телефоне одна колонка, на широком экране оружие слева от поля, корабли и «Готов» справа */
+.place-grid { display: flex; flex-direction: column; gap: 12px; }
+.pl-board, .pl-ships, .pl-arsenal, .pl-ready { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (min-width: 900px) {
+  .page.place { max-width: 1120px; }
+  .place-grid { display: grid; grid-template-columns: minmax(300px, 1.25fr) minmax(0, 500px) minmax(230px, 1fr); grid-template-rows: auto 1fr; gap: 16px 20px; align-items: start; }
+  .pl-arsenal { grid-column: 1; grid-row: 1 / span 2; }
+  .pl-board { grid-column: 2; grid-row: 1 / span 2; }
+  .pl-ships { grid-column: 3; grid-row: 1; }
+  .pl-ready { grid-column: 3; grid-row: 2; align-self: end; }
+  .pl-ships .tray { display: grid; grid-template-columns: 1fr 1fr; }
+  .pl-ships .row { flex-direction: column; }
+}
