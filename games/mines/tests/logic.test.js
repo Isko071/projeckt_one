@@ -65,3 +65,8 @@ test('проверки: повторная клетка, выход за пол�
   const v = M.view(st);
   assert.equal(v.layout, null); assert.equal(v.next, 90); assert.equal(v.left, 21);
 });
+
+test('проигрыш списывает фиксированные 200 аконов при любом числе мин; награда за раунд предела не имеет', () => {
+  assert.equal(M.CONFIG.loss, 200);
+  assert.ok(M.maxReward(12) > 3000, 'один раунд может принести больше прежнего дневного предела');
+});

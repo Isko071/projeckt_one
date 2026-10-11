@@ -316,12 +316,3 @@ test('награды: «Морской бой» 500 за победу над б�
     assert.equal(W.reward(src, 500, D(2026, 5, 2, 10)).granted, 500);
   });
 });
-
-test('награды «Мин»: за день не больше 3000, на следующий день снова', () => {
-  const W = load({ localStorage: fakeBackend() });
-  const t0 = D(2026, 5, 1, 10);
-  assert.equal(W.rewardStatus('mines', t0).left, 3000);
-  assert.equal(W.reward('mines', 2500, t0).granted, 2500);
-  assert.deepEqual(plain(W.reward('mines', 1000, t0 + 1)), { granted: 500, capped: true, left: 0 });
-  assert.equal(W.reward('mines', 240, D(2026, 5, 2, 10)).granted, 240);
-});
