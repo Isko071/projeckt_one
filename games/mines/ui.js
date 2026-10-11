@@ -49,7 +49,7 @@ function startHtml() {
     '<div class="balrow">' + balanceHtml() + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.count')) + '</div>' +
       '<div class="stepper"><button class="stepbtn" data-act="minus" aria-label="' + esc(tr('start.minus')) + '"' + (app.count <= M.CONFIG.minMines ? ' disabled' : '') + '>−</button>' +
-      '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr(app.count <= M.CONFIG.flatMax ? 'start.perCell' : 'start.perCellGrow', { n: M.cellReward(app.count), step: M.CONFIG.cellStep })) + '</small></div>' +
+      '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr('start.perCellGrow', { n: M.cellReward(app.count) })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
     (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>') +
@@ -62,7 +62,7 @@ function startRound() {
   app.round = M.init(app.count); app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game';
   render();
 }
-// Раунд закончен: награда без дневного предела; мина списывает штраф (700 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
+// Раунд закончен: награда без дневного предела; мина списывает штраф (500 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
 function finish(v) {
   if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
   else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
