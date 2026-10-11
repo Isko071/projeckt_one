@@ -4,6 +4,7 @@
   var p = 'games.mines.';
   var texts = {
     'toCatalog': 'В каталог',
+    'balance': 'Баланс: {n} {unit}',
     'sub': 'Открывайте клетки и не наступите на мину. Чем больше мин, тем выше награда.',
     'start.count': 'Сколько мин',
     'start.perCell': '+{n} за клетку',

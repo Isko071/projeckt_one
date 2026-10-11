@@ -27,6 +27,14 @@ function themeButtonHtml() {
 var MINE_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="8" class="mi-body"/><path d="M16 5v5M16 24v5M4 17h5M23 17h5M7.5 8.5l3.5 3.5M21 22l3.5 3.5M24.5 8.5L21 12M11 22l-3.5 3.5" class="mi-spike"/><circle cx="13" cy="14" r="2" class="mi-shine"/></svg>';
 var GEM_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 4h16l5 8-13 16L3 12z" class="gm-body"/><path d="M3 12h26M11 4l-3 8 8 16 8-16-3-8" class="gm-edge"/></svg>';
 
+// Плашка с балансом; после раунда рядом всплывает изменение (+награда или −штраф)
+function balanceHtml() {
+  var b = W.getBalance(), rw = app.fresh && app.rw ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
+  var delta = rw ? (rw.granted > 0 ? '+' + fmt(rw.granted) : (rw.lost > 0 ? '−' + fmt(rw.lost) : '')) : '';
+  return '<div class="bal' + cls + '" role="status" aria-label="' + esc(tr('balance', { n: fmt(b), unit: unit(b) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
+    (delta ? '<i class="delta" aria-hidden="true">' + delta + '</i>' : '') + '</div>';
+}
+
 // ===== Старт =====
 var LOGO = '<svg viewBox="0 0 120 80" width="96" height="64" aria-hidden="true"><rect x="2" y="2" width="116" height="76" rx="14" class="logo-bg"/><g transform="translate(14 14)"><path d="M10 0h20l8 12-18 22L2 12z" class="gm-body"/></g><g transform="translate(66 22) scale(1.3)"><circle cx="16" cy="17" r="8" class="mi-body"/><path d="M16 5v5M16 24v5M4 17h5M23 17h5" class="mi-spike"/></g></svg>';
 function startHtml() {
@@ -36,6 +44,7 @@ function startHtml() {
   return '<div class="start"><div class="brand-row"><div class="brand"><div class="logo-mines">' + LOGO + '</div><h1>' + esc(window.I18n.t('games.mines.title')) + '</h1></div>' +
     '<div class="top-actions"><a class="theme-btn" href="' + CATALOG_URL + '" aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>' + themeButtonHtml() + '</div></div>' +
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
+    '<div class="balrow">' + balanceHtml() + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.count')) + '</div>' +
       '<div class="stepper"><button class="stepbtn" data-act="minus" aria-label="' + esc(tr('start.minus')) + '"' + (app.count <= M.CONFIG.minMines ? ' disabled' : '') + '>−</button>' +
       '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr(app.count <= M.CONFIG.flatMax ? 'start.perCell' : 'start.perCellGrow', { n: M.cellReward(app.count), step: M.CONFIG.cellStep })) + '</small></div>' +
@@ -88,7 +97,7 @@ function gameHtml() {
   var take = over
     ? '<div class="row"><button class="btn primary" data-act="again"' + (canPlay(app.round.mines) ? '' : ' disabled') + '>' + esc(tr('again')) + '</button><button class="btn" data-act="menu">' + esc(tr('menu')) + '</button></div>'
     : '<button class="btn primary full take" data-act="take"' + (v.openedCount ? '' : ' disabled') + '>' + esc(v.openedCount ? tr('take', { n: fmt(v.earned) }) : tr('take.none')) + '</button>';
-  return '<div class="page"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit.aria')) + '">←</button><h2>' + esc(window.I18n.t('games.mines.title')) + '</h2>' +
+  return '<div class="page"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit.aria')) + '">←</button><h2>' + esc(window.I18n.t('games.mines.title')) + '</h2>' + balanceHtml() +
     '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml() + '</div>' +
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('earned')) + '</small><b' + (app.fresh && v.earned ? ' class="bump"' : '') + '>' + fmt(v.earned) + '</b></div>' +

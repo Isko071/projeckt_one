@@ -51,8 +51,8 @@ test('бонус дня: только после игры; 500, потом +250 
   }
   assert.deepEqual(amounts, [500, 750, 1000, 1250, 1500, 1750, 2000, 2000, 2000]);
   assert.equal(W.claimDaily().claimed, false, 'второй раз за день нельзя');
-  // разовые бонусы серии: 3 дня +250, 7 дней +1000
-  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b) + 250 + 1000);
+  // разовый бонус серии: 7 дней +1000
+  assert.equal(W.getBalance(), 5000 + amounts.reduce((a, b) => a + b) + 1000);
 });
 
 test('серия: вторая игра в тот же день её не продлевает; бонус дня один', () => {
@@ -76,7 +76,7 @@ test('серия: пропущенный день сжигает её, лучш�
   const st = W.dailyStatus(D(2027, 1, 3));
   assert.equal(st.best, 3);
   assert.equal(st.nextAmount, 750);
-  assert.equal(st.nextMilestone, 3);
+  assert.equal(st.nextMilestone, 7);
 });
 
 test('неполученный бонус не пропадает: выплачивается при следующей игре', () => {
@@ -87,7 +87,7 @@ test('неполученный бонус не пропадает: выплач�
   assert.equal(W.dailyStatus(D(2026, 4, 2)).pending.amount, 750);
 });
 
-test('длинные серии: разовые бонусы на 14, 30, 60 и 100 дни', () => {
+test('длинные серии: разовые бонусы только на 7 и 14 дни', () => {
   const W = load({ localStorage: fakeBackend() });
   const bonuses = {};
   for (let d = 0; d < 100; d++) {
@@ -95,7 +95,7 @@ test('длинные серии: разовые бонусы на 14, 30, 60 и 
     if (m.bonus) bonuses[m.streak] = m.bonus;
     W.claimDaily();
   }
-  assert.deepEqual(bonuses, { 3: 250, 7: 1000, 14: 3000, 30: 10000, 60: 25000, 100: 50000 });
+  assert.deepEqual(bonuses, { 7: 1000, 14: 2000 });
 });
 
 test('награды за одиночные игры: дневной лимит 1500, на следующий день снова', () => {
