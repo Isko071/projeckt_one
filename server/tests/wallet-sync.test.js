@@ -11,8 +11,9 @@ const root = path.join(__dirname, '..', '..');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms) { const t = Date.now(); while (Date.now() - t < (ms || 3000)) { if (fn()) return true; await wait(20); } return false; }
 
-function client(port, uid) {
+function client(port, uid, initial) {
   const data = {};
+  Object.keys(initial || {}).forEach((k) => { data[k] = JSON.stringify(initial[k]); });
   const ctx = vm.createContext({
     JSON, Promise, Math, Object, Array, Number, String, Error, Date, isFinite, parseInt, setTimeout, clearTimeout, WebSocket,
     PlatformStorage: { get: (k, d) => (k in data ? JSON.parse(data[k]) : d), set: (k, v) => { data[k] = JSON.stringify(v); return true; } },
@@ -80,5 +81,16 @@ test('очередь: награда, полученная до ответа с�
     assert.ok(await until(() => s.wallet.balanceOf('D') === 5400), 'награда доехала до сервера из очереди');
     assert.strictEqual(c.W.getBalance(), 5400);
     assert.deepStrictEqual(JSON.parse(c.data['platform:wallet-queue']), []);
+  } finally { await s.close(); }
+});
+
+test('первый вход с серверным балансом: серия и баланс из браузера переезжают на сервер, а не сбрасываются', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger({ seeds: { E: 1234 } }), config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'E', { 'platform:wallet': { balance: 9000, streak: 4, best: 12, playDay: '2026-03-10', peak: 9000, days: ['2026-03-08', '2026-03-09', '2026-03-10'], wins: { yahtzee: 5 } } });
+    assert.ok(await until(() => c.S.status() === 'server'));
+    assert.strictEqual(c.W.getBalance(), 9000, 'не 5000 и не баланс рейтинга');
+    const st = (await s.wallet.act('E', { op: 'sync' })).state;
+    assert.strictEqual(st.streak, 4); assert.strictEqual(st.best, 12); assert.strictEqual(st.days.length, 3); assert.strictEqual(st.wins.yahtzee, 5);
   } finally { await s.close(); }
 });

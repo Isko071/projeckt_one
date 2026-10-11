@@ -65,7 +65,10 @@
       if (!ws || ws.readyState !== 1) { rej(fail('offline')); return; }
       var id = ++seq;
       pend[id] = { res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); }, CALL_MS) };
-      try { ws.send(JSON.stringify(Object.assign({ id: id, t: 'wallet' }, msg))); } catch (e) { delete pend[id]; rej(fail('offline')); }
+      // tz — часовой пояс игрока: сервер считает дни серии по его часам. seed (только при первой синхронизации) — прогресс игрока, с которого сервер начнёт его кошелёк
+      var out = Object.assign({ id: id, t: 'wallet', tz: new Date().getTimezoneOffset() }, msg);
+      if (msg.op === 'sync' && W.exportState) { var st = W.exportState(); if (st.streak || st.best || st.playDay || (st.days && st.days.length) || Object.keys(st.wins || {}).length || Object.keys(st.plays || {}).length || st.balance !== W.CONFIG.start) out.seed = st; }
+      try { ws.send(JSON.stringify(out)); } catch (e) { delete pend[id]; rej(fail('offline')); }
     });
   }
 

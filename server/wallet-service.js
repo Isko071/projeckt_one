@@ -17,7 +17,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-const SEED_CAP = 10000;                 // новому игроку выдаётся не больше этого, даже если в облаке опубликован больший баланс
+const SEED_CAP = Number(process.env.WALLET_SEED_CAP) || 100000;   // новому игроку засчитывается не больше этого баланса (на случай подделки до первого входа)
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
 const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
 const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple'];
@@ -32,6 +32,8 @@ class WalletService {
     this.cache = new Map();             // uid → состояние кошелька
     this.holds = new Map();             // 'uid_код' → { uid, code, amount }
     this.queues = new Map();            // uid → хвост очереди операций (на игрока они идут по одной)
+    this.shifts = new Map();            // uid → сдвиг дня (по часам игрока)
+    this.seeds = new Map();             // uid → прогресс, присланный браузером при первой синхронизации
     this.rounds = new Map();            // uid → раунд «Мин» (с расположением мин: клиенту оно не отдаётся до конца раунда)
     this.rng = o.rng || (() => crypto.randomInt(0, 4294967296) / 4294967296);
     const ctx = vm.createContext({ JSON, Math, Date, Object, Array, Number, String, isFinite, parseInt });
@@ -62,13 +64,25 @@ class WalletService {
     return next;
   }
 
+  // Кошелёк «как у нового игрока»: прогресса в нём нет, начинать с него незачем
+  pristine(s) {
+    const c = this.W.sanitize(s);
+    return c.streak === 0 && c.best === 0 && !c.playDay && !c.days.length && !Object.keys(c.wins).length && !Object.keys(c.plays).length && c.balance === this.W.CONFIG.start && !c.pending;
+  }
   async load(uid) {
     if (this.cache.has(uid)) return this.cache.get(uid);
     let state = await this.ledger.get('wallets', uid);
     if (!state) {
-      const seed = await this.ledger.seed(uid);
-      state = this.W.sanitize(seed === null ? null : { balance: Math.min(seed, SEED_CAP) });
+      // Новый игрок: прогресс (серия, рекорды, дни, баланс) берётся из его кошелька в браузере, а если браузер его не прислал, баланс из рейтинга
+      // Откуда начать: 1) кошелёк в браузере, если в нём есть прогресс; 2) прогресс из облака (снимок игрока) или хотя бы баланс из рейтинга; 3) пустой кошелёк
+      const mine = this.seeds.get(uid);
+      let seed = mine && typeof mine === 'object' && !this.pristine(mine) ? mine : await this.ledger.seed(uid);
+      if (typeof seed === 'number') seed = { balance: seed };
+      state = this.W.sanitize(seed && typeof seed === 'object' ? seed : null);
+      state.balance = Math.min(state.balance, SEED_CAP); state.peak = Math.max(state.balance, Math.min(state.peak, SEED_CAP));
+      try { await this.ledger.commit([{ op: 'set', coll: 'wallets', id: uid, data: state }]); } catch (e) { throw fail('ledger'); }
     }
+    this.seeds.delete(uid);
     this.cache.set(uid, state);
     return state;
   }
@@ -76,7 +90,7 @@ class WalletService {
   // Выполнить fn(W) над состоянием игрока и записать результат вместе с extra-записями (залоги) одной операцией
   async mutate(uid, fn, extra) {
     const state = await this.load(uid);
-    this.ctx.cur = clone(state); this.ctx.out = null; this.W.forget();
+    this.ctx.cur = clone(state); this.ctx.out = null; this.W.forget(); this.W.setDayShift(this.shifts.get(uid) || 0);
     let result;
     try { result = fn(this.W); }
     catch (e) { this.ctx.cur = null; throw e; }
@@ -98,6 +112,10 @@ class WalletService {
   act(uid, m) {
     m = m || {};
     const now = this.now();
+    // День игрока считается по его часам: сервер у себя живёт по другому поясу
+    const tz = Number.isInteger(m.tz) && m.tz >= -840 && m.tz <= 840 ? m.tz : 0, serverTz = new Date(now).getTimezoneOffset();
+    this.shifts.set(uid, (serverTz - tz) * 60000);
+    if (m.op === 'sync' && m.seed && typeof m.seed === 'object' && !this.cache.has(uid)) this.seeds.set(uid, m.seed);
     return this.run(uid, async () => {
       switch (m.op) {
         case 'sync': return this.mutate(uid, () => null);

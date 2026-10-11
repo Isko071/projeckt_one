@@ -194,3 +194,39 @@ test('«Мины» на сервере: раунд переживает пере
   assert.strictEqual(ab.state.balance, 5000);
   assert.strictEqual((await svc2.act('B', { op: 'minesState' })).result.mines, null);
 });
+
+// ---------- Первый вход: прогресс переносится, дни считаются по часам игрока ----------
+test('первый вход: серия, рекорды и дни берутся из кошелька в браузере, а не сбрасываются', async () => {
+  const { svc } = await minesSvc({ A: 1234 });
+  const seed = { balance: 8000, streak: 5, best: 9, playDay: '2026-03-10', peak: 20000, days: ['2026-03-06', '2026-03-10'], wins: { yahtzee: 3 }, plays: { yahtzee: 4 } };
+  const r = await svc.act('A', { op: 'sync', seed, tz: 0 });
+  assert.strictEqual(r.state.balance, 8000, 'баланс из браузера, а не из рейтинга (1234)');
+  assert.strictEqual(r.state.streak, 5); assert.strictEqual(r.state.best, 9);
+  assert.deepStrictEqual(plainJ(r.state.wins), { yahtzee: 3 });
+  assert.strictEqual(r.state.days.length, 2);
+  const again = await svc.act('A', { op: 'sync', seed: { balance: 1, streak: 0 }, tz: 0 });
+  assert.strictEqual(again.state.balance, 8000, 'у существующего кошелька присланный прогресс игнорируется');
+  const forged = await minesSvc();
+  const f = await forged.svc.act('B', { op: 'sync', seed: { balance: 5e9, streak: 3 }, tz: 0 });
+  assert.strictEqual(f.state.balance, 100000, 'подделанный баланс обрезается');
+});
+
+test('серия дней идёт по часам игрока, а не по часам сервера', async () => {
+  const { svc } = await minesSvc();
+  // игрок в поясе UTC+6 (tz = −360): играет в 02:00 по своим часам 10 марта и в 20:00 11 марта: это соседние дни, серия 2
+  let t = Date.UTC(2026, 2, 9, 20, 0);          // 10 марта 02:00 у игрока
+  svc.now = () => t;
+  await svc.act('A', { op: 'markPlayed', tz: -360 });
+  await svc.act('A', { op: 'claimDaily', tz: -360 });
+  t = Date.UTC(2026, 2, 11, 14, 0);              // 11 марта 20:00 у игрока
+  const day2 = await svc.act('A', { op: 'markPlayed', tz: -360 });
+  assert.strictEqual(day2.state.streak, 2, 'серия продолжилась');
+  // тот же случай по часам сервера (tz 0): 9 марта и 11 марта, между ними день: серия бы порвалась
+  const { svc: s2 } = await minesSvc();
+  let t2 = Date.UTC(2026, 2, 9, 20, 0); s2.now = () => t2;
+  await s2.act('B', { op: 'markPlayed', tz: 0 });
+  await s2.act('B', { op: 'claimDaily', tz: 0 });
+  t2 = Date.UTC(2026, 2, 11, 14, 0);
+  const broke = await s2.act('B', { op: 'markPlayed', tz: 0 });
+  assert.strictEqual(broke.state.streak, 1, 'с часами сервера серия рвалась (это и была ошибка)');
+});
