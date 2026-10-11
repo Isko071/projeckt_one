@@ -62,7 +62,7 @@ function startRound() {
   app.round = M.init(app.count); app.rw = null; app.last = -1; app.fresh = false; app.confirm = false; app.screen = 'game';
   render();
 }
-// Раунд закончен: награда без дневного предела; мина списывает штраф (700 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
+// Раунд закончен: награда без дневного предела; мина списывает штраф (500 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
 function finish(v) {
   if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
   else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }

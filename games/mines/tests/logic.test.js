@@ -70,9 +70,9 @@ test('проверки: повторная клетка, выход за пол�
   assert.equal(v.layout, null); assert.equal(v.next, 50); assert.equal(v.left, 21);
 });
 
-test('штраф за мину: 700 при 1–10 минах, 200 при 11–24; награда за раунд предела не имеет', () => {
-  assert.deepEqual([1, 5, 10, 11, 12, 24].map(M.lossFor), [700, 700, 700, 200, 200, 200]);
-  assert.equal(M.lossFor(0), 700); assert.equal(M.lossFor(99), 200);
+test('штраф за мину: 500 при 1–10 минах, 200 при 11–24; награда за раунд предела не имеет', () => {
+  assert.deepEqual([1, 5, 10, 11, 12, 24].map(M.lossFor), [500, 500, 500, 200, 200, 200]);
+  assert.equal(M.lossFor(0), 500); assert.equal(M.lossFor(99), 200);
   assert.ok(M.maxReward(5) > 3000, 'один раунд может принести больше прежнего дневного предела');
   let g = M.init(5, seeded(4)); g = M.reduce(g, { type: 'open', index: firstSafe(g) }).state; g = M.reduce(g, { type: 'open', index: firstSafe(g) }).state;
   assert.equal(g.earned, 60 + 80); assert.equal(M.view(g).next, 100);
