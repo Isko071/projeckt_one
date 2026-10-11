@@ -72,7 +72,7 @@ function cellHtml(v, i, order) {
   var fresh = app.fresh && i === app.last;
   if (open && !mine) { cls += ' safe' + (fresh ? ' pop gleam' : ''); inner = GEM_SVG; label += ', ' + tr('cell.safe'); }
   else if (open && mine) { cls += ' boom' + (app.fresh ? ' blast' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); }
-  else if (over && mine) { cls += ' mine' + (app.fresh ? ' reveal' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); if (app.fresh) style = ' style="animation-delay:' + (350 + order * 90) + 'ms"'; }
+  else if (over && mine) { cls += ' mine' + (app.fresh ? ' reveal' : ''); inner = MINE_SVG; label += ', ' + tr('cell.mine'); if (app.fresh) style = ' style="animation-delay:' + (600 + order * 130) + 'ms"'; }
   else if (over) cls += ' dim';
   return '<button class="' + cls + '" data-cell="' + i + '"' + style + ' aria-label="' + esc(label) + '"' + (open || over ? ' disabled' : '') + '>' + inner + '</button>';
 }
