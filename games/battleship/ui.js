@@ -121,7 +121,24 @@ function impactFx(cx, cy, kind, t) {
   });
   return s;
 }
-// Самолёт пролетает слева направо на высоте cy; возвращает время, когда он над столбцом cx
+// Самолёт и подлодка идут от поля того, кто применил оружие: рисуем «вдоль хода» (u — по ходу, v — поперёк) и поворачиваем на нужную сторону.
+// Когда поля рядом, ваше слева, а соперника справа; когда одно под другим — ваше внизу
+function sideOf(attackerIsMe) {
+  var wide = window.matchMedia && window.matchMedia('(min-width: 820px)').matches;
+  return wide ? (attackerIsMe ? 'left' : 'right') : (attackerIsMe ? 'bottom' : 'top');
+}
+function sideCanon(side, cx, cy) {
+  var W = (N + 1) * C;
+  if (side === 'right') return { u: W - cx, v: cy };
+  if (side === 'bottom') return { u: W - cy, v: cx };
+  if (side === 'top') return { u: cy, v: cx };
+  return { u: cx, v: cy };
+}
+function sideWrap(side, inner) {
+  var W = (N + 1) * C, m = { right: '-1,0,0,1,' + W + ',0', bottom: '0,-1,1,0,0,' + W, top: '0,1,1,0,0,0' }[side];
+  return m ? '<g transform="matrix(' + m + ')">' + inner + '</g>' : inner;
+}
+// Самолёт пролетает над полем на линии v; возвращает время, когда он над точкой u
 function planeFx(cx, cy) {
   var W = (N + 1) * C, from = -300, to = W + 300, dur = 1.5, tAt = Math.max(0.1, (cx - from) / (to - from) * dur);
   var body = '<g transform="scale(1.7)"><path d="M-2 0 Q2 -6 18 -7 L118 -6 L142 0 L118 6 L18 7 Q2 6 -2 0Z M100 -7 L72 -7 L42 -76 L58 -76Z M100 7 L72 7 L42 76 L58 76Z M10 -6 L-6 -28 L6 -28 L26 -6Z M10 6 L-6 28 L6 28 L26 6Z" class="plane-body"/>' +
@@ -132,9 +149,9 @@ function planeFx(cx, cy) {
 // Подлодка в точке удара: капсула с рубкой и перископом, появляется и уходит под воду
 function subBodyFx(cx, cy) {
   var d = 'M16 35 Q40 6 90 6 L220 6 Q268 8 290 35 Q268 62 220 64 L90 64 Q40 64 16 35Z';
-  var x0 = cx - 150, x1 = (N + 1) * C - 120, run = Math.max(300, x1 - x0);
-  return '<g class="sub" opacity="0" transform="translate(' + x0 + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.82;1" begin="0s" dur="2.6s" fill="freeze"/>' +
-    '<animateTransform attributeName="transform" type="translate" from="' + x0 + ' ' + (cy - 35) + '" to="' + (x0 + run) + ' ' + (cy - 35) + '" begin="0.9s" dur="1.7s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".5 0 .9 .8"/>' +
+  var x0 = -340, x1 = cx - 150;
+  return '<g class="sub" opacity="0" transform="translate(' + x0 + ',' + (cy - 35) + ')"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.08;.8;1" begin="0s" dur="2.9s" fill="freeze"/>' +
+    '<animateTransform attributeName="transform" type="translate" from="' + x0 + ' ' + (cy - 35) + '" to="' + x1 + ' ' + (cy - 35) + '" begin="0s" dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".2 .6 .4 1"/>' +
     '<path d="' + d + '" class="hull"/><rect x="118" y="22" width="56" height="26" rx="3" class="deck pf"/><path d="M146 22 V10 H162" class="deck"/><path d="M40 35 H110 M182 35 H260" class="deck thin"/><path d="M-10 26 q-14 9 0 18 M-34 22 q-16 13 0 26" class="deck thin"/></g>';
 }
 // План анимации действия: рисунок и задержки появления итоговых отметок по клеткам
@@ -146,17 +163,18 @@ function fxPlan(fx) {
     svg += impactFx(p.cx, p.cy, fx.result, FALL);
     delays[fx.idx] = FALL + (fx.result === 'miss' ? 0.4 : 0.07);
   } else if (fx.kind === 'bomber') {
-    var pl = planeFx(p.cx, p.cy);
-    svg += pl.svg;
+    var cn = sideCanon(fx.side, p.cx, p.cy), pl = planeFx(cn.u, cn.v);
+    svg += sideWrap(fx.side, pl.svg);
     fx.cells.forEach(function (d, k) {
       var t = Math.max(0.15, pl.tAt - 0.3 + k * 0.1), q = cellXY(d.idx), tIn = t;
       svg += impactFx(q.cx, q.cy, d.result, tIn);
       if (d.result !== 'none') delays[d.idx] = tIn + (d.result === 'miss' ? 0.4 : 0.07);
     });
   } else if (fx.kind === 'sub') {
-    svg += subBodyFx(p.cx, p.cy);
+    var sc = sideCanon(fx.side, p.cx, p.cy);
+    svg += sideWrap(fx.side, subBodyFx(sc.u, sc.v));
     fx.torpedoes.forEach(function (tp) {
-      var steps = tp.path.length, t0 = 0.5, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
+      var steps = tp.path.length, t0 = 1.1, dur = Math.max(0.25, steps * 0.09), end = cellXY(tp.path[steps - 1]);
       svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.6) + '</line>';
       svg += '<rect class="torp" x="' + (p.cx - 7) + '" y="' + (p.cy - 20) + '" width="14" height="40" rx="7" opacity="0">' + appear(t0) + anim('y', p.cy - 20, end.cy - 20, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</rect>';
       tp.fresh.forEach(function (ci) { delays[ci] = t0 + dur * (tp.path.indexOf(ci) + 1) / steps + 0.05; });
@@ -336,6 +354,14 @@ function waitHtml(v) {
 }
 
 // ===== Бой =====
+// Область 3×3 (радар, бомбардировщик) целиком внутри поля, поэтому центр не бывает на краю
+function aimCell(idx, weapon) {
+  if (weapon !== 'radar' && weapon !== 'bomber') return idx;
+  var x = Math.min(N - 2, Math.max(1, idx % N)), y = Math.min(N - 2, Math.max(1, Math.floor(idx / N)));
+  return y * N + x;
+}
+// Куда смотрит оружие: выбранная клетка или, пока не выбрана, клетка под мышью
+function aimOf(weapon) { return app.sel >= 0 ? app.sel : (weapon !== 'shoot' && app.hover >= 0 ? aimCell(app.hover, weapon) : -1); }
 function lastShotText(v) {
   var L = v.last;
   if (!L) return '';
@@ -348,7 +374,7 @@ function lastShotText(v) {
 function fxOf(v, defSeat) {
   var L = v.last;
   if (!L || L.seat === defSeat || app.animTurns === v.turns) return null;
-  var fx = { kind: L.kind, idx: L.y * N + L.x };
+  var fx = { kind: L.kind, idx: L.y * N + L.x, side: sideOf(L.seat === app.ctrl.seat) };
   if (L.kind === 'shoot') fx.result = L.result;
   else if (L.kind === 'radar') fx.cells = L.cells;
   else if (L.kind === 'bomber') fx.cells = L.cells;
@@ -374,12 +400,12 @@ function battleHtml(v) {
   var arm = mine.arsenal || { radar: 0, sub: 0, bomber: 0 };
   if (app.weapon !== 'shoot' && !(arm[app.weapon] > 0)) app.weapon = 'shoot';
   if (!myTurn) app.arsenalOpen = false;
-  var foeBoard = boardSvg({ key: 'f', label: tr('board.foe'), marks: other.marks, sunkShips: other.ships.length ? [] : sunkShips(other.marks), ships: other.ships.length ? other.ships : [], interactive: myTurn, sel: myTurn ? app.sel : -1, weapon: app.weapon, fx: fxOf(v, foe) });
+  var foeBoard = boardSvg({ key: 'f', label: tr('board.foe'), marks: other.marks, sunkShips: other.ships.length ? [] : sunkShips(other.marks), ships: other.ships.length ? other.ships : [], interactive: myTurn, sel: myTurn ? aimOf(app.weapon) : -1, weapon: app.weapon, fx: fxOf(v, foe) });
   var myBoard = boardSvg({ key: 'm', label: tr('board.mine'), marks: mine.marks, ships: mine.ships, small: true, fx: fxOf(v, me) });
   var leftRow = other.left ? Object.keys(other.left).sort(function (a, b) { return b - a; }).map(function (len) {
     return '<span class="lw">' + miniShip(Number(len)) + '×' + other.left[len] + '</span>';
   }).join('') : '';
-  var fire = myTurn
+  var fire = myTurn && app.weapon !== 'shoot'
     ? '<button class="btn primary full" data-act="fire"' + (app.sel >= 0 ? '' : ' disabled') + '>' + esc(app.sel >= 0 ? tr('fire.' + app.weapon) + ' ' + cellLabel(app.sel) : tr('fire.pick')) + '</button>'
     : '';
   var foeIcon = app.ctrl.local ? 'ai' : 'foe', myName = P.getProfile().name || tr('you'), foeName = other.name || tr('foe');
@@ -499,7 +525,9 @@ appEl.addEventListener('click', function (e) {
     if (v.phase === 'placing') onPlaceCell(idx);
     else if (v.current === app.ctrl.seat && !v.gameOver) {
       var mk = v.seats[1 - app.ctrl.seat].marks[idx];
-      if (app.weapon !== 'shoot' || mk === 0 || mk === 4) { app.sel = idx; render(); }
+      if (app.weapon === 'shoot') {
+        if (mk === 0 || mk === 4) { app.sel = -1; app.hover = -1; app.ctrl.send({ type: 'shoot', seat: app.ctrl.seat, x: idx % N, y: Math.floor(idx / N) }); }
+      } else { app.sel = aimCell(idx, app.weapon); render(); }
     }
     return;
   }
@@ -531,15 +559,17 @@ appEl.addEventListener('click', function (e) {
       break;
     }
     case 'arsenalToggle': app.arsenalOpen = !app.arsenalOpen; render(); break;
-    case 'weapon': { var wn = el.getAttribute('data-w'); app.weapon = app.weapon === wn ? 'shoot' : wn; app.arsenalOpen = false; render(); break; }
-    case 'fire': if (app.sel >= 0) { var i2 = app.sel, wp = app.weapon; app.sel = -1; app.weapon = 'shoot'; ctrl.send({ type: wp, seat: ctrl.seat, x: i2 % N, y: Math.floor(i2 / N) }); } break;
+    case 'weapon': { var wn = el.getAttribute('data-w'); app.weapon = app.weapon === wn ? 'shoot' : wn; app.sel = -1; app.hover = -1; app.arsenalOpen = false; render(); break; }
+    case 'fire': if (app.sel >= 0) { var i2 = app.sel, wp = app.weapon; app.sel = -1; app.hover = -1; app.weapon = 'shoot'; ctrl.send({ type: wp, seat: ctrl.seat, x: i2 % N, y: Math.floor(i2 / N) }); } break;
   }
 });
 // Подсказка-тень при наведении мыши (на телефоне её нет: корабль ставится нажатием)
 appEl.addEventListener('mouseover', function (e) {
   var cell = e.target.closest && e.target.closest('[data-cell]');
-  if (!cell || !app.ctrl || app.screen !== 'game' || app.ctrl.view().phase !== 'placing') return;
-  var idx = Number(cell.getAttribute('data-cell'));
+  if (!cell || !app.ctrl || app.screen !== 'game') return;
+  var v = app.ctrl.view(), idx = Number(cell.getAttribute('data-cell'));
+  if (v.phase === 'placing') { /* тень корабля */ }
+  else if (!(v.phase === 'playing' && !v.gameOver && v.current === app.ctrl.seat && app.weapon !== 'shoot' && app.sel < 0)) return;
   if (app.hover === idx) return;
   app.hover = idx; render();
 });
