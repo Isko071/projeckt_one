@@ -41,7 +41,7 @@ function startHtml() {
       '<div class="stepval"><b>' + app.count + '</b><small>' + esc(tr('start.perCell', { n: M.cellReward(app.count) })) + '</small></div>' +
       '<button class="stepbtn" data-act="plus" aria-label="' + esc(tr('start.plus')) + '"' + (app.count >= M.CONFIG.maxMines ? ' disabled' : '') + '>+</button></div>' +
       '<div class="chips">' + chips + '</div></div>' +
-    (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.CONFIG.loss })) + '</div>') +
+    (canPlay() ? '' : '<div class="muted-text" role="status">' + esc(tr('start.need', { n: M.lossFor(app.count) })) + '</div>') +
     '<div class="start-actions"><button class="btn-play" data-act="play"' + (canPlay() ? '' : ' disabled') + '>' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
@@ -51,12 +51,12 @@ function startRound() {
   app.round = M.init(app.count); app.rw = null; app.last = -1; app.anim = {}; app.confirm = false; app.screen = 'game';
   render();
 }
-// Раунд закончен: награда без дневного предела; мина списывает с баланса 200 аконов (сколько есть, если меньше)
+// Раунд закончен: награда без дневного предела; мина списывает штраф (700 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
 function finish(v) {
   if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
-  else { var take = Math.min(M.CONFIG.loss, W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
+  else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
 }
-function canPlay() { return W.getBalance() >= M.CONFIG.loss; }
+function canPlay(mines) { return W.getBalance() >= M.lossFor(mines === undefined ? app.count : mines); }
 function act(action) {
   var r = M.reduce(app.round, action);
   if (!r.ok) return;
@@ -83,7 +83,7 @@ function gameHtml() {
     result = '<div class="result ' + (v.status === 'lost' ? 'lose' : 'win') + '" role="status"><b>' + esc(text) + '</b></div>';
   }
   var take = over
-    ? '<div class="row"><button class="btn primary" data-act="again"' + (canPlay() ? '' : ' disabled') + '>' + esc(tr('again')) + '</button><button class="btn" data-act="menu">' + esc(tr('menu')) + '</button></div>'
+    ? '<div class="row"><button class="btn primary" data-act="again"' + (canPlay(app.round.mines) ? '' : ' disabled') + '>' + esc(tr('again')) + '</button><button class="btn" data-act="menu">' + esc(tr('menu')) + '</button></div>'
     : '<button class="btn primary full take" data-act="take"' + (v.openedCount ? '' : ' disabled') + '>' + esc(v.openedCount ? tr('take', { n: fmt(v.earned) }) : tr('take.none')) + '</button>';
   return '<div class="page"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit.aria')) + '">←</button><h2>' + esc(window.I18n.t('games.mines.title')) + '</h2>' +
     '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml() + '</div>' +
@@ -114,7 +114,8 @@ appEl.addEventListener('click', function (e) {
     case 'minus': app.count = M.clampMines(app.count - 1); render(); break;
     case 'plus': app.count = M.clampMines(app.count + 1); render(); break;
     case 'count': app.count = M.clampMines(Number(el.getAttribute('data-n'))); render(); break;
-    case 'play': case 'again': if (canPlay()) startRound(); break;
+    case 'play': if (canPlay(app.count)) startRound(); break;
+    case 'again': if (canPlay(app.round ? app.round.mines : app.count)) { app.count = app.round ? app.round.mines : app.count; startRound(); } break;
     case 'take': act({ type: 'cashout' }); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;

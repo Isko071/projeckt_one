@@ -1,16 +1,16 @@
 // Чистая логика игры «Мины»: поле 5×5 (25 клеток), игрок выбирает число мин от 1 до 24 и открывает клетки по одной.
 // Каждая безопасная клетка приносит аконы: при 1 мине 50, и на каждую следующую мину на 20 больше (2 — 70, 3 — 90, 4 — 110 … 24 — 510).
-// Попал на мину — накопленное за раунд сгорает и с баланса списывается CONFIG.loss (200) аконов при любом числе мин. Дневного предела наград нет. Забрать накопленное можно в любой момент после первой клетки;
+// Попал на мину — накопленное за раунд сгорает и с баланса списывается штраф: 700 аконов при 1–10 минах (лёгкое поле, награда мала) и 200 при 11–24. Чтобы играть, на балансе должно быть не меньше штрафа. Дневного предела наград нет. Забрать накопленное можно в любой момент после первой клетки;
 // если открыты все безопасные клетки, накопленное забирается само.
 // Без window и document: тестируется в node. Мины раскладываются сразу при начале раунда (rng — функция 0..1).
 //
 //   Mines.init(mines, rng)              → состояние раунда
 //   Mines.reduce(state, action)         → { ok, state, events } | { ok: false, error };  action: { type: 'open', index } | { type: 'cashout' }
 //   Mines.view(state)                   → то, что видно игроку: мины открыты только после конца раунда
-//   Mines.cellReward(mines), Mines.safeCells(mines), Mines.maxReward(mines)
+//   Mines.cellReward(mines), Mines.safeCells(mines), Mines.maxReward(mines), Mines.lossFor(mines) — штраф за мину
 //   status: 'playing' | 'lost' | 'cashed' | 'cleared';  payout — сколько аконов раунд принёс (0 при проигрыше)
 (function (root) {
-  var CONFIG = { size: 5, cells: 25, minMines: 1, maxMines: 24, baseReward: 50, rewardStep: 20, loss: 200 };
+  var CONFIG = { size: 5, cells: 25, minMines: 1, maxMines: 24, baseReward: 50, rewardStep: 20, lossLow: 700, lossHigh: 200, lowMax: 10 };
 
   function bad(error) { return { ok: false, error: error }; }
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
@@ -19,6 +19,7 @@
   function cellReward(mines) { return CONFIG.baseReward + CONFIG.rewardStep * (clampMines(mines) - 1); }
   function safeCells(mines) { return CONFIG.cells - clampMines(mines); }
   function maxReward(mines) { return cellReward(mines) * safeCells(mines); }
+  function lossFor(mines) { return clampMines(mines) <= CONFIG.lowMax ? CONFIG.lossLow : CONFIG.lossHigh; }
 
   function init(mines, rng) {
     mines = clampMines(mines);
@@ -68,5 +69,5 @@
     };
   }
 
-  root.Mines = { CONFIG: CONFIG, init: init, reduce: reduce, view: view, cellReward: cellReward, safeCells: safeCells, maxReward: maxReward, clampMines: clampMines };
+  root.Mines = { CONFIG: CONFIG, init: init, reduce: reduce, view: view, cellReward: cellReward, safeCells: safeCells, maxReward: maxReward, lossFor: lossFor, clampMines: clampMines };
 })(typeof window !== 'undefined' ? window : globalThis);
