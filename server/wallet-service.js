@@ -79,7 +79,7 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.touched.delete(uid); } });
+    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.touched.delete(uid); } });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -324,6 +324,7 @@ class WalletService {
         if (m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
         if (m.op === 'pokerStart') W.capStart(now);
         dealt = this.pokerDeal(next, W, now);
+        if (dealt && next.st.phase === 'settled') rw = this.pokerSettle(next, W, now);       // раздача закончилась внутри deal (мало фишек): итог подводится сразу
         if (!dealt && m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
         return;
       }
@@ -358,10 +359,13 @@ class WalletService {
     if (!(amount >= 1) || !isFinite(amount)) return Promise.reject(fail('bad-request'));
     const key = uid + '_' + code;
     return this.run(uid, async () => {
+      // После сбоя записи залоги игрока забыты: перечитываем, иначе лимит залогов обходится
+      if (!this.holdsLoaded) { try { await this.loadHolds(); } catch (e) { throw fail('ledger'); } }
       // Такой залог уже есть (прошлый выход ещё не оформлен или запись в хранилище была неоднозначной): новый не берём, пусть игрок попробует через секунду
       if (await this.holdRecord(key)) return { ok: false, error: 'busy', balance: this.balanceOf(uid) };
       let mine = 0; this.holds.forEach((h) => { if (h.uid === uid) mine++; });
       if (mine >= MAX_HOLDS) return { ok: false, error: 'busy', balance: this.balanceOf(uid) };
+      if ((await this.load(uid)).balance < amount) return { ok: false, error: 'no-funds', balance: this.balanceOf(uid) };          // не хватает: раунд «Мин» при этом не трогаем
       // Раунд «Мин» в процессе сбрасывается (без штрафа): иначе, спрятав баланс в залог, можно было бы открыть мину, не заплатив штраф
       if (await this.loadRound(uid)) { try { await this.ledger.commit([{ op: 'delete', coll: 'rounds', id: uid }]); } catch (e) { this.forget(uid); throw fail('ledger'); } this.rounds.delete(uid); }
       let ok = false;

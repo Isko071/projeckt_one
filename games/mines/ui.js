@@ -153,7 +153,7 @@ function gameHtml() {
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('earned')) + '</small><b' + (app.fresh && v.earned ? ' class="bump"' : '') + '>' + fmt(v.earned) + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('next')) + '</small><b>' + esc(tr('plus', { n: v.next })) + '</b></div></div>' +
-    errHtml() + '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + result + take + '</div>';
+    errHtml() + '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + take + result + '</div>';
 }
 
 function modalHtml() {
@@ -163,9 +163,29 @@ function modalHtml() {
     [1, 2, 3, 4, 5].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
   return out;
 }
+// Экран перерисовывается целиком; чтобы клавиатурный фокус не терялся, запоминаем, на чём он стоял (клетка или кнопка), и возвращаем после перерисовки
+function focusKey() {
+  var a = document.activeElement;
+  if (!a || a === document.body || !appEl.contains(a)) return a === document.body ? app.refocus || null : null;
+  if (a.hasAttribute('data-cell')) return { cell: Number(a.getAttribute('data-cell')) };
+  if (a.hasAttribute('data-act')) return { act: a.getAttribute('data-act'), n: a.getAttribute('data-n') };
+  return null;
+}
+function restoreFocus(k) {
+  if (!k) return;
+  var el = null;
+  if (k.cell !== undefined) {
+    var cells = Array.prototype.slice.call(appEl.querySelectorAll('[data-cell]:not([disabled])'));
+    el = cells.filter(function (c) { return Number(c.getAttribute('data-cell')) >= k.cell; })[0] || cells[0] || null;
+  } else el = appEl.querySelector('[data-act="' + k.act + '"]' + (k.n !== null && k.n !== undefined ? '[data-n="' + k.n + '"]' : '') + ':not([disabled])');
+  app.refocus = el ? null : k;           // клетки заблокированы (ждём сервер): вернём фокус при следующей перерисовке
+  if (el) { try { el.focus({ preventScroll: true }); } catch (e) { /* без фокуса */ } }
+}
 function render() {
+  var k = focusKey();
   appEl.innerHTML = '<div class="screen">' + (app.screen === 'game' && app.round ? gameHtml() : startHtml()) + '</div>' + modalHtml();
   app.fresh = false;
+  restoreFocus(k);
 }
 
 appEl.addEventListener('click', function (e) {

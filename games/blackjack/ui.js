@@ -502,7 +502,7 @@ function topbarHtml() {
   var L = layout();
   var balText = balChipText(W.shownBalance(), L.narrow);
   return '<div class="topbar">' + catalogButtonHtml() +
-    '<div class="title">' + (L.narrow ? '' : esc(window.I18n.t('games.blackjack.title'))) + '</div>' +
+    '<div class="title">' + (L.vw < 420 ? '' : esc(window.I18n.t('games.blackjack.title'))) + '</div>' +
     '<button class="icon-btn" data-act="rules" data-key="rules" aria-label="' + esc(tr('rulesBtn')) + '">?</button>' +
     (G && G.mode === 'online' && app.screen === 'game' ? chat.buttonHtml() : '') + themeButtonHtml('') + '<div class="bal-chip" data-key="bal" data-narrow="' + !!L.narrow + '">' + esc(balText) + '</div></div>';
 }
@@ -687,7 +687,7 @@ function playHtml(D) {
     var waitText = !myTurn && vs.phase === 'playing' && cur && vs.current !== me ? tr('turn.other', { name: cur.name || tr('st.bot') }) : (vs.phase === 'betting' ? tr('wait.dealing') : '');
     if (D.online && app.pending) waitText = tr('wait.sent'); else if (D.online && app.banner === 'offline') waitText = tr('wait.offline');
     var dis = !myTurn;
-    panel = '<div class="actions">' + (waitText ? '<div class="wait-text">' + esc(waitText) + '</div>' : '') +
+    panel = '<div class="actions"><div class="wait-text" data-key="wait">' + esc(waitText) + '</div>' +
       '<div class="act-row"><button class="act" data-act="stand" data-key="stand"' + (dis ? ' disabled' : '') + '><span>' + esc(tr('act.stand')) + '</span><small>' + esc(tr('key.stand')) + '</small></button>' +
       '<button class="act take" data-act="hit" data-key="hit"' + (dis ? ' disabled' : '') + '><span>' + esc(tr(app.pending ? 'act.sending' : 'act.hit')) + '</span><small>' + esc(tr('key.hit')) + '</small></button></div></div>';
   } else if (showResult) {

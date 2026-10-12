@@ -508,7 +508,10 @@ function render() {
     if (app.ctrl.online) html = window.BattleshipOnline.bannerHtml() + html;
   } else if (app.screen === 'online') html = window.BattleshipOnline.html();
   else html = startHtml();
+  // Поле ввода (код стола) не должно терять фокус и курсор при перерисовке по таймеру (список столов обновляется каждые 5 с)
+  var ai = document.activeElement, keep = ai && ai.tagName === 'INPUT' && ai.id && appEl.contains(ai) ? { id: ai.id, a: ai.selectionStart, b: ai.selectionEnd } : null;
   appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml() + (window.BattleshipOnline ? window.BattleshipOnline.overlayHtml() : '');
+  if (keep) { var ni = document.getElementById(keep.id); if (ni) { try { ni.focus({ preventScroll: true }); if (keep.a !== null) ni.setSelectionRange(keep.a, keep.b); } catch (e) { /* без фокуса */ } } }
   if (window.BattleshipOnline) window.BattleshipOnline.afterRender();
 }
 function startGame(ctrl) {

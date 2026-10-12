@@ -187,7 +187,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .act:disabled { border: 2px dashed var(--line); background: var(--surface); color: var(--muted); cursor: default; }
 .act.hl { outline: 4px solid var(--ink); outline-offset: 3px; }
 .act small { display: none; font-size: 12px; font-weight: 400; opacity: .85; }
-.wait-text { text-align: center; font-size: 15px; font-weight: 700; color: var(--felt-ink); opacity: .85; }
+.wait-text { min-height: 20px; text-align: center; font-size: 15px; font-weight: 700; color: var(--felt-ink); opacity: .85; }
 .notice { background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 14px; padding: 10px 14px; font-size: 15px; font-weight: 700; animation: slide-down .25s ease both; }
 .notice.bad { background: var(--danger-soft); border-color: var(--danger); }
 .result-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 10px; animation: slide-down .3s ease both; }

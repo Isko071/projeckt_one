@@ -95,7 +95,8 @@ function ring(n) {
   // Места соперников в процентах стола: боковые стоят выше, по бокам от общих карт; на узком экране ещё выше (над рядом общих карт) и ближе к краю
   var w = document.documentElement.clientWidth || window.innerWidth, k = w < 360 ? 0.86 : w < 500 ? 0.9 : 1;
   var t = { 1: [[50, 14]], 2: [[27, 20], [73, 20]], 3: [[12, 50], [50, 14], [88, 50]], 4: [[12, 52], [34, 17], [66, 17], [88, 52]], 5: [[11, 58], [24, 25], [50, 13], [76, 25], [89, 58]] }[n] || [];
-  return t.map(function (p) { return { x: 50 + (p[0] - 50) * k, y: p[1] + (w < 500 && Math.abs(p[0] - 50) > 35 ? -14 : 0) }; });
+  // Шестеро за столом на узком экране: боковые места стоят ниже ряда общих карт (выше им не уместиться, не закрыв первую и последнюю карту)
+  return t.map(function (p) { var side = w < 500 && Math.abs(p[0] - 50) > 35; return { x: 50 + (p[0] - 50) * k, y: side ? (n === 5 ? 72 : p[1] - 14) : p[1] }; });
 }
 function seatColor(i) { return 'oklch(' + (window.PlatformTheme.isDark() ? 0.42 : 0.86) + ' 0.07 ' + (i * 70 + 20) + ')'; }
 function statusText(s) { return s.k ? ICON[s.k] + tr('st.' + s.k, { n: fmt(s.n || 0) }) : ''; }
@@ -127,7 +128,7 @@ function sitDown() {
 function seatOnline(t) {
   if (app.entering) return;
   app.entering = true;
-  var show = function () { app.entering = false; if (T !== t) return; app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
+  var show = function () { app.entering = false; if (T !== t) { render(); return; } app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
   if (window.PlatformLoader && window.PlatformLoader.cover) window.PlatformLoader.cover({ reveal: show }); else show();       // стол и раздача появляются, когда загрузка тает
 }
 function bindTable() {
@@ -490,6 +491,7 @@ function screenHtml() {
   return startHtml();
 }
 function render() {
+  if (app.entering) return;        // стол садится под загрузкой: пока она не растаяла, поле не рисуем (иначе раздача проигрывается под ней и ещё раз после неё)
   // чат узнаёт о новых сообщениях из вида стола: без этого отправленные сообщения остаются «Не отправлено» и показываются дважды
   var cv = T && T.ctrl && T.ctrl.getView ? T.ctrl.getView() : null;
   if (cv) chat.update(cv, cv.status === 'playing' ? 'game' : 'lobby');
@@ -577,7 +579,7 @@ document.addEventListener('keydown', function (e) {
 });
 window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
 // Вернулись кнопкой «Назад»/«Вперёд» из кеша страницы: стол, с которого мы «ушли», остановлен, поэтому возвращаем игрока на стартовый экран
-window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; render(); } });
+window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; app.menu = app.rules = app.combos = false; app.modal = app.sheet = null; app.bet = []; app.deal = null; render(); } });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
 W.onShown(function (v) {
   var els = appEl.querySelectorAll('[data-bal]');
