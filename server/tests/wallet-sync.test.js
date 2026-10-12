@@ -125,3 +125,20 @@ test('повторная отправка той же награды (втора
     assert.strictEqual(r1.state.balance, 5800); assert.strictEqual(r2.state.balance, 5800);
   } finally { await s.close(); }
 });
+
+test('запрос с задержкой показа: сначала на экране «до выплаты», потом настоящий баланс', async () => {
+  const ledger = new MemLedger({ seeds: { A: 7000 } });
+  const s = await startServer({ insecure: true, ledger, config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'A');
+    assert.ok(await until(() => c.S.status() === 'server'));
+    const seen = [];
+    c.W.onChange((b) => seen.push(b));
+    const held = [];
+    c.W.holdShown = (ms) => held.push(ms);
+    await c.S.call('reward', { source: 'blackjack', kind: 'win' }, () => 900, () => 7000);
+    assert.deepStrictEqual(seen, [7000, 7250], 'сперва число «до выплаты», затем итог');
+    assert.deepStrictEqual(held, [900]);
+    assert.strictEqual(c.W.getBalance(), 7250);
+  } finally { await s.close(); }
+});
