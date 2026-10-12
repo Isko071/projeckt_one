@@ -66,3 +66,18 @@ test('выбор хранилища по переменным окружения
   const acc = await account();
   assert.ok(makeLedger({ FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ client_email: acc.client_email, private_key: acc.private_key }), FIREBASE_PROJECT_ID: 'p' }) instanceof FirestoreLedger);
 });
+
+test('Firestore-хранилище: возраст аккаунта берётся из времени создания документов (подделать нельзя)', async () => {
+  const acc = await account();
+  const fetch = async (url) => {
+    if (url === 'https://oauth2.googleapis.com/token') return { ok: true, status: 200, json: async () => ({ access_token: 't', expires_in: 3600 }) };
+    if (url.includes('/users/old')) return { ok: true, status: 200, json: async () => ({ createTime: '2026-10-08T10:00:00.000Z', fields: {} }) };
+    if (url.includes('/ratings/old')) return { ok: true, status: 200, json: async () => ({ createTime: '2026-10-09T10:00:00.000Z', fields: {} }) };
+    if (url.includes('/ratings/rate')) return { ok: true, status: 200, json: async () => ({ createTime: '2026-10-11T10:00:00.000Z', fields: {} }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const L = new FirestoreLedger({ projectId: 'p', serviceAccount: { client_email: acc.client_email, private_key: acc.private_key }, fetch });
+  assert.strictEqual(await L.accountSince('old'), Date.parse('2026-10-08T10:00:00.000Z'), 'берётся самый ранний документ');
+  assert.strictEqual(await L.accountSince('rate'), Date.parse('2026-10-11T10:00:00.000Z'));
+  assert.strictEqual(await L.accountSince('nobody'), null);
+});

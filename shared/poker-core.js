@@ -166,7 +166,14 @@
     this.busy = true; clearTimeout(this.timer);
     // баланс на экране меняется после вскрытия карт: сервер уже начислил итог, показ задерживаем
     var holdFor = function (r) { var p = r.result && r.result.poker; return p && p.st.phase === 'settled' && before.phase !== 'settled' ? (p.st.result && p.st.result.showdown ? self.flipMs : 0) + 300 : 0; };
-    root.PlatformWalletSync.call(op, args, holdFor).then(function (r) { self.busy = false; self.failures = 0; if (!self.stopped) self.srvApply(op, r.result || {}, before); }, function (e) { self.busy = false; if (!self.stopped) self.srvFail(op, e); });
+    // ставка этого хода списывается на экране сразу, а выигрыш (если раздача кончилась) ждёт вскрытия
+    var beforeHold = function (r) {
+      var p = r.result && r.result.poker;
+      if (!p || p.free || !before || !before.seats) return null;
+      var bet = Math.max(0, p.st.seats[0].total - (before.phase === 'settled' ? 0 : before.seats[0].total));
+      return self.W.getBalance() - bet;
+    };
+    root.PlatformWalletSync.call(op, args, holdFor, beforeHold).then(function (r) { self.busy = false; self.failures = 0; if (!self.stopped) self.srvApply(op, r.result || {}, before); }, function (e) { self.busy = false; if (!self.stopped) self.srvFail(op, e); });
     return true;
   };
   Solo.prototype.srvApply = function (op, res, before) {

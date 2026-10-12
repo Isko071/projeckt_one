@@ -13,6 +13,7 @@ class MemLedger {
     this.seeds = (o && o.seeds) || {};     // uid → стартовый баланс (для проверок)
     this.failNext = 0;                     // для проверок: сколько ближайших записей завершить ошибкой
     this.failAfterApply = 0;               // для проверок: сколько ближайших записей применить, но сообщить об ошибке
+    this.sinces = (o && o.sinces) || {};   // для проверок: uid → когда создан аккаунт (мс); по умолчанию «давно»
   }
   async get(coll, id) { const v = this.data.get(coll + '/' + id); return v ? JSON.parse(JSON.stringify(v)) : null; }
   async commit(writes) {
@@ -29,6 +30,7 @@ class MemLedger {
     return out;
   }
   async seed(uid) { return Number.isFinite(this.seeds[uid]) ? this.seeds[uid] : null; }
+  async accountSince(uid) { return Number.isFinite(this.sinces[uid]) ? this.sinces[uid] : 0; }
 }
 
 // Firestore через REST: токен получаем из ключа сервисного аккаунта (JSON из консоли Firebase), без сторонних библиотек
@@ -112,6 +114,16 @@ class FirestoreLedger {
   }
   // Новому игроку: его кошелёк из облачного снимка прогресса (users/{uid}: серия, рекорды, дни, баланс), а если снимка нет, баланс из рейтинга
   // (оба пишет сам клиент, поэтому в wallet-service.js баланс ограничен сверху)
+  // Когда аккаунт появился в базе: время создания его документов users/{uid} и ratings/{uid} (его ставит сам Firestore, подделать нельзя); null — документов нет
+  async accountSince(uid) {
+    const times = [];
+    for (const coll of ['users', 'ratings']) {
+      const doc = await this.call('GET', this.base + '/' + coll + '/' + encodeURIComponent(uid));
+      const t = doc && doc.createTime ? Date.parse(doc.createTime) : NaN;
+      if (Number.isFinite(t)) times.push(t);
+    }
+    return times.length ? Math.min.apply(null, times) : null;
+  }
   async seed(uid) {
     const snap = await this.call('GET', this.base + '/users/' + encodeURIComponent(uid));
     try {

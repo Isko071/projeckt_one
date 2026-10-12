@@ -19,6 +19,8 @@ const crypto = require('node:crypto');
 
 const SEED_CAP = Number(process.env.WALLET_SEED_CAP) || 50000;    // новому игроку засчитывается не больше этого баланса (на случай подделки до первого входа)
 const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // награда эксперта «Сапёра» без дневного предела: не чаще раза в минуту и не больше 30 в сутки (партию сервер не видит)
+// Прогресс, принесённый из браузера (баланс, серия), принимается только у аккаунтов, появившихся до этой даты (они играли до серверного баланса): иначе любой новый аккаунт приносил бы себе до SEED_CAP аконов
+const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:00:00Z');
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
 const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
@@ -33,6 +35,7 @@ class WalletService {
   constructor(o) {
     this.ledger = o.ledger;
     this.now = o.now || Date.now;
+    this.seedBefore = o.seedBefore !== undefined ? o.seedBefore : SEED_BEFORE;
     this.cache = new Map();             // uid → состояние кошелька
     this.holds = new Map();             // 'uid_код' → { uid, code, amount }
     this.queues = new Map();            // uid → хвост очереди операций (на игрока они идут по одной)
@@ -104,8 +107,9 @@ class WalletService {
     if (!state) {
       // Новый игрок: прогресс (серия, рекорды, дни, баланс) берётся из его кошелька в браузере, а если браузер его не прислал, баланс из рейтинга
       // Откуда начать: 1) кошелёк в браузере, если в нём есть прогресс; 2) прогресс из облака (снимок игрока) или хотя бы баланс из рейтинга; 3) пустой кошелёк
-      const mine = this.seeds.get(uid);
-      let seed = mine && typeof mine === 'object' && !this.pristine(mine) ? mine : await this.ledger.seed(uid);
+      const mine = this.seeds.get(uid), since = await this.ledger.accountSince(uid);
+      const old = since !== null && since < this.seedBefore;                  // нет документов аккаунта или он новый: перенос прогресса не положен, начинает с обычного старта
+      let seed = !old ? null : (mine && typeof mine === 'object' && !this.pristine(mine) ? mine : await this.ledger.seed(uid));
       if (typeof seed === 'number') seed = { balance: seed };
       state = this.W.sanitize(seed && typeof seed === 'object' ? seed : null);
       state.balance = Math.min(state.balance, SEED_CAP); state.peak = Math.max(state.balance, Math.min(state.peak, SEED_CAP));

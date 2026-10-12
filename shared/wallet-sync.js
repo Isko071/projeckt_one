@@ -8,7 +8,7 @@
 //   PlatformWalletSync.status()    → 'local' (кошелёк в браузере) | 'connecting' (ждём сервер) | 'server' (серверный баланс работает)
 //   PlatformWalletSync.onStatus(fn)
 //   PlatformWalletSync.start() / stop()   — вызываются сами по входу и выходу из аккаунта
-//   PlatformWalletSync.call(op, args, holdFor) → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server'); holdFor(ответ) — через сколько мс показать новый баланс
+//   PlatformWalletSync.call(op, args, holdFor, beforeHold) → Promise<{ state, result }>  запрос к серверу напрямую (только в режиме 'server'); holdFor(ответ) — через сколько мс показать новый баланс
 //   PlatformWalletSync.blocked(game)      → true, если игра сейчас недоступна: пока ждём сервер, а при серверном балансе — игры, которые пока считают аконы в браузере (сейчас таких нет)
 (function (root) {
   var W = root.PlatformWallet, Cloud = root.PlatformCloud, Store = root.PlatformStorage;
@@ -16,6 +16,7 @@
   var CALL_MS = 20000, CONNECT_MS = 15000;
   var status = 'local', fns = [], ws = null, uid = null, running = false, flushing = false, pend = {}, seq = 0, retry = 0, retryTimer = null, openTimer = null, lastState = null;
   var queue = [];
+  var synced = false;                        // сервер уже ответил на этой странице: до этого число баланса — копия из браузера, и экран показывает его притушенным
   var SERVER_GAMES = ['mines', 'poker-simple', 'poker'];              // игры, которые уже умеют работать на серверном балансе
 
   var connectingSince = 0, UNREACHABLE_MS = 45000;
@@ -149,7 +150,7 @@
     running = false; uid = null;
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     try { ws && ws.close(); } catch (e) { /* уже закрыт */ }
-    ws = null; lastState = null;
+    ws = null; lastState = null; synced = false;
     setStatus('local');
   }
   function refresh() { if (!wanted()) { if (running) stop(); return; } if (!running || (uid && Cloud.getState().user.uid !== uid)) { if (running) stop(); start(); } }
@@ -163,10 +164,12 @@
     // Игры, которые пока считают аконы в браузере, при серверном балансе (и пока он неизвестен) недоступны; «Мины» и «Покер» работают на сервере и ждут только ответа
     blocked: function (game) { if (status === 'server') return SERVER_GAMES.indexOf(game) < 0; return status !== 'local'; },
     // holdFor(ответ) → через сколько мс показать на экране новый баланс (игра сначала доигрывает анимацию); 0 или не задано — как обычно
-    call: function (op, args, holdFor) {
+    // beforeHold(ответ) → баланс, который на экране должен стать сразу (например, после ставки), пока выигрыш ещё ждёт конца анимации
+    call: function (op, args, holdFor, beforeHold) {
       if (status !== 'server') return Promise.reject(fail('offline'));
       return rawCall(Object.assign({ op: op }, args || {})).then(function (r) {
         var ms = holdFor ? holdFor(r) : 0;
+        if (ms > 0 && beforeHold) { var pre = beforeHold(r); if (typeof pre === 'number' && isFinite(pre) && pre >= 0 && pre !== r.state.balance) W.applyServer(Object.assign({}, r.state, { balance: pre })); }
         if (ms > 0 && W.holdShown) W.holdShown(ms);
         W.applyServer(r.state);
         return r;

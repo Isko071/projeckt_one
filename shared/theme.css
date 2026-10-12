@@ -85,3 +85,7 @@ button { font-family: inherit; }
 @keyframes pl-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 html.pl-arrive::after { content: ""; position: fixed; inset: 0; z-index: 2000; background: var(--bg); pointer-events: none; animation: pl-out .5s ease .1s forwards; }
 @keyframes pl-out { to { opacity: 0; visibility: hidden; } }
+
+/* Пока сервер не ответил, число баланса — копия из браузера: показываем притушенным, чтобы не выдавать его за настоящее */
+.bal, .bal-chip, .bal-line, .stackline, #wallet-open, .wallet-balance { transition: opacity .35s ease; }
+html.wallet-wait :is(.bal, .bal-chip, .bal-line, .stackline, #wallet-open, .wallet-balance) { opacity: .45; }

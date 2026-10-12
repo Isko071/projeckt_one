@@ -31,10 +31,11 @@ var GEM_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 4h16l5 8-
 // Баланс на плашке меняется постепенно: показываемое число берётся из кошелька (W.shownBalance) и обновляется на каждом кадре
 function balanceNow() { return W.shownBalance(); }
 function balanceHtml() {
-  var b = balanceNow(), rw = app.fresh && app.rw ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
+  // Подсветка и «+награда/−штраф» стартуют вместе с бегущим числом (после паузы hold) и живут, пока не доиграют, даже если экран перерисовали (смена темы, правила)
+  var b = balanceNow(), hold = app.hold || 700, el = app.rw && app.deltaAt ? Date.now() - app.deltaAt : -1, rw = el >= 0 && el < hold + 2300 ? app.rw : null, cls = rw ? (rw.granted > 0 ? ' up' : (rw.lost > 0 ? ' down' : '')) : '';
   var delta = rw ? (rw.granted > 0 ? '+' + fmt(rw.granted) : (rw.lost > 0 ? '−' + fmt(rw.lost) : '')) : '';
-  return '<div class="bal' + cls + '" aria-label="' + esc(tr('balance', { n: fmt(W.getBalance()), unit: unit(W.getBalance()) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
-    (delta ? '<i class="delta" aria-hidden="true" style="animation-delay:' + (app.hold || 700) + 'ms">' + delta + '</i>' : '') + '</div>';
+  return '<div class="bal' + cls + '"' + (rw ? ' style="--d:' + (hold - el) + 'ms"' : '') + ' aria-label="' + esc(tr('balance', { n: fmt(W.getBalance()), unit: unit(W.getBalance()) })) + '"><span class="coin" aria-hidden="true"></span><b>' + fmt(b) + '</b>' +
+    (delta ? '<i class="delta" aria-hidden="true" style="animation-delay:' + (hold - el) + 'ms">' + delta + '</i>' : '') + '</div>';
 }
 
 // ===== Старт =====
@@ -81,8 +82,8 @@ function startRound() {
 // Раунд закончен: награда без дневного предела; мина списывает штраф (500 при 1–10 минах, 200 при 11–24; сколько есть, если меньше)
 function finish(v) {
   app.hold = holdMs(v); W.holdShown(app.hold);
-  if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; }
-  else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; }
+  if (v.payout > 0) { W.add(v.payout, 'mines', Date.now()); W.countWin('mines'); app.rw = { granted: v.payout, lost: 0 }; app.deltaAt = Date.now(); }
+  else { var take = Math.min(M.lossFor(v.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', Date.now()); app.rw = { granted: 0, lost: take }; app.deltaAt = Date.now(); }
 }
 // Пока баланс на сервере (или ждём его), игра, которая считает аконы в браузере, недоступна: подделать серверный баланс через неё было бы можно
 function walletBlocked() { return !!(window.PlatformWalletSync && window.PlatformWalletSync.blocked('mines')); }
@@ -114,7 +115,7 @@ function act(action) {
     var idx = action.type === 'open' ? action.index : -1;
     render();
     srvCall(action.type === 'open' ? 'minesOpen' : 'minesCash', { index: action.index }, srvHold).then(function (r) {
-      app.busy = false; app.round = r.result.mines; app.rw = r.result.rw; app.hold = srvHold(r); if (idx >= 0) app.last = idx; app.fresh = true; render();
+      app.busy = false; app.round = r.result.mines; app.rw = r.result.rw; app.deltaAt = Date.now(); app.hold = srvHold(r); if (idx >= 0) app.last = idx; app.fresh = true; render();
     }, function (e) { resync(srvError(e)); });
     return;
   }
