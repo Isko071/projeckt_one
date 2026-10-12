@@ -27,7 +27,7 @@
   function renderBar() {
     var balance = W.getBalance(), st = W.dailyStatus(), seen = W.shownBalance();
     balanceEl.textContent = fmt(seen);
-    unitEl.textContent = unit(seen);
+    unitEl.textContent = unit(balance);          // слово по настоящему балансу: пока число бежит, оно не должно менять форму (плашка прыгала бы по ширине)
     streakEl.textContent = st.streak;
     streakChip.classList.toggle('cold', st.streak === 0);
     streakChip.classList.toggle('risk', st.atRisk);
@@ -85,7 +85,7 @@
   function renderDialog() {
     var seen = W.shownBalance();
     $('wd-balance').textContent = fmt(seen);
-    $('wd-unit').textContent = unit(seen);
+    $('wd-unit').textContent = unit(W.getBalance());
   }
 
   function openDialog() {
@@ -110,7 +110,7 @@
   // Баланс мог измениться в другой вкладке или после возврата из игры
   function refresh() { renderBar(); if (dialog.open) renderDialog(); if (!pop.hidden) renderCalendar(); }
   W.onChange(refresh);
-  W.onShown(function (v) { balanceEl.textContent = fmt(v); unitEl.textContent = unit(v); if (dialog.open) renderDialog(); });
+  W.onShown(function (v) { balanceEl.textContent = fmt(v); unitEl.textContent = unit(W.getBalance()); if (dialog.open) renderDialog(); });
   window.addEventListener('pageshow', refresh);
   window.addEventListener('focus', refresh);
   window.addEventListener('storage', function (e) { if (!e.key || e.key === W.KEY) refresh(); });

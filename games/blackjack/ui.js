@@ -518,7 +518,7 @@ function startHtml() {
     '<div class="muted-text">' + esc(tr('tagline')) + '</div>' + modes +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play">' + esc(tr('start.play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
-    '<div class="bal-line" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()), unit: unit(W.shownBalance()) })) + '</div></div>';
+    '<div class="bal-line" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()), unit: unit(W.getBalance()) })) + '</div></div>';
 }
 
 function loginHtml() {

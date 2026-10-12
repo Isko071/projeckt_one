@@ -225,7 +225,7 @@ function startHtml() {
     (walletBlocked() ? '<div class="note-card" data-key="blocked" role="status"><div style="font-weight:700">' + esc(tr(window.PlatformWalletSync.unreachable && window.PlatformWalletSync.unreachable() ? 'server.unreachable' : 'server.connecting')) + '</div></div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play" data-key="play"' + (needAuth || walletBlocked() ? ' disabled' : '') + '>' + esc(tr('play')) + '</button>' +
     '<button class="btn-secondary wide" data-act="rules" data-key="rules">' + esc(tr('rules')) + '</button></div>' +
-    '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div></div>';
+    '<div class="bal-line" data-key="bal" data-bal="line">' + esc(tr('balance', { n: fmt(W.shownBalance()) + ' ' + unit(W.getBalance()) })) + '</div></div>';
 }
 function segHtml(items, sel, act) {
   return '<div class="seg">' + items.map(function (it) { return '<button data-act="' + act + '" data-v="' + it.v + '" data-key="' + act + it.v + '" aria-pressed="' + (it.v === sel) + '">' + esc(it.t) + '</button>'; }).join('') + '</div>';
@@ -237,7 +237,7 @@ function setupHtml() {
     '<div><div class="lbl">' + esc(tr('setup.players')) + '</div>' + segHtml(SIZES.map(function (n) { return { v: n, t: String(n) }; }), pr.n, 'size') + '</div>' +
     '<div class="prev" data-key="prev"><div class="felt"></div>' + dots + '</div>' +
     '<div><div class="lbl">' + esc(tr('setup.ante')) + '</div>' + segHtml(ANTES.map(function (n) { return { v: n, t: String(n) }; }), pr.ante, 'ante') + '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(tr('setup.minNote', { n: pr.ante * 2 })) + '</div></div>' +
-    '<div class="stackline" data-bal="stack">' + esc(tr('setup.stack', { n: fmt(W.shownBalance()) + ' ' + unit(W.shownBalance()) })) + '</div>' +
+    '<div class="stackline" data-bal="stack">' + esc(tr('setup.stack', { n: fmt(W.shownBalance()) + ' ' + unit(W.getBalance()) })) + '</div>' +
     '<div class="capline">' + esc(tr('setup.cap', { n: fmt(cap.left) })) + '</div>' +
     (broke ? '<div class="warnbox">' + esc(tr('setup.broke', { n: pr.ante })) + '</div>' : '') +
     '<div style="display:flex"><button class="btn primary full" data-act="sit" data-key="sit"' + (broke ? ' disabled' : '') + '>' + esc(tr('setup.sit')) + '</button></div></div>';
@@ -585,7 +585,7 @@ W.onShown(function (v) {
   var els = appEl.querySelectorAll('[data-bal]');
   for (var i = 0; i < els.length; i++) {
     var kind = els[i].getAttribute('data-bal');
-    els[i].textContent = kind === 'short' ? fmt(v) + ' ' + tr('unitShort') : tr(kind === 'line' ? 'balance' : 'setup.stack', { n: fmt(v) + ' ' + unit(v) });
+    els[i].textContent = kind === 'short' ? fmt(v) + ' ' + tr('unitShort') : tr(kind === 'line' ? 'balance' : 'setup.stack', { n: fmt(v) + ' ' + unit(W.getBalance()) });
   }
 });
 window.PlatformTheme.onChange(function () { render(); });
