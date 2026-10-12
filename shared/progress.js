@@ -20,7 +20,12 @@
   }
 
   // При серверном балансе кошелёк в браузере это копия: в сравнении «что изменилось» и при замене снимком он не участвует (иначе на втором устройстве возникал бы ложный конфликт)
-  function walletIsServer() { return !!(root.PlatformWallet && root.PlatformWallet.serverOn && root.PlatformWallet.serverOn()); }
+  // Это и пока сервер ещё не ответил (статус «подключаемся»): сервер забирает прогресс с устройства один раз при первой синхронизации, а дальше хранит его сам
+  function walletIsServer() {
+    var S = root.PlatformWalletSync;
+    if (S && S.status && S.status() !== 'local') return true;
+    return !!(root.PlatformWallet && root.PlatformWallet.serverOn && root.PlatformWallet.serverOn());
+  }
   function snapshot() {
     var data = {};
     allKeys().forEach(function (k) {

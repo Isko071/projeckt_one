@@ -249,3 +249,17 @@ test('в записи игрока есть время регистрации и
   assert.ok(Number(cloud.docs.u1.fields.lastSeen.integerValue) > 1000, 'визит обновлён');
   assert.equal(Number(cloud.docs.u1.fields.createdAt.integerValue), Date.parse('Mon, 01 Sep 2025 10:00:00 GMT'));
 });
+
+test('серверный баланс (в том числе пока сервер не ответил): кошелёк в браузере не участвует ни в сравнении, ни в замене снимком', async () => {
+  const cloud = makeCloud();
+  const d = device(cloud);
+  d.ctx.PlatformWalletSync = { status: () => 'connecting' };
+  d.W.add(777, 'win');
+  const fp = d.PP.fingerprint();
+  d.W.add(1000, 'win');
+  assert.equal(d.PP.fingerprint(), fp, 'смена копии баланса не считается изменением прогресса');
+  const cloudSnap = { v: 1, data: { 'platform:wallet': { balance: 99999 }, 'game:x:best': 5 } };
+  d.PP.applySnapshot(cloudSnap);
+  assert.equal(d.W.getBalance(), 6777, 'копия баланса осталась (её заменит ответ сервера), чужой снимок её не затирает');
+  assert.equal(d.S.get('game:x:best', null), 5, 'остальной прогресс из снимка применился');
+});
