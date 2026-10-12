@@ -5,7 +5,9 @@
 //   rating.fingerprint(profile, balance) → строка: менялась ли строка с прошлой отправки
 //   rating.publish(token, uid, profile, balance) → Promise;  rating.top(token, limit) → Promise<[{ uid, name, avatar, icon, balance }]>
 // Ошибки: { code: 'denied' | 'http-<код>' }; без сети fetch сам отклонит запрос.
-// Баланс считается в браузере игрока, поэтому рейтинг по балансу честен лишь настолько, насколько честны игроки (docs/wallet.md).
+// Серверный баланс (docs/server-wallet.md): баланс в строку пишет сервер (поле src = 'server'), игрок пишет только имя, аватар и значок (publish с profileOnly),
+// а top оставляет только строки с отметкой сервера: числа, присланные браузером, в рейтинге не показываются.
+// Без серверного баланса рейтинг честен лишь настолько, насколько честны игроки (docs/wallet.md).
 (function (root) {
   var MAX_NAME = 20, MAX_BALANCE = 1000000000;
 
@@ -18,7 +20,7 @@
     var p = profile || {};
     return { name: cleanName(p.name), avatar: cleanInt(p.avatar, 99), icon: typeof p.icon === 'string' ? p.icon.slice(0, 8) : '', balance: cleanInt(balance, MAX_BALANCE) };
   }
-  function fingerprint(profile, balance) { var r = rowFields(profile, balance); return [r.name, r.avatar, r.icon, r.balance].join('|'); }
+  function fingerprint(profile, balance, profileOnly) { var r = rowFields(profile, balance); return (profileOnly ? [r.name, r.avatar, r.icon] : [r.name, r.avatar, r.icon, r.balance]).join('|'); }
 
   function create(env) {
     var base = 'https://firestore.googleapis.com/v1/projects/' + env.projectId + '/databases/' + env.db + '/documents';
@@ -30,8 +32,14 @@
       if (!res.ok) throw fail('http-' + res.status);
       return res;
     }
-    function publish(token, uid, profile, balance) {
+    // profileOnly: баланс игрок не пишет (его пишет сервер), обновляются только имя, аватар и значок
+    function publish(token, uid, profile, balance, profileOnly) {
       var r = rowFields(profile, balance);
+      if (profileOnly) {
+        var mask = '?updateMask.fieldPaths=name&updateMask.fieldPaths=avatar&updateMask.fieldPaths=icon';
+        var pbody = { fields: { name: { stringValue: r.name }, avatar: { integerValue: String(r.avatar) }, icon: { stringValue: r.icon } } };
+        return req('PATCH', base + '/ratings/' + encodeURIComponent(uid) + mask, token, pbody).then(check).then(function () { return true; });
+      }
       var body = { fields: { name: { stringValue: r.name }, avatar: { integerValue: String(r.avatar) }, icon: { stringValue: r.icon }, balance: { integerValue: String(r.balance) }, updatedAt: { integerValue: String(Date.now()) } } };
       return req('PATCH', base + '/ratings/' + encodeURIComponent(uid), token, body).then(check).then(function () { return true; });
     }
@@ -39,14 +47,17 @@
     function top(token, limit) {
       var body = { structuredQuery: { from: [{ collectionId: 'ratings' }], orderBy: [{ field: { fieldPath: 'balance' }, direction: 'DESCENDING' }], limit: Math.max(1, Math.min(100, limit || 20)) } };
       return req('POST', base + ':runQuery', token, body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
-        var out = [];
+        var out = [], server = 0;
         (Array.isArray(rows) ? rows : []).forEach(function (r) {
           if (!r || !r.document) return;
           var f = r.document.fields || {}, uid = String(r.document.name || '').split('/').pop();
           var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, field(f, 'balance'));
-          out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, balance: row.balance });
+          var fromServer = field(f, 'src') === 'server';
+          if (fromServer) server++;
+          out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, balance: row.balance, server: fromServer });
         });
-        return out;
+        // Раз сервер уже пишет строки, остаются только его: число, присланное браузером, могло быть подделано
+        return (server ? out.filter(function (x) { return x.server; }) : out).map(function (x) { return { uid: x.uid, name: x.name, avatar: x.avatar, icon: x.icon, balance: x.balance }; });
       });
     }
     // ----- Победы онлайн: ratings_wins/<игра>/rows/<uid>, победа прибавляется на единицу (правила базы не дают прибавить больше) -----

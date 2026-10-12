@@ -21,6 +21,7 @@ const SEED_CAP = Number(process.env.WALLET_SEED_CAP) || 50000;    // новом�
 const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // награда эксперта «Сапёра» без дневного предела: не чаще раза в минуту и не больше 30 в сутки (партию сервер не видит)
 // Прогресс, принесённый из браузера (баланс, серия), принимается только у аккаунтов, появившихся до этой даты (они играли до серверного баланса): иначе любой новый аккаунт приносил бы себе до SEED_CAP аконов
 const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:00:00Z');
+const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
 const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
@@ -47,6 +48,9 @@ class WalletService {
     this.experts = new Map();           // uid → { last, t0, n }
     this.touched = new Map();           // uid → когда последний раз обращались (для очистки памяти)
     this.holdsLoaded = false;
+    this.rated = new Map();             // uid → баланс, который ждёт отправки в рейтинг
+    this.ratedLast = new Map();         // uid → что уже отправлено
+    this.rateTimer = null;
     this.rng = o.rng || (() => crypto.randomInt(0, 4294967296) / 4294967296);
     const ctx = vm.createContext({ JSON, Math, Date, Object, Array, Number, String, isFinite, parseInt });
     ctx.cur = null; ctx.out = null;
@@ -141,6 +145,7 @@ class WalletService {
       catch (e) { this.forget(uid); throw fail('ledger'); }       // запись могла пройти, а ответ потеряться: всё, что помним про этого игрока, перечитаем из хранилища
     }
     this.cache.set(uid, next);
+    this.rate(uid, next.balance);
     if (ridList) this.rids.set(uid, ridList);
     return { state: next, result };
   }
@@ -355,6 +360,32 @@ class WalletService {
     this.pokers.set(uid, next);
     return { state: res.state, result: { poker: this.pokerView(next, rw) } };
   }
+
+  // ---------- Рейтинг по балансу ----------
+  // Баланс в публичную строку рейтинга (ratings/{uid}) пишет сервер, а не браузер: накопившееся с задержкой и не чаще раза в RATING_MS на игрока.
+  // В рейтинге стоит баланс вместе с залогами (аконы за столом никуда не делись)
+  rate(uid, balance) { this.rated.set(uid, balance); }
+  heldSum(uid) { let n = 0; this.holds.forEach((h) => { if (h.uid === uid) n += h.amount; }); return n; }
+  async flushRatings() {
+    if (!this.ledger.setRating) return 0;
+    let sent = 0;
+    for (const [uid, bal] of Array.from(this.rated.entries())) {
+      const c = this.cache.get(uid), total = (c ? c.balance : bal) + this.heldSum(uid);
+      this.rated.delete(uid);
+      if (this.ratedLast.get(uid) === total) continue;
+      try { await this.ledger.setRating(uid, total); this.ratedLast.set(uid, total); sent++; }
+      catch (e) { if (!this.rated.has(uid)) this.rated.set(uid, bal); }      // повторим в следующий раз
+    }
+    return sent;
+  }
+  // Раз в RATING_MS отправляет накопившееся; при запуске записывает в рейтинг балансы всех игроков с кошельком (строки, присланные браузером, перекрываются)
+  startRatings() {
+    if (this.rateTimer || !this.ledger.setRating) return;
+    this.rateTimer = setInterval(() => { this.flushRatings().catch(() => {}); }, RATING_MS);
+    if (this.rateTimer.unref) this.rateTimer.unref();
+    this.ledger.list('wallets').then((list) => { list.forEach((w) => { if (w.data && typeof w.data.balance === 'number' && !this.rated.has(w.id)) this.rated.set(w.id, w.data.balance); }); }, () => {});
+  }
+  stopRatings() { if (this.rateTimer) clearInterval(this.rateTimer); this.rateTimer = null; }
 
   // ---------- Залоги ставок ----------
   async holdRecord(key) { return this.holds.get(key) || (await this.ledger.get('holds', key)); }

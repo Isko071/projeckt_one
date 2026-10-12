@@ -13,6 +13,7 @@ class MemLedger {
     this.seeds = (o && o.seeds) || {};     // uid → стартовый баланс (для проверок)
     this.failNext = 0;                     // для проверок: сколько ближайших записей завершить ошибкой
     this.failAfterApply = 0;               // для проверок: сколько ближайших записей применить, но сообщить об ошибке
+    this.ratings = new Map();              // uid → баланс в рейтинге (для проверок)
     this.sinces = (o && o.sinces) || {};   // для проверок: uid → когда создан аккаунт (мс); по умолчанию «давно»
   }
   async get(coll, id) { const v = this.data.get(coll + '/' + id); return v ? JSON.parse(JSON.stringify(v)) : null; }
@@ -31,6 +32,7 @@ class MemLedger {
   }
   async seed(uid) { return Number.isFinite(this.seeds[uid]) ? this.seeds[uid] : null; }
   async accountSince(uid) { return Number.isFinite(this.sinces[uid]) ? this.sinces[uid] : 0; }
+  async setRating(uid, balance) { this.ratings.set(uid, balance); }
 }
 
 // Firestore через REST: токен получаем из ключа сервисного аккаунта (JSON из консоли Firebase), без сторонних библиотек
@@ -111,6 +113,11 @@ class FirestoreLedger {
       page = (body && body.nextPageToken) || '';
     } while (page);
     return out;
+  }
+  // Строка рейтинга: баланс пишет только сервер (с отметкой src), имя и аватар игрок пишет сам; маска полей не трогает остальное
+  async setRating(uid, balance) {
+    const mask = '?updateMask.fieldPaths=balance&updateMask.fieldPaths=src&updateMask.fieldPaths=updatedAt';
+    await this.call('PATCH', this.base + '/ratings/' + encodeURIComponent(uid) + mask, { fields: { balance: { integerValue: String(Math.max(0, Math.floor(balance))) }, src: { stringValue: 'server' }, updatedAt: { integerValue: String(this.now()) } } });
   }
   // Новому игроку: его кошелёк из облачного снимка прогресса (users/{uid}: серия, рекорды, дни, баланс), а если снимка нет, баланс из рейтинга
   // (оба пишет сам клиент, поэтому в wallet-service.js баланс ограничен сверху)
