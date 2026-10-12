@@ -127,46 +127,32 @@ test('прогресс другого устройства подтягивае�
   assert.equal(b.reloads.n >= 1, true);
 });
 
-test('конфликт: изменились обе стороны, игрок выбирает облако', async () => {
+test('конфликт: изменились обе стороны — окно не показывается, берётся прогресс этого устройства и уходит в облако', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
   const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
   a.W.add(1000, 'win'); await a.C.syncNow();   // облако: 6000
   b.W.add(300, 'win');                          // устройство B: 5300, облако тоже ушло вперёд
-  await b.C.syncNow();
-  const st = b.C.getState();
-  assert.equal(st.sync, 'conflict');
-  assert.equal(st.conflict.cloud.balance, 6000);
-  assert.equal(st.conflict.local.balance, 5300);
-  await b.C.resolveConflict('cloud');
-  assert.equal(b.W.getBalance(), 6000);
-  assert.equal(b.C.getState().conflict, null);
-});
-
-test('конфликт при серверном балансе: окно не показывается, облако берётся само', async () => {
-  const cloud = makeCloud();
-  const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
-  const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
-  a.W.add(1000, 'win'); await a.C.syncNow();
-  b.W.add(300, 'win');
-  b.ctx.PlatformWalletSync = { status: () => 'connecting' };         // баланс этого игрока считает сервер
   const before = b.reloads.n;
   await b.C.syncNow();
   const st = b.C.getState();
   assert.equal(st.sync, 'idle', 'вопроса нет');
   assert.equal(st.conflict, null);
-  assert.equal(b.reloads.n, before + 1, 'страница перезагрузилась с прогрессом из облака');
+  assert.equal(b.W.getBalance(), 5300, 'остаётся то, что у игрока на устройстве');
+  assert.equal(cloudSnapshot(cloud).data['platform:wallet'].balance, 5300, 'и оно уходит в облако');
+  assert.equal(b.reloads.n, before, 'страница не перезагружается');
 });
 
-test('конфликт: игрок оставляет прогресс этого устройства, облако обновляется', async () => {
+test('конфликт при серверном балансе: тоже без окна, прогресс устройства', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
   const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
   a.W.add(1000, 'win'); await a.C.syncNow();
-  b.W.add(300, 'win'); await b.C.syncNow();
-  await b.C.resolveConflict('local');
-  assert.equal(cloudSnapshot(cloud).data['platform:wallet'].balance, 5300);
+  b.W.add(300, 'win');
+  b.ctx.PlatformWalletSync = { status: () => 'connecting' };
+  await b.C.syncNow();
   assert.equal(b.C.getState().sync, 'idle');
+  assert.equal(b.C.getState().conflict, null);
 });
 
 test('на странице игры (allowDownload: false) облако не затирает локальный прогресс', async () => {
