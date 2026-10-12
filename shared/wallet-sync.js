@@ -55,7 +55,7 @@
       sock.onopen = function () { sock.send(JSON.stringify({ t: 'auth', token: token })); };
       sock.onmessage = function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.t === 'ready') { opened = true; clearTimeout(openTimer); retry = 0; onReady(m); }
+        if (m.t === 'ready') { opened = true; clearTimeout(openTimer); onReady(m); }
         else if (m.t === 'denied') { opened = true; clearTimeout(openTimer); running = false; setStatus('local'); }
         else if (m.t === 'wallet' && m.state) { lastState = m.state; if (!queue.length && !flushing) W.applyServer(m.state); }
         else if (m.id && pend[m.id]) { var p = pend[m.id]; delete pend[m.id]; clearTimeout(p.timer); if (m.ok) p.res(m); else p.rej(fail(m.error || 'error')); }
@@ -115,7 +115,7 @@
     }
     return next().then(function () {
       flushing = false;
-      if (lastState) { W.applyServer(lastState); setStatus('server'); }
+      if (lastState) { retry = 0; W.applyServer(lastState); setStatus('server'); }
     }, function () {
       flushing = false;
       if (status === 'server') setStatus('connecting');

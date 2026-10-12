@@ -128,7 +128,7 @@ function sitDown() {
 function seatOnline(t) {
   if (app.entering) return;
   app.entering = true;
-  var show = function () { app.entering = false; if (T !== t) return; app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
+  var show = function () { app.entering = false; if (T !== t) { render(); return; } app.screen = 'game'; if (t.redeal) t.redeal(); render(); };
   if (window.PlatformLoader && window.PlatformLoader.cover) window.PlatformLoader.cover({ reveal: show }); else show();       // стол и раздача появляются, когда загрузка тает
 }
 function bindTable() {
@@ -491,6 +491,7 @@ function screenHtml() {
   return startHtml();
 }
 function render() {
+  if (app.entering) return;        // стол садится под загрузкой: пока она не растаяла, поле не рисуем (иначе раздача проигрывается под ней и ещё раз после неё)
   // чат узнаёт о новых сообщениях из вида стола: без этого отправленные сообщения остаются «Не отправлено» и показываются дважды
   var cv = T && T.ctrl && T.ctrl.getView ? T.ctrl.getView() : null;
   if (cv) chat.update(cv, cv.status === 'playing' ? 'game' : 'lobby');
@@ -578,7 +579,7 @@ document.addEventListener('keydown', function (e) {
 });
 window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
 // Вернулись кнопкой «Назад»/«Вперёд» из кеша страницы: стол, с которого мы «ушли», остановлен, поэтому возвращаем игрока на стартовый экран
-window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; render(); } });
+window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; app.menu = app.rules = app.combos = false; app.modal = app.sheet = null; app.bet = []; app.deal = null; render(); } });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });
 W.onShown(function (v) {
   var els = appEl.querySelectorAll('[data-bal]');

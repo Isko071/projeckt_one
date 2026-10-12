@@ -207,9 +207,9 @@
       root.PlatformWalletSync.call('pokerState', {}).then(function (r) {
         self.busy = false; if (self.stopped) return;
         var p = r.result && r.result.poker;
-        if (!p) { if (op === 'pokerStart' || op === 'pokerNext') { self.started = false; self.srvStep(op === 'pokerNext' && self.st ? 'pokerStart' : op, { size: self.cfg.size, ante: self.cfg.ante, name: self.cfg.name || '', styles: self.styles }); } else { self.stage = 'broke'; self.emit(); } return; }
+        if (!p) { if (op === 'pokerStart' || op === 'pokerNext') { self.started = false; self.srvStep(op === 'pokerNext' && self.st ? 'pokerStart' : op, { size: self.cfg.size, ante: self.cfg.ante, name: self.cfg.name || '', styles: self.styles }); } else if (self.st && self.st.phase !== 'settled') { self.started = false; self.srvStep('pokerStart', { size: self.cfg.size, ante: self.cfg.ante, name: self.cfg.name || '', styles: self.styles }); } else { self.stage = 'broke'; self.emit(); } return; }
         self.failures = 0; self.st = p.st; self.free = p.free; self.spent = p.spent; self.started = true; self.stage = null;
-        if (p.st.phase === 'settled') self.srvSettled(null); else { self.emit(); self.pump(); }
+        if (p.st.phase === 'settled') { if (self.stage === 'summary' || self.stage === 'short') self.emit(); else self.srvSettled(null); } else { self.emit(); self.pump(); }
       }, function () { self.busy = false; self.srvFail(op, e); });
     }, Math.min(8000, 1500 * self.failures));
   };
@@ -257,11 +257,11 @@
     if (this.stopped || this.busy || this.stage || this.st.current !== 0 || this.holding() || this.dealLeft() > 0) return false;
     return this.apply(Object.assign({ type: type, seat: 0 }, extra || {}));
   };
-  Solo.prototype.back = function () { this.stage = null; this.startHand(); };
+  Solo.prototype.back = function () { if (this.srv) { if (!this.busy) this.startHand(); return; } this.stage = null; this.startHand(); };
   Solo.prototype.inHand = function () { var st = this.st; return ['preflop', 'flop', 'turn', 'river'].indexOf(st.phase) >= 0 && !st.seats[0].folded; };
   Solo.prototype.leave = function () {
     this.stopped = true; clearTimeout(this.timer);
-    if (this.srv && this.started && root.PlatformWalletSync && root.PlatformWalletSync.status() === 'server') root.PlatformWalletSync.call('pokerLeave', {}).then(null, function () { /* партия на сервере доживёт до следующего стола */ });
+    if (this.srv && (this.started || this.busy) && root.PlatformWalletSync && root.PlatformWalletSync.status() === 'server') root.PlatformWalletSync.call('pokerLeave', {}).then(null, function () { /* партия на сервере доживёт до следующего стола */ });
   };
   Solo.prototype.tick = function () { if (this.notice && now() > this.notice.until) { this.notice = null; this.emit(); } };
   Solo.prototype.model = function () {
@@ -347,10 +347,10 @@
     } else this.stage = 'short';
     if (mine && mine.chips <= 0) this.brokeAfter = true;
   };
-  Online.prototype.send = function (action) { var self = this; this.pending = true; this.emit(); return Promise.resolve(this.ctrl.send(action)).then(null, function () { self.pending = false; self.emit(); }); };
+  Online.prototype.send = function (action) { var self = this; this.pending = true; this.emit(); return Promise.resolve(this.ctrl.send(action)).then(function () { return true; }, function () { self.pending = false; self.emit(); return false; }); };
   Online.prototype.act = function (type, extra) {
     var v = this.v;
-    if (this.stopped || !v || !v.state || this.stage || this.holding() || this.dealLeft() > 0 || v.state.current !== v.seat) return false;
+    if (this.stopped || this.pending || !v || !v.state || this.stage || this.holding() || this.dealLeft() > 0 || v.state.current !== v.seat) return false;
     this.send(Object.assign({ type: type }, extra || {}));
     return true;
   };
@@ -358,7 +358,9 @@
   Online.prototype.ackAuto = function () { this.autoAck = true; this.emit(); };
   Online.prototype.back = function () {
     if (this.brokeAfter) { this.stage = 'broke'; this.emit(); return; }
-    this.stage = 'ready'; this.send({ type: 'ready' });
+    var prev = this.stage, self = this;
+    this.stage = 'ready';
+    this.send({ type: 'ready' }).then(function (ok) { if (!ok && self.stage === 'ready') { self.stage = prev; self.emit(); } });      // связи не было: возвращаем панель итога с кнопкой
   };
   Online.prototype.start = function () { return this.send({ type: 'start' }); };
   Online.prototype.chatSend = function (text, cid) { return this.ctrl.send({ type: 'chat', text: text, cid: cid }); };
