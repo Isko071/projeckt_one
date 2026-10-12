@@ -143,6 +143,21 @@ test('конфликт: изменились обе стороны, игрок �
   assert.equal(b.C.getState().conflict, null);
 });
 
+test('конфликт при серверном балансе: окно не показывается, облако берётся само', async () => {
+  const cloud = makeCloud();
+  const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
+  const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
+  a.W.add(1000, 'win'); await a.C.syncNow();
+  b.W.add(300, 'win');
+  b.ctx.PlatformWalletSync = { status: () => 'connecting' };         // баланс этого игрока считает сервер
+  const before = b.reloads.n;
+  await b.C.syncNow();
+  const st = b.C.getState();
+  assert.equal(st.sync, 'idle', 'вопроса нет');
+  assert.equal(st.conflict, null);
+  assert.equal(b.reloads.n, before + 1, 'страница перезагрузилась с прогрессом из облака');
+});
+
 test('конфликт: игрок оставляет прогресс этого устройства, облако обновляется', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();

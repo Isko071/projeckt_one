@@ -135,6 +135,15 @@
           reload();
           return 'idle';
         }
+        // Серверный баланс: аконы и серия принадлежат серверу, а не браузеру, поэтому выбирать между «облаком» и «этим устройством» нечего: берём облако, баланс всё равно придёт с сервера
+        var S = root.PlatformWalletSync;
+        if (S && S.status && S.status() !== 'local') {
+          if (!allowDownload) return 'paused';
+          PP.applySnapshot(cloud.snap);
+          writeBase(uid, PP.fingerprint());
+          reload();
+          return 'idle';
+        }
         state.conflict = { cloud: meta(cloud.snap, cloud.updatedAt), local: meta(local, 0), cloudSnap: cloud.snap };
         return 'conflict';
       });
