@@ -127,31 +127,32 @@ test('прогресс другого устройства подтягивае�
   assert.equal(b.reloads.n >= 1, true);
 });
 
-test('конфликт: изменились обе стороны, игрок выбирает облако', async () => {
+test('конфликт: изменились обе стороны — окно не показывается, берётся прогресс этого устройства и уходит в облако', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
   const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
   a.W.add(1000, 'win'); await a.C.syncNow();   // облако: 6000
   b.W.add(300, 'win');                          // устройство B: 5300, облако тоже ушло вперёд
+  const before = b.reloads.n;
   await b.C.syncNow();
   const st = b.C.getState();
-  assert.equal(st.sync, 'conflict');
-  assert.equal(st.conflict.cloud.balance, 6000);
-  assert.equal(st.conflict.local.balance, 5300);
-  await b.C.resolveConflict('cloud');
-  assert.equal(b.W.getBalance(), 6000);
-  assert.equal(b.C.getState().conflict, null);
+  assert.equal(st.sync, 'idle', 'вопроса нет');
+  assert.equal(st.conflict, null);
+  assert.equal(b.W.getBalance(), 5300, 'остаётся то, что у игрока на устройстве');
+  assert.equal(cloudSnapshot(cloud).data['platform:wallet'].balance, 5300, 'и оно уходит в облако');
+  assert.equal(b.reloads.n, before, 'страница не перезагружается');
 });
 
-test('конфликт: игрок оставляет прогресс этого устройства, облако обновляется', async () => {
+test('конфликт при серверном балансе: тоже без окна, прогресс устройства', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
   const b = device(cloud); b.C.start(); await b.C.signIn(); await tick();
   a.W.add(1000, 'win'); await a.C.syncNow();
-  b.W.add(300, 'win'); await b.C.syncNow();
-  await b.C.resolveConflict('local');
-  assert.equal(cloudSnapshot(cloud).data['platform:wallet'].balance, 5300);
+  b.W.add(300, 'win');
+  b.ctx.PlatformWalletSync = { status: () => 'connecting' };
+  await b.C.syncNow();
   assert.equal(b.C.getState().sync, 'idle');
+  assert.equal(b.C.getState().conflict, null);
 });
 
 test('на странице игры (allowDownload: false) облако не затирает локальный прогресс', async () => {
@@ -247,4 +248,18 @@ test('в записи игрока есть время регистрации и
   assert.equal(cloud.docs.u1.fields.data.stringValue, data, 'данные не затёрты');
   assert.ok(Number(cloud.docs.u1.fields.lastSeen.integerValue) > 1000, 'визит обновлён');
   assert.equal(Number(cloud.docs.u1.fields.createdAt.integerValue), Date.parse('Mon, 01 Sep 2025 10:00:00 GMT'));
+});
+
+test('серверный баланс (в том числе пока сервер не ответил): кошелёк в браузере не участвует ни в сравнении, ни в замене снимком', async () => {
+  const cloud = makeCloud();
+  const d = device(cloud);
+  d.ctx.PlatformWalletSync = { status: () => 'connecting' };
+  d.W.add(777, 'win');
+  const fp = d.PP.fingerprint();
+  d.W.add(1000, 'win');
+  assert.equal(d.PP.fingerprint(), fp, 'смена копии баланса не считается изменением прогресса');
+  const cloudSnap = { v: 1, data: { 'platform:wallet': { balance: 99999 }, 'game:x:best': 5 } };
+  d.PP.applySnapshot(cloudSnap);
+  assert.equal(d.W.getBalance(), 6777, 'копия баланса осталась (её заменит ответ сервера), чужой снимок её не затирает');
+  assert.equal(d.S.get('game:x:best', null), 5, 'остальной прогресс из снимка применился');
 });

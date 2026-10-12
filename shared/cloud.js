@@ -135,8 +135,11 @@
           reload();
           return 'idle';
         }
-        state.conflict = { cloud: meta(cloud.snap, cloud.updatedAt), local: meta(local, 0), cloudSnap: cloud.snap };
-        return 'conflict';
+        // Окно «Какой прогресс оставить?» не показываем: берём то, что лежит у игрока на устройстве (это он и видит), и отправляем в облако;
+        // а баланс и серию при серверном балансе дальше ведёт сервер сам
+        adoptName();
+        var s3 = PP.snapshot();
+        return upload(uid, tk, s3).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s3)); return publishRating(uid, tk); }).then(function () { return 'idle'; });
       });
     }).then(function (result) { running = false; setSync(result); }, function (err) {
       running = false;
