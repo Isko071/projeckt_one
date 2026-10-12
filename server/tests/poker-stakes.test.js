@@ -57,7 +57,7 @@ test('онлайн-покер: не хватает на начальную ст�
   m.stop();
 });
 
-test('онлайн-покер: следующая раздача снова берёт залог, а закрытие стола посреди раздачи возвращает стеки', async () => {
+test('онлайн-покер: следующая раздача снова берёт залог, закрыть идущую раздачу нельзя, а пустой стол возвращает стеки', async () => {
   const { m, wallet } = await mk(), a = conn('A'), b = conn('B');
   const code = await m.create(a, 'poker-simple', { size: 2, name: 'Аня', ante: 50, minBet: 100 });
   await m.join(b, 'poker-simple', code, { name: 'Боря' });
@@ -70,10 +70,12 @@ test('онлайн-покер: следующая раздача снова бе
   await wait(250);
   assert.strictEqual(state(a).phase, 'preflop', 'новая раздача');
   assert.strictEqual(state(a).round, 2);
-  m.act(a, code, { type: 'close' });
-  await wait(6500);                                                   // стол закрылся и убран: раздача отменена
-  assert.strictEqual((await bal(wallet, 'A')) + (await bal(wallet, 'B')), 10000, 'залоги вернулись');
-  m.stop();
+  m.act(a, code, { type: 'close' });                                  // идущую раздачу закрыть нельзя
+  await wait(300);
+  assert.strictEqual(m.rooms.size, 1, 'стол остался');
+  m.leave(a, code); m.leave(b, code);                                 // все ушли: раздача отменена, стеки возвращены
+  await wait(500);
+  try { assert.strictEqual((await bal(wallet, 'A')) + (await bal(wallet, 'B')), 10000, 'залоги вернулись'); } finally { m.stop(); }
 });
 
 test('онлайн-покер: стек урезается до баланса, если в другой игре потрачено', async () => {
