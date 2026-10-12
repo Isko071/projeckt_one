@@ -164,9 +164,12 @@
       }
       function memberBySeat(seat) { return members.filter(function (m) { return m.seat === seat; })[0]; }
       function canStart() { return status === 'lobby' && members.length >= game.CONFIG.minSeats && !!readyAt && now() - readyAt >= cfg.startDelayMs; }
+      // Новая раздача. settledAt сбрасывается до неё, чтобы раздача, закончившаяся внутри deal (у кого-то стек меньше начальной ставки), тоже подвела итог и вызвала onSettle
       function dealHand() {
-        if (!apply({ type: 'next', seat: 0 })) return false;
-        settledAt = 0; ready = {}; idle = {}; dealAt = 0;
+        var old = settledAt;
+        settledAt = 0;
+        if (!apply({ type: 'next', seat: 0 })) { settledAt = old; return false; }
+        ready = {}; idle = {}; dealAt = 0;
         return true;
       }
       // Раздача под присмотром сервера баланса (env.gate): сначала у игроков берётся залог на стек, и только потом карты раздаются
@@ -195,7 +198,7 @@
           });
           full.seats.forEach(function (x, i) { if (x.active && !x.sitOut && x.chips > 0 && !got[x.id]) apply({ type: 'sitout', seat: i, value: true }); });     // сел за стол, пока шёл залог: эту раздачу пропускает
           var ok = full.seats.filter(function (x) { return x.active && !x.sitOut && x.chips > 0 && got[x.id]; });
-          if (ok.length >= 2 && apply({ type: 'next', seat: 0 })) { settledAt = 0; ready = {}; idle = {}; dealAt = 0; }
+          if (ok.length >= 2 && dealHand()) { /* карты розданы */ }
           else {                                                                               // играть некому: залоги возвращаются, ждём игроков
             ok.forEach(function (x) { back.push({ uid: x.id, chips: got[x.id] }); ready[x.id] = true; });
           }
@@ -249,7 +252,8 @@
         if (payload.type === 'chat') { addChat(m, payload.text, payload.cid); return; }
         if (uid === ownerUid) {
           if (payload.type === 'start') { start(); return; }
-          if (payload.type === 'close') { close(); return; }
+          // Закрытый посреди раздачи стол отменял бы её итог (залоги вернулись бы целиком): при серверном балансе владелец может выйти, но не закрыть идущую раздачу
+          if (payload.type === 'close') { if (env.gate && full && ['preflop', 'flop', 'turn', 'river'].indexOf(full.phase) >= 0) return; close(); return; }
         }
         if (payload.type === 'leave') {
           sys('leave', m.name);

@@ -254,7 +254,16 @@ class RoomManager {
       this.event('stake', { game: room.game, code, uid, info: '-' + sum });
       this.pushWallet(uid, await this.wallet.load(uid));
       return { ok: true };
-    } catch (e) { return { ok: false, error: (e && e.code) || 'ledger' }; }
+    } catch (e) {
+      // Запись залога могла пройти, а ответ потеряться: если залог лежит в хранилище, он принимается (иначе аконы игрока остались бы запертыми)
+      if (e && e.code === 'ledger') {
+        try {
+          const rec = await this.wallet.holdRecord(uid + '_' + code);
+          if (rec && rec.amount === sum) { room.holds.set(uid, { amount: sum, at: this.now(), seen: poker }); try { this.pushWallet(uid, await this.wallet.load(uid)); } catch (e2) { /* баланс придёт со следующим ответом */ } return { ok: true }; }
+        } catch (e3) { /* хранилище недоступно: считаем, что залога нет */ }
+      }
+      return { ok: false, error: (e && e.code) || 'ledger' };
+    }
   }
   // Выплата или возврат залога; если запись в хранилище не прошла, ставка остаётся за игроком в долгах (h.owed) и повторяется из sweepStake
   async payStake(room, code, uid, payout, why) {
@@ -274,7 +283,7 @@ class RoomManager {
   refundAll(code, room) {
     if (!room.holds.size) return;
     const list = Array.from(room.holds.entries());
-    this.queueStake(room, async () => { for (const [uid, h] of list) await this.payStake(room, code, uid, h.amount, 'refund'); });
+    this.queueStake(room, async () => { for (const [uid, h] of list) await this.payStake(room, code, uid, h.owed !== undefined ? h.owed : h.amount, 'refund'); });
   }
   // Следим за документом стола: конец партии, новая партия за тем же столом, уход из комнаты ожидания, закрытие стола
   watchStake(code, room) {
