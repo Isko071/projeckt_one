@@ -497,7 +497,7 @@ function leaveGame(toScreen) {
 }
 
 // ===== Вёрстка экранов =====
-function balChipText(bal, narrow) { return narrow ? tr('balanceShort', { n: fmt(bal) }) : tr('balanceFull', { n: fmt(bal), unit: unit(bal) }); }
+function balChipText(bal, narrow) { return narrow ? tr('balanceShort', { n: fmt(bal) }) : tr('balanceFull', { n: fmt(bal), unit: unit(W.getBalance()) }); }
 function topbarHtml() {
   var L = layout();
   var balText = balChipText(W.shownBalance(), L.narrow);
@@ -946,7 +946,7 @@ window.addEventListener('pagehide', function () { if (G && G.mode === 'online') 
 W.onShown(function (v) {
   var chips = document.querySelectorAll('.bal-chip'), lines = document.querySelectorAll('.bal-line[data-bal]'), i;
   for (i = 0; i < chips.length; i++) chips[i].textContent = balChipText(v, chips[i].getAttribute('data-narrow') === 'true');
-  for (i = 0; i < lines.length; i++) lines[i].textContent = tr('balance', { n: fmt(v), unit: unit(v) });
+  for (i = 0; i < lines.length; i++) lines[i].textContent = tr('balance', { n: fmt(v), unit: unit(W.getBalance()) });
 });
 window.PlatformTheme.onChange(render);
 W.onChange(function () { if (app.screen === 'start' || app.screen === 'game') render(); });

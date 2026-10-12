@@ -127,9 +127,12 @@
   }
   function shownBalance() { return anim ? shown : getBalance(); }
   function onShown(fn) { shownFns.push(fn); }
-  function trackShown(b) {
-    if (lastBal !== null && b !== lastBal) {
-      if (b > lastBal || smoothDown || (holdUntil > 0 && holdUntil > nowMs())) startShown(anim ? shown : lastBal, b);
+  // before — баланс, который лежал в хранилище до этой записи (его же видел экран): от него и идёт анимация. lastBal может устареть, если другая вкладка или ответ сервера
+  // изменили баланс, а эта страница ещё ничего не записывала (тогда число откатывалось назад или прыгало без плавности)
+  function trackShown(b, before) {
+    var base = typeof before === 'number' && isFinite(before) ? before : lastBal;
+    if (base !== null && b !== base) {
+      if (b > base || smoothDown || (holdUntil > 0 && holdUntil > nowMs())) startShown(anim ? shown : base, b);
       else if (anim) { stopShown(); shown = b; emitShown(); }
     }
     lastBal = b; smoothDown = false;
@@ -137,9 +140,11 @@
 
   function save(state) {
     if (state.balance > state.peak) state.peak = state.balance;
+    var before = null;
+    try { before = load().balance; } catch (e) { /* без хранилища: от прошлого показанного значения */ }
     memory = state;
     if (root.PlatformStorage) root.PlatformStorage.set(KEY, state);
-    trackShown(state.balance);
+    trackShown(state.balance, before);
     listeners.forEach(function (fn) { try { fn(state.balance); } catch (e) { /* подписчик не должен ломать остальных */ } });
     return state;
   }

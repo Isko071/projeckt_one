@@ -317,13 +317,26 @@ test('награды: «Морской бой» 500 за победу над б�
   });
 });
 
+test('показываемый баланс: после изменения в другой вкладке число не откатывается назад', () => {
+  let t = 0, cb = null;
+  const backend = fakeBackend();
+  const W = load({ localStorage: backend, performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
+  W.add(100, 'x');                                    // эта вкладка что-то записала
+  while (t < 5000 && cb) { t += 50; const f = cb; cb = null; f(t); }
+  const other = JSON.parse(backend.data['platform:wallet']); other.balance += 5000; backend.data['platform:wallet'] = JSON.stringify(other);     // другая вкладка прибавила
+  W.add(1000, 'bonus');
+  assert.ok(W.shownBalance() >= 10100, 'анимация идёт от числа, которое видел игрок (' + W.shownBalance() + '), а не от устаревшего');
+});
+
 test('показываемый баланс: пополнение доезжает постепенно, ставка списывается сразу, штраф «Мин» плавно', () => {
   let t = 0, cb = null;
   const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
   const seen = [];
   W.onShown((v) => seen.push(v));
   const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
-  W.add(1000, 'x');                                   // первая запись только запоминает баланс
+  W.add(1000, 'x');                                   // и первая запись плавная
+  run(5000);
+  assert.equal(W.shownBalance(), 6000);
   W.add(500, 'win');
   assert.equal(W.getBalance(), 6500);
   assert.equal(W.shownBalance(), 6000, 'сразу после выигрыша на экране ещё старое число');
@@ -346,7 +359,7 @@ test('holdShown: пополнение на экране начинается п�
   let t = 0, cb = null;
   const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
   const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
-  W.add(10, 'x');
+  W.add(10, 'x'); run(2000);                  // первая запись тоже плавная: даём ей закончиться
   W.holdShown(3000);
   W.add(500, 'win');
   run(2900);
@@ -364,9 +377,9 @@ test('holdShown: «крайний срок», а не одноразовая о�
   let t = 0, cb = null;
   const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
   const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
-  W.add(10, 'x');
+  W.add(10, 'x'); run(2000);                  // первая запись тоже плавная: даём ей закончиться
   W.holdShown(3000);                          // раздача кончилась проигрышем, пополнения не было
-  t = 4000;
+  t = 6000;
   W.add(100, 'bonus');
   run(t + 500);
   assert.strictEqual(W.shownBalance(), 5010, 'обычные 0,6 с: ещё не началось');
@@ -378,7 +391,7 @@ test('серверный режим: списание после hold тоже �
   let t = 0, cb = null;
   const W = load({ localStorage: fakeBackend(), performance: { now: () => t }, requestAnimationFrame: (f) => { cb = f; return 1; }, cancelAnimationFrame: () => { cb = null; } });
   const run = (to) => { while (t < to && cb) { t += 50; const f = cb; cb = null; f(t); } };
-  W.add(10, 'x');
+  W.add(10, 'x'); run(2000);                  // первая запись тоже плавная: даём ей закончиться
   W.setServer({ active: () => true, queueing: () => true, claim() {} });
   W.holdShown(2000);
   W.applyServer(Object.assign({}, W.exportState(), { balance: 4500 }));      // ответ сервера: штраф

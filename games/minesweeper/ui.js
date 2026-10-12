@@ -96,7 +96,7 @@ function applyResult(res, wasReady) {
 }
 
 // Баланс игрока в шапке; после победы число меняется, когда открылось окно итога (а не раньше)
-function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function fmtNum(n) { return Number(n).toLocaleString('ru-RU'); }
 function balanceChipHtml() {
   var W = window.PlatformWallet, now = W.getBalance(), seen = W.shownBalance();
   return '<div class="bal" data-key="bal" aria-label="' + esc(tr('balance', { n: fmtNum(now), unit: window.I18n.plural(now, 'wallet.unit') })) + '"><span class="coin" aria-hidden="true"></span><b data-bal>' + fmtNum(seen) + '</b></div>';
