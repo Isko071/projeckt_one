@@ -42,12 +42,16 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.token.email == 'АДРЕС_ВЛАДЕЛЬЦА@gmail.com' && request.auth.token.email_verified == true;
     }
 
-    // Рейтинг игроков: свою строку пишет сам игрок, читают все вошедшие
+    // Рейтинг игроков: читают все вошедшие. Имя, аватар и значок пишет сам игрок, а баланс (поля balance, src, updatedAt) только сервер:
+    // ключ сервисного аккаунта обходит правила, а игрок эти поля изменить не может (docs/server-wallet.md)
     match /ratings/{uid} {
       allow read: if request.auth != null;
-      allow create, update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.balance is int && request.resource.data.balance >= 0
-        && request.resource.data.name is string && request.resource.data.name.size() <= 20;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20
+        && !('balance' in request.resource.data) && !('src' in request.resource.data);
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'icon']);
     }
 
     // Серверный кошелёк (docs/server-wallet.md): свой кошелёк игрок читает, пишет только сервер (ключ сервисного аккаунта обходит правила)

@@ -17,7 +17,7 @@ async function startServer(o) {
   const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxMsg = 8000, perSec = 20;
   const ledger = o.ledger === undefined ? makeLedger(o.env) : o.ledger;      // null — серверный баланс выключен, ставки за столами недоступны
   const wallet = ledger ? new WalletService({ ledger, now: o.now }) : null;
-  if (wallet) await wallet.init();                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются
+  if (wallet) { await wallet.init(); if (o.ratings !== false) wallet.startRatings(); }                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются
   const manager = new RoomManager({ engine: loadEngine(), config: o.config || {}, wallet }).start();
   const perIp = new Map();
 
@@ -88,7 +88,7 @@ async function startServer(o) {
 
   return new Promise((resolve) => server.listen(o.port || 0, () => resolve({
     port: server.address().port, manager, wallet,
-    close: () => { manager.stop(); wss.clients.forEach((c) => c.terminate()); return new Promise((r) => server.close(r)); }
+    close: () => { manager.stop(); if (wallet) wallet.stopRatings(); wss.clients.forEach((c) => c.terminate()); return new Promise((r) => server.close(r)); }
   })));
 }
 

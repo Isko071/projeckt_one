@@ -81,3 +81,20 @@ test('Firestore-хранилище: возраст аккаунта берётс
   assert.strictEqual(await L.accountSince('rate'), Date.parse('2026-10-11T10:00:00.000Z'));
   assert.strictEqual(await L.accountSince('nobody'), null);
 });
+
+test('Firestore-хранилище: баланс в строку рейтинга пишется по маске полей с отметкой сервера', async () => {
+  const acc = await account();
+  const calls = [];
+  const fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (url === 'https://oauth2.googleapis.com/token') return { ok: true, status: 200, json: async () => ({ access_token: 't', expires_in: 3600 }) };
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  const L = new FirestoreLedger({ projectId: 'p', serviceAccount: { client_email: acc.client_email, private_key: acc.private_key }, fetch, now: () => 1700000000000 });
+  await L.setRating('u 1', 6543.9);
+  const c = calls.find((x) => x.url.includes('/ratings/'));
+  assert.match(c.url, /ratings\/u%201\?updateMask\.fieldPaths=balance&updateMask\.fieldPaths=src&updateMask\.fieldPaths=updatedAt$/);
+  assert.strictEqual(c.init.method, 'PATCH');
+  const f = JSON.parse(c.init.body).fields;
+  assert.deepStrictEqual(f, { balance: { integerValue: '6543' }, src: { stringValue: 'server' }, updatedAt: { integerValue: '1700000000000' } });
+});

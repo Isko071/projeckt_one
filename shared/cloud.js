@@ -84,9 +84,11 @@
   function publishRating(uid, tk) {
     var R = root.PlatformRating, W = root.PlatformWallet, P = root.PlatformProfile;
     if (!R || !W || !P) return Promise.resolve();
-    var prof = P.getProfile(), bal = W.getBalance(), fp = R.fingerprint(prof, bal), last = root.PlatformStorage.get(RATING_KEY, null);
+    // Серверный баланс (или ожидание ответа сервера): число в рейтинг пишет сервер, игрок отправляет только имя и аватар
+    var S = root.PlatformWalletSync, profileOnly = !!(S && S.status && S.status() !== 'local');
+    var prof = P.getProfile(), bal = W.getBalance(), fp = R.fingerprint(prof, bal, profileOnly) + (profileOnly ? '|p' : ''), last = root.PlatformStorage.get(RATING_KEY, null);
     if (last && last.uid === uid && last.fp === fp) return Promise.resolve();
-    return R.create({ fetch: function (u, i) { return root.fetch(u, i); }, projectId: cfg.projectId, db: dbName }).publish(tk, uid, prof, bal).then(function () {
+    return R.create({ fetch: function (u, i) { return root.fetch(u, i); }, projectId: cfg.projectId, db: dbName }).publish(tk, uid, prof, bal, profileOnly).then(function () {
       root.PlatformStorage.set(RATING_KEY, { uid: uid, fp: fp });
     }, function () { /* правила базы для рейтинга могли быть не добавлены: повторим при следующей синхронизации */ });
   }

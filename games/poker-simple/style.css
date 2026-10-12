@@ -273,3 +273,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 
 /* Длинное название «Покер: Чожук» помещается в одну строку */
 .brand h1 { font-size: clamp(26px, 5vh, 34px); }
+
+/* До первой раздачи общие карты и пустые места для карт игрока не рисуем: иначе они стоят на столе «уже раздатые», а потом раздача проигрывается заново */
+.center .board.pre { visibility: hidden; }
