@@ -174,6 +174,7 @@ function fxPlan(fx) {
     var sc = sideCanon(fx.side, p.cx, p.cy);
     svg += sideWrap(fx.side, subBodyFx(sc.u, sc.v));
     fx.torpedoes.forEach(function (tp) {
+      if (!tp.path.length) return;                     // торпеда в сторону края поля: лететь некуда
       var steps = tp.path.length, t0 = 1.6, dur = Math.max(0.35, steps * 0.13), end = cellXY(tp.path[steps - 1]);
       svg += '<line class="wake" x1="' + p.cx + '" y1="' + p.cy + '" x2="' + p.cx + '" y2="' + p.cy + '" opacity="0">' + appear(t0) + anim('y2', p.cy, end.cy, t0, dur) + anim('opacity', 0.8, 0, t0 + dur, 0.6) + '</line>';
       svg += '<rect class="torp" x="' + (p.cx - 7) + '" y="' + (p.cy - 20) + '" width="14" height="40" rx="7" opacity="0">' + appear(t0) + anim('y', p.cy - 20, end.cy - 20, t0, dur) + anim('opacity', 1, 0, t0 + dur, 0.01) + '</rect>';
