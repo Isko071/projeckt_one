@@ -675,8 +675,8 @@ function playHtml(D) {
       '<div class="pop-btns">' + '<button class="btn accent" data-act="newBet" data-key="newBet">' + esc(tr('res.newBet')) + '</button>' +
       '<button class="btn" data-act="backMenu" data-key="backMenu">' + esc(tr('res.back')) + '</button></div></div>';
   }
-  var shoeW = L.desk ? 84 : (L.narrow ? 58 : 68);
-  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>';
+  var shoeW = L.desk ? 42 : (L.narrow ? 29 : 34);          // стопка вдвое меньше прежней (84/68/58)
+  var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i></div>';
   var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + center + meBox + pop + '</div>';
 
   var notice = activeNotice();
