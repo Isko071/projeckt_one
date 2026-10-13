@@ -9,6 +9,12 @@
     var I = root.I18n, t = I.t, P = root.PlatformProfile, C = root.PlatformCloud, doc = root.document;
     var el = doc.createElement('aside'), shown = false, loadedAt = 0, loading = false, rows = null;
     el.className = 'rw'; el.hidden = true;
+    // На телефоне плашка раскрывается по нажатию (список столбиком), на широком экране всегда развёрнута
+    el.setAttribute('tabindex', '0');
+    function toggle() { el.classList.toggle('open'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); }
+    el.setAttribute('aria-expanded', 'false');
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     var kind = opts.kind === 'wins' ? 'wins' : 'balance', titleKey = kind === 'wins' ? 'rating.wins' : 'rating.top.balance';
     el.setAttribute('aria-label', t(titleKey));
     doc.body.appendChild(el);
