@@ -25,12 +25,14 @@
     return li;
   }
   function tabsRender() {
+    var hadFocus = tabsEl.contains(document.activeElement);
     tabsEl.textContent = '';
     ['balance', 'wins', 'fast'].forEach(function (k) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'rating-tab'; b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(k === tab)); b.textContent = t('rating.tab.' + k);
       b.addEventListener('click', function () { if (tab !== k) { tab = k; tabsRender(); load(); } });
       tabsEl.appendChild(b);
+      if (hadFocus && k === tab) b.focus();                      // клавиатурный фокус остаётся на выбранной вкладке
     });
   }
   // Раздел с заголовком и пятёркой лучших; rows — [{...}], value(r) → текст справа
@@ -56,6 +58,10 @@
       return api.top(tk, TOP);
     }).then(function (data) {
       if (my !== token) return;
+      try { renderData(mine, data, uid); } catch (e) { note(t('rating.error'), true); }
+    }, function (e) { if (my === token) note(t(e && e.code === 'denied' ? 'rating.denied' : 'rating.error'), true); });
+  }
+  function renderData(mine, data, uid) {
       body.textContent = '';
       if (mine === 'balance') {
         if (!data.length) { note(t('rating.empty')); return; }
@@ -67,7 +73,6 @@
       var sub = document.createElement('p'); sub.className = 'rating-sub'; sub.textContent = t(mine === 'wins' ? 'rating.wins.sub' : 'rating.fast.sub'); body.appendChild(sub);
       if (mine === 'wins') data.forEach(function (rows, i) { body.appendChild(sectionEl(t('games.' + WIN_GAMES[i] + '.title'), rows, uid, function (r) { return String(r.wins); })); });
       else data.forEach(function (rows, i) { body.appendChild(sectionEl(t('rating.fast.' + LEVELS[i]), rows, uid, function (r) { return mmss(r.time); })); });
-    }, function (e) { if (my === token) note(t(e && e.code === 'denied' ? 'rating.denied' : 'rating.error'), true); });
   }
   function openDialog() { dialog.showModal(); tabsRender(); load(); }
   function closeDialog() { token++; if (dialog.open) dialog.close(); }
@@ -75,6 +80,8 @@
   $('rating-open').addEventListener('click', openDialog);
   $('rating-close').addEventListener('click', closeDialog);
   dialog.addEventListener('click', function (e) { if (e.target === dialog) closeDialog(); });
-  Cloud.onChange(function () { if (dialog.open) load(); });
+  // Перезагружаем только когда сменился игрок или вход (а не на каждую синхронизацию облака)
+  var lastWho = '';
+  Cloud.onChange(function () { var st = Cloud.getState(), who = st.status + '|' + (st.user ? st.user.uid : ''); if (who === lastWho) return; lastWho = who; if (dialog.open) load(); });
   I.apply();
 })();

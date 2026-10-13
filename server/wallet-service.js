@@ -24,7 +24,8 @@ const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:
 // Топы: победы онлайн (их фиксирует сервер за столом) и быстрые победы в «Сапёре». Партию «Сапёра» сервер не видит, поэтому время принимается, только если оно не меньше правдоподобного
 // предела уровня (секунды) и не больше, чем игрок мог играть с момента первого хода (сервер ставит отметку на первом ходе партии) плюс запас
 const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
-const FAST_MIN = { novice: 3, amateur: 8, expert: 20 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 5;
+const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 2;
+const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
@@ -55,6 +56,9 @@ class WalletService {
     this.winQ = new Map();              // 'игра|uid' → побед, ждущих отправки в топ
     this.fastQ = new Map();             // 'уровень|uid' → лучшее время, ждущее отправки
     this.fastBest = new Map();          // uid → лучшие времена игрока ({ novice, amateur, expert })
+    this.winDay = new Map();            // 'игра|uid' → { day, n }: сколько побед засчитано в топ сегодня
+    this.fastDay = new Map();           // uid → { day, n }: сколько рекордов «Сапёра» принято сегодня
+    this.flushingRatings = false; this.flushingTops = false;
     this.msStart = new Map();           // uid → когда начата последняя партия «Сапёра»
     this.rated = new Map();             // uid → баланс, который ждёт отправки в рейтинг
     this.ratedLast = new Map();         // uid → что уже отправлено
@@ -94,7 +98,7 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.touched.delete(uid); } });
+    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -119,7 +123,9 @@ class WalletService {
     if (!state) {
       // Новый игрок: прогресс (серия, рекорды, дни, баланс) берётся из его кошелька в браузере, а если браузер его не прислал, баланс из рейтинга
       // Откуда начать: 1) кошелёк в браузере, если в нём есть прогресс; 2) прогресс из облака (снимок игрока) или хотя бы баланс из рейтинга; 3) пустой кошелёк
-      const mine = this.seeds.get(uid), since = await this.ledger.accountSince(uid);
+      const mine = this.seeds.get(uid);
+      let since;
+      try { since = await this.ledger.accountSince(uid); } catch (e) { throw fail('ledger'); }
       const old = since !== null && since < this.seedBefore;                  // нет документов аккаунта или он новый: перенос прогресса не положен, начинает с обычного старта
       let seed = !old ? null : (mine && typeof mine === 'object' && !this.pristine(mine) ? mine : await this.ledger.seed(uid));
       if (typeof seed === 'number') seed = { balance: seed };
@@ -160,7 +166,7 @@ class WalletService {
 
   // После неоднозначной ошибки записи забываем кеш игрока: кошелёк, раунд «Мин» и залоги перечитаются из хранилища
   forget(uid) {
-    this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid);
+    this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.rated.delete(uid);      // устаревшее число в рейтинг не уходит: следующая операция игрока поставит настоящее
     Array.from(this.holds.entries()).forEach(([k, h]) => { if (h.uid === uid) this.holds.delete(k); });
     this.holdsLoaded = false;
   }
@@ -200,7 +206,7 @@ class WalletService {
             if (!ok) return this.mutate(uid, (W) => { W.countWin('minesweeper'); return { granted: 0, capped: true }; }, null, rid);
           }
           const earned = await this.mutate(uid, (W) => W.earn(m.source, W.CONFIG.rewards[m.source][m.level], now, expert), null, rid);
-          if (m.source === 'minesweeper') { await this.noteFast(uid, m.level, m.time, now); this.msStart.delete(uid); }      // каждой победе нужна своя отметка начала партии
+          if (m.source === 'minesweeper') { try { await this.noteFast(uid, m.level, m.time, now); } catch (e) { /* награда уже выдана: рекорд лучше потерять, чем показать ложную ошибку */ } this.msStart.delete(uid); }      // каждой победе нужна своя отметка начала партии
           return earned;
         }
         case 'reward': {
@@ -376,7 +382,10 @@ class WalletService {
   // Победа онлайн (вызывает manager, когда стол подвёл итог): прибавляется к счёту игрока и уходит в топ пачкой
   recordWin(uid, game) {
     if (typeof uid !== 'string' || TOP_WIN_GAMES.indexOf(game) < 0) return;
-    const k = game + '|' + uid;
+    const k = game + '|' + uid, day = Math.floor(this.now() / 86400000), d = this.winDay.get(k);
+    const rec = d && d.day === day ? d : { day, n: 0 };
+    if (rec.n >= WIN_DAY_MAX) return;                                  // больше за сутки в топ не идёт (защита от накрутки парой аккаунтов)
+    rec.n++; this.winDay.set(k, rec);
     this.winQ.set(k, (this.winQ.get(k) || 0) + 1);
   }
   async loadFast(uid) {
@@ -393,6 +402,9 @@ class WalletService {
     if (!has(FAST_MIN, level) || !Number.isInteger(time) || time < FAST_MIN[level] || time > FAST_MAX) return false;
     const start = this.msStart.get(uid);
     if (!start || (now - start) / 1000 < time - FAST_SLACK) return false;          // раньше времени партии выиграть нельзя
+    const day = Math.floor(now / 86400000), fd = this.fastDay.get(uid), fr = fd && fd.day === day ? fd : { day, n: 0 };
+    if (fr.n >= FAST_DAY_MAX) return false;
+    fr.n++; this.fastDay.set(uid, fr);
     const best = await this.loadFast(uid);
     if (best[level] !== undefined && best[level] <= time) return false;
     const next = Object.assign({}, best, { [level]: time });
@@ -403,11 +415,16 @@ class WalletService {
   }
   // Отправка накопленного в топы (из того же таймера, что и рейтинг по балансу)
   async flushTops() {
+    if (this.flushingTops) return 0;
+    this.flushingTops = true;
+    try { return await this.flushTopsNow(); } finally { this.flushingTops = false; }
+  }
+  async flushTopsNow() {
     let sent = 0;
     for (const [k, n] of Array.from(this.winQ.entries())) {
       const [game, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
       this.winQ.delete(k);
-      try { await this.ledger.addWins(game, uid, n); sent++; } catch (e) { this.winQ.set(k, (this.winQ.get(k) || 0) + n); }
+      try { await this.ledger.addWins(game, uid, n); sent++; } catch (e) { /* запись могла пройти: не повторяем, чтобы не засчитать дважды (лучше недосчитать) */ }
     }
     for (const [k, t] of Array.from(this.fastQ.entries())) {
       const [level, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
@@ -423,7 +440,11 @@ class WalletService {
   rate(uid, balance) { this.rated.set(uid, balance); }
   heldSum(uid) { let n = 0; this.holds.forEach((h) => { if (h.uid === uid) n += h.amount; }); return n; }
   async flushRatings() {
-    if (!this.ledger.setRating) return 0;
+    if (!this.ledger.setRating || this.flushingRatings || !this.holdsLoaded) return 0;     // залоги не прочитаны: число в рейтинге было бы занижено
+    this.flushingRatings = true;
+    try { return await this.flushRatingsNow(); } finally { this.flushingRatings = false; }
+  }
+  async flushRatingsNow() {
     let sent = 0;
     for (const [uid, bal] of Array.from(this.rated.entries())) {
       const c = this.cache.get(uid), total = (c ? c.balance : bal) + this.heldSum(uid);

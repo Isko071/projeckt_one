@@ -135,11 +135,15 @@
           reload();
           return 'idle';
         }
-        // Окно «Какой прогресс оставить?» не показываем: берём то, что лежит у игрока на устройстве (это он и видит), и отправляем в облако;
-        // а баланс и серию при серверном балансе дальше ведёт сервер сам
+        // Окно «Какой прогресс оставить?» не показываем. Прогресс объединяется: то, что есть на устройстве, главнее (это игрок и видит),
+        // а то, чего на устройстве нет (рекорды других игр, профиль), берётся из облака, чтобы не стереть его. Баланс и серию при серверном балансе ведёт сервер
+        if (!allowDownload) return 'paused';                // на странице игры не трогаем: объединит каталог
+        var merged = { v: 1, data: Object.assign({}, cloud.snap.data || {}, local.data) };
+        var changed = PP.fingerprint(merged) !== localFp;
+        if (changed) PP.applySnapshot(merged);
         adoptName();
         var s3 = PP.snapshot();
-        return upload(uid, tk, s3).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s3)); return publishRating(uid, tk); }).then(function () { return 'idle'; });
+        return upload(uid, tk, s3).then(function () { seenSent = true; writeBase(uid, PP.fingerprint(s3)); return publishRating(uid, tk); }).then(function () { if (changed) reload(); return 'idle'; });
       });
     }).then(function (result) { running = false; setSync(result); }, function (err) {
       running = false;

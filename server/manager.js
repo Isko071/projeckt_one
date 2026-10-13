@@ -221,23 +221,31 @@ class RoomManager {
     }
     if (room.game === 'blackjack') {
       if (st.phase !== 'settled') return null;
-      return (st.seats || []).map((s, i) => ((s.hands || []).some((h) => h.outcome === 'win' || h.outcome === 'blackjack') ? uidAt(i) : null));
+      return (Array.isArray(st.seats) ? st.seats : []).map((s, i) => ((s && Array.isArray(s.hands) && s.hands.some((h) => h && (h.outcome === 'win' || h.outcome === 'blackjack')) ? uidAt(i) : null)));
     }
     return undefined;                                // покер ведёт свой учёт в pokerSettle
   }
+  // Защита от накрутки: побеждать нужно живых соперников, сидящих за столом (зрители и боты не в счёт), а партия «Ятзи» и «Морского боя» не может быть мгновенной
   watchWins(room, d) {
     if (['yahtzee', 'battleship', 'blackjack'].indexOf(room.game) < 0) return;
-    let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
-    if (!st) return;
-    const key = room.game === 'blackjack' ? 'r' + st.round : 'over';
-    const over = room.game === 'blackjack' ? st.phase === 'settled' : !!st.gameOver;
-    if (!over) { room.winKey = null; return; }
-    if (room.winKey === key) return;
-    room.winKey = key;
-    const members = this.members(room);
-    if (members.length < 2) return;
-    const winners = this.winnersOf(room, d, st, members);
-    (winners || []).forEach((uid) => { if (uid) this.wallet.recordWin(uid, room.game); });
+    try {
+      let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
+      if (!st || typeof st !== 'object') return;
+      const key = room.game === 'blackjack' ? 'r' + st.round : 'over';
+      const over = room.game === 'blackjack' ? st.phase === 'settled' : !!st.gameOver;
+      if (!over) { room.winKey = null; if (!room.playSince) room.playSince = this.now(); return; }
+      if (room.winKey === key) return;
+      room.winKey = key;
+      const since = room.playSince; room.playSince = 0;
+      const minMs = { yahtzee: 90000, battleship: 45000 }[room.game] || 0;
+      if (minMs && (!since || this.now() - since < minMs)) return;
+      const seated = this.members(room).filter((m) => m.seat !== null && m.seat !== undefined && m.seat >= 0);
+      let players = seated;
+      if (room.game === 'blackjack') players = seated.filter((m) => { const s = (st.seats || [])[m.seat]; return s && Array.isArray(s.hands) && s.hands.length > 0; });   // сыграл эту раздачу
+      if (players.length < 2) return;
+      const winners = this.winnersOf(room, d, st, players);
+      (winners || []).forEach((uid) => { if (uid) this.wallet.recordWin(uid, room.game); });
+    } catch (e) { /* кривой документ не должен мешать столу */ }
   }
 
   // ---------- Стеки за покерным столом ----------
@@ -268,7 +276,7 @@ class RoomManager {
   pokerSettle(code, list, voided) {
     const room = this.rooms.get(code);
     if (!room) return;
-    if (!voided && room.game === 'poker-simple' && this.members(room).length >= 2) list.forEach((x) => { if (x.net > 0 && x.showdown) this.wallet.recordWin(x.uid, 'poker-simple'); });      // победа онлайн: выигран банк на вскрытии
+    if (!voided && room.game === 'poker-simple' && list.length >= 2) list.forEach((x) => { if (x.net > 0 && x.showdown) this.wallet.recordWin(x.uid, 'poker-simple'); });      // победа онлайн: выигран банк на вскрытии
     list.forEach((x) => { if (room.holds.has(x.uid)) this.queueStake(room, () => this.payStake(room, code, x.uid, Math.max(0, Math.floor(x.chips) || 0), voided ? 'void' : 'hand')); });
   }
 

@@ -101,5 +101,12 @@ if (require.main === module) {
     insecure: process.env.INSECURE_AUTH === '1',
     allowedOrigins: String(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()),
     adminEmails: String(process.env.ADMIN_EMAILS || '').split(',')
-  }).then((s) => console.log('Игротека: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)')), (e) => { console.error(e); process.exit(1); });
+  }).then((s) => {
+    console.log('Игротека: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)'));
+    // Остановка (деплой на Render): накопленные победы, рекорды и рейтинг успевают уйти в базу, не дольше 5 секунд
+    process.once('SIGTERM', () => {
+      const flush = s.wallet ? Promise.all([s.wallet.flushTops(), s.wallet.flushRatings()]).catch(() => {}) : Promise.resolve();
+      Promise.race([flush, new Promise((r) => setTimeout(r, 5000))]).then(() => process.exit(0));
+    });
+  }, (e) => { console.error(e); process.exit(1); });
 }
