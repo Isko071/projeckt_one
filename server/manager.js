@@ -64,7 +64,7 @@ class RoomManager {
   onDoc(code, fields) {
     const room = this.rooms.get(code);
     const doc = decodeFields(fields);
-    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc: this.docFor(doc, c.uid) })); if (room.stake) this.watchStake(code, room); }
+    if (room) { room.fields = doc; room.subs.forEach((c) => c.send({ t: 'doc', code, doc: this.docFor(doc, c.uid) })); if (room.stake) this.watchStake(code, room); if (this.wallet) this.watchWins(room, doc); }
     else this.pendingDoc = { code, doc };            // документ пришёл раньше, чем комната записана (при создании)
   }
   // Скрытые карты покера: поле `hole` (карты всех игроков) никому не уходит, каждому клиенту кладутся только его карты (`mine`)
@@ -207,6 +207,39 @@ class RoomManager {
     if (room.fields) conn.send({ t: 'doc', code, doc: this.docFor(room.fields, conn.uid) });
   }
 
+  // ---------- Победы онлайн (топ) ----------
+  // Победу фиксирует сервер по итогу стола: игра закончилась (или раздача подведена), за столом не меньше двух человек. Повторно за ту же партию не засчитывается
+  winnersOf(room, d, st, members) {
+    const uidAt = (seat) => { const m = members.filter((x) => x.seat === seat)[0]; return m ? m.uid : null; };
+    if (room.game === 'yahtzee') {
+      if (!st.gameOver || st.reason !== 'finished') return null;
+      return this.engine.YahtzeeTable.standings(JSON.parse(JSON.stringify(st))).filter((r) => r.active && r.winner).map((r) => uidAt(r.seat));
+    }
+    if (room.game === 'battleship') {
+      if (!st.gameOver || st.reason !== 'fleet' || !(st.winner >= 0)) return null;
+      return [uidAt(st.winner)];
+    }
+    if (room.game === 'blackjack') {
+      if (st.phase !== 'settled') return null;
+      return (st.seats || []).map((s, i) => ((s.hands || []).some((h) => h.outcome === 'win' || h.outcome === 'blackjack') ? uidAt(i) : null));
+    }
+    return undefined;                                // покер ведёт свой учёт в pokerSettle
+  }
+  watchWins(room, d) {
+    if (['yahtzee', 'battleship', 'blackjack'].indexOf(room.game) < 0) return;
+    let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
+    if (!st) return;
+    const key = room.game === 'blackjack' ? 'r' + st.round : 'over';
+    const over = room.game === 'blackjack' ? st.phase === 'settled' : !!st.gameOver;
+    if (!over) { room.winKey = null; return; }
+    if (room.winKey === key) return;
+    room.winKey = key;
+    const members = this.members(room);
+    if (members.length < 2) return;
+    const winners = this.winnersOf(room, d, st, members);
+    (winners || []).forEach((uid) => { if (uid) this.wallet.recordWin(uid, room.game); });
+  }
+
   // ---------- Стеки за покерным столом ----------
   // Стек игрока = его баланс на сервере (то, что приславил браузер, не принимается). Не хватает на начальную ставку: за стол не сесть
   async pokerChips(uid, ante) {
@@ -235,6 +268,7 @@ class RoomManager {
   pokerSettle(code, list, voided) {
     const room = this.rooms.get(code);
     if (!room) return;
+    if (!voided && room.game === 'poker-simple' && this.members(room).length >= 2) list.forEach((x) => { if (x.net > 0 && x.showdown) this.wallet.recordWin(x.uid, 'poker-simple'); });      // победа онлайн: выигран банк на вскрытии
     list.forEach((x) => { if (room.holds.has(x.uid)) this.queueStake(room, () => this.payStake(room, code, x.uid, Math.max(0, Math.floor(x.chips) || 0), voided ? 'void' : 'hand')); });
   }
 

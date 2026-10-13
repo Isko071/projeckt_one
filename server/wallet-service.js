@@ -21,6 +21,10 @@ const SEED_CAP = Number(process.env.WALLET_SEED_CAP) || 50000;    // новом�
 const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // награда эксперта «Сапёра» без дневного предела: не чаще раза в минуту и не больше 30 в сутки (партию сервер не видит)
 // Прогресс, принесённый из браузера (баланс, серия), принимается только у аккаунтов, появившихся до этой даты (они играли до серверного баланса): иначе любой новый аккаунт приносил бы себе до SEED_CAP аконов
 const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:00:00Z');
+// Топы: победы онлайн (их фиксирует сервер за столом) и быстрые победы в «Сапёре». Партию «Сапёра» сервер не видит, поэтому время принимается, только если оно не меньше правдоподобного
+// предела уровня (секунды) и не больше, чем игрок мог играть с момента первого хода (сервер ставит отметку на первом ходе партии) плюс запас
+const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
+const FAST_MIN = { novice: 3, amateur: 8, expert: 20 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 5;
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
@@ -48,6 +52,10 @@ class WalletService {
     this.experts = new Map();           // uid → { last, t0, n }
     this.touched = new Map();           // uid → когда последний раз обращались (для очистки памяти)
     this.holdsLoaded = false;
+    this.winQ = new Map();              // 'игра|uid' → побед, ждущих отправки в топ
+    this.fastQ = new Map();             // 'уровень|uid' → лучшее время, ждущее отправки
+    this.fastBest = new Map();          // uid → лучшие времена игрока ({ novice, amateur, expert })
+    this.msStart = new Map();           // uid → когда начата последняя партия «Сапёра»
     this.rated = new Map();             // uid → баланс, который ждёт отправки в рейтинг
     this.ratedLast = new Map();         // uid → что уже отправлено
     this.rateTimer = null;
@@ -86,7 +94,7 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.touched.delete(uid); } });
+    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.touched.delete(uid); } });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -152,7 +160,7 @@ class WalletService {
 
   // После неоднозначной ошибки записи забываем кеш игрока: кошелёк, раунд «Мин» и залоги перечитаются из хранилища
   forget(uid) {
-    this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid);
+    this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid);
     Array.from(this.holds.entries()).forEach(([k, h]) => { if (h.uid === uid) this.holds.delete(k); });
     this.holdsLoaded = false;
   }
@@ -191,7 +199,9 @@ class WalletService {
             this.experts.set(uid, e);
             if (!ok) return this.mutate(uid, (W) => { W.countWin('minesweeper'); return { granted: 0, capped: true }; }, null, rid);
           }
-          return this.mutate(uid, (W) => W.earn(m.source, W.CONFIG.rewards[m.source][m.level], now, expert), null, rid);
+          const earned = await this.mutate(uid, (W) => W.earn(m.source, W.CONFIG.rewards[m.source][m.level], now, expert), null, rid);
+          if (m.source === 'minesweeper') { await this.noteFast(uid, m.level, m.time, now); this.msStart.delete(uid); }      // каждой победе нужна своя отметка начала партии
+          return earned;
         }
         case 'reward': {
           const kinds = has(REWARD, m.source) ? REWARD[m.source] : null, kind = m.kind || 'win';
@@ -202,6 +212,7 @@ class WalletService {
         case 'minesState': case 'minesStart': case 'minesOpen': case 'minesCash': case 'minesAbandon': return this.minesOp(uid, m, now, rid);
         case 'countPlay': case 'countWin':
           if (typeof m.source !== 'string' || COUNT_SOURCES.indexOf(m.source) < 0) throw fail('bad-request');
+          if (m.op === 'countPlay' && m.source === 'minesweeper') this.msStart.set(uid, now);
           return this.mutate(uid, (W) => (m.op === 'countPlay' ? W.countPlay(m.source) : W.countWin(m.source)), null, rid);
         default: throw fail('bad-request');
       }
@@ -361,6 +372,51 @@ class WalletService {
     return { state: res.state, result: { poker: this.pokerView(next, rw) } };
   }
 
+  // ---------- Топы ----------
+  // Победа онлайн (вызывает manager, когда стол подвёл итог): прибавляется к счёту игрока и уходит в топ пачкой
+  recordWin(uid, game) {
+    if (typeof uid !== 'string' || TOP_WIN_GAMES.indexOf(game) < 0) return;
+    const k = game + '|' + uid;
+    this.winQ.set(k, (this.winQ.get(k) || 0) + 1);
+  }
+  async loadFast(uid) {
+    if (this.fastBest.has(uid)) return this.fastBest.get(uid);
+    let rec = null;
+    try { rec = await this.ledger.get('fast', uid); } catch (e) { throw fail('ledger'); }
+    const out = {};
+    Object.keys(FAST_MIN).forEach((l) => { const v = rec && rec[l]; if (Number.isInteger(v) && v > 0) out[l] = v; });
+    this.fastBest.set(uid, out);
+    return out;
+  }
+  // Победа в «Сапёре» со временем: если время правдоподобно и лучше прежнего, оно запоминается и уходит в топ
+  async noteFast(uid, level, time, now) {
+    if (!has(FAST_MIN, level) || !Number.isInteger(time) || time < FAST_MIN[level] || time > FAST_MAX) return false;
+    const start = this.msStart.get(uid);
+    if (!start || (now - start) / 1000 < time - FAST_SLACK) return false;          // раньше времени партии выиграть нельзя
+    const best = await this.loadFast(uid);
+    if (best[level] !== undefined && best[level] <= time) return false;
+    const next = Object.assign({}, best, { [level]: time });
+    try { await this.ledger.commit([{ op: 'set', coll: 'fast', id: uid, data: next }]); } catch (e) { this.fastBest.delete(uid); return false; }
+    this.fastBest.set(uid, next);
+    this.fastQ.set(level + '|' + uid, time);
+    return true;
+  }
+  // Отправка накопленного в топы (из того же таймера, что и рейтинг по балансу)
+  async flushTops() {
+    let sent = 0;
+    for (const [k, n] of Array.from(this.winQ.entries())) {
+      const [game, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
+      this.winQ.delete(k);
+      try { await this.ledger.addWins(game, uid, n); sent++; } catch (e) { this.winQ.set(k, (this.winQ.get(k) || 0) + n); }
+    }
+    for (const [k, t] of Array.from(this.fastQ.entries())) {
+      const [level, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
+      this.fastQ.delete(k);
+      try { await this.ledger.setFast(level, uid, t); sent++; } catch (e) { if (!this.fastQ.has(k)) this.fastQ.set(k, t); }
+    }
+    return sent;
+  }
+
   // ---------- Рейтинг по балансу ----------
   // Баланс в публичную строку рейтинга (ratings/{uid}) пишет сервер, а не браузер: накопившееся с задержкой и не чаще раза в RATING_MS на игрока.
   // В рейтинге стоит баланс вместе с залогами (аконы за столом никуда не делись)
@@ -381,7 +437,7 @@ class WalletService {
   // Раз в RATING_MS отправляет накопившееся; при запуске записывает в рейтинг балансы всех игроков с кошельком (строки, присланные браузером, перекрываются)
   startRatings() {
     if (this.rateTimer || !this.ledger.setRating) return;
-    this.rateTimer = setInterval(() => { this.flushRatings().catch(() => {}); }, RATING_MS);
+    this.rateTimer = setInterval(() => { this.flushRatings().catch(() => {}); if (this.ledger.addWins) this.flushTops().catch(() => {}); }, RATING_MS);
     if (this.rateTimer.unref) this.rateTimer.unref();
     this.ledger.list('wallets').then((list) => { list.forEach((w) => { if (w.data && typeof w.data.balance === 'number' && !this.rated.has(w.id)) this.rated.set(w.id, w.data.balance); }); }, () => {});
   }

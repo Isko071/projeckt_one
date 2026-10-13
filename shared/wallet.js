@@ -258,7 +258,7 @@
   }
 
   // Награда за одиночную игру: не больше earnDailyCap в день. uncapped = true — награда без дневного предела (не расходует и не ждёт предела других игр)
-  function earn(source, n, now, uncapped, level) {
+  function earn(source, n, now, uncapped, level, time) {
     var s = load(), today = dayOf(now);
     if (num(n, -1) < 1) return { granted: 0, capped: false };
     var key = String(source || 'earn').slice(0, 40);
@@ -272,7 +272,7 @@
       record(s, source || 'earn', granted, now);
     }
     save(s);
-    if (level) viaServer({ op: 'earn', source: key, level: level });
+    if (level) viaServer(time === undefined ? { op: 'earn', source: key, level: level } : { op: 'earn', source: key, level: level, time: Math.floor(Number(time)) || 0 });
     return { granted: granted, capped: granted < n };
   }
 
