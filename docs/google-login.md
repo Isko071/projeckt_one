@@ -54,6 +54,19 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'icon']);
     }
 
+    // Топы (docs/server-wallet.md): победы онлайн и быстрые победы в «Сапёре»; читают все вошедшие, пишет только сервер
+    match /ratings_wins/{game}/rows/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /ratings_fast/{level}/rows/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /fast/{uid} {
+      allow read, write: if false;      // личные лучшие времена «Сапёра»: только сервер
+    }
+
     // Серверный кошелёк (docs/server-wallet.md): свой кошелёк игрок читает, пишет только сервер (ключ сервисного аккаунта обходит правила)
     match /wallets/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;

@@ -158,7 +158,7 @@
         full = r.state; dirty = true;
         if (full.phase === 'settled' && !settledAt) {
           settledAt = now(); ready = {}; idle = {};
-          if (env.onSettle) { try { env.onSettle(code, full.seats.filter(function (x) { return x.inHand; }).map(function (x) { return { uid: x.id, chips: x.chips }; })); } catch (e) { /* расчёт не должен ломать стол */ } }
+          if (env.onSettle) { try { env.onSettle(code, full.seats.filter(function (x) { return x.inHand; }).map(function (x) { return { uid: x.id, chips: x.chips, net: x.net, showdown: !!(full.result && full.result.showdown) }; })); } catch (e) { /* расчёт не должен ломать стол */ } }
         }
         return true;
       }

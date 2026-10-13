@@ -72,24 +72,42 @@
     function topWins(token, game, limit) {
       var body = { structuredQuery: { from: [{ collectionId: 'rows' }], orderBy: [{ field: { fieldPath: 'wins' }, direction: 'DESCENDING' }], limit: Math.max(1, Math.min(100, limit || 5)) } };
       return req('POST', base + '/ratings_wins/' + encodeURIComponent(game) + ':runQuery', token, body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
+        var out = [], server = 0;
+        (Array.isArray(rows) ? rows : []).forEach(function (r) {
+          if (!r || !r.document) return;
+          var f = r.document.fields || {}, uid = String(r.document.name || '').split('/').pop();
+          var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, 0), fromServer = field(f, 'src') === 'server';
+          if (fromServer) server++;
+          out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, wins: cleanInt(field(f, 'wins'), MAX_BALANCE), server: fromServer });
+        });
+        // Победы теперь фиксирует сервер: пока он ещё не писал строки, показываем как раньше, потом только его строки
+        return (server ? out.filter(function (x) { return x.server; }) : out).map(function (x) { return { uid: x.uid, name: x.name, avatar: x.avatar, icon: x.icon, wins: x.wins }; });
+      });
+    }
+    // ----- Быстрые победы в «Сапёре»: ratings_fast/<уровень>/rows/<uid>, время в секундах (пишет сервер), лучшие сверху -----
+    function topFast(token, level, limit) {
+      var body = { structuredQuery: { from: [{ collectionId: 'rows' }], orderBy: [{ field: { fieldPath: 'time' }, direction: 'ASCENDING' }], limit: Math.max(1, Math.min(100, limit || 5)) } };
+      return req('POST', base + '/ratings_fast/' + encodeURIComponent(level) + ':runQuery', token, body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
         var out = [];
         (Array.isArray(rows) ? rows : []).forEach(function (r) {
           if (!r || !r.document) return;
           var f = r.document.fields || {}, uid = String(r.document.name || '').split('/').pop();
-          var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, 0);
-          out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, wins: cleanInt(field(f, 'wins'), MAX_BALANCE) });
+          var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, 0), time = cleanInt(field(f, 'time'), 99 * 60 + 59);
+          if (time > 0) out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, time: time });
         });
         return out;
       });
     }
-    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top, recordWin: recordWin, topWins: topWins };
+    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top, recordWin: recordWin, topWins: topWins, topFast: topFast };
   }
 
   // Игры, где считаются победы онлайн
   var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
 
-  // Для браузера: засчитать победу онлайн этому игроку (один вызов на выигранную партию); без входа и без правил базы ничего не делает
-  function reportWin(game) {
+  // Победы онлайн теперь фиксирует сервер по итогу стола, браузер их больше не присылает (вызовы из игр остаются, но ничего не делают)
+  function reportWin() { return Promise.resolve(false); }
+  // Старый способ (браузер сам прибавляет себе победу): оставлен для проверки и на случай включения без сервера
+  function reportWinLegacy(game) {
     var C = root.PlatformCloud, P = root.PlatformProfile;
     if (WIN_GAMES.indexOf(game) < 0 || !C || !P || !C.getState().user || !root.FIREBASE_CONFIG || typeof root.fetch !== 'function') return Promise.resolve(false);
     return C.getToken().then(function (tk) {
@@ -98,5 +116,5 @@
     }).then(function () { return true; }, function () { return false; });
   }
 
-  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, reportWin: reportWin, WIN_GAMES: WIN_GAMES, MAX_NAME: MAX_NAME };
+  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, reportWin: reportWin, reportWinLegacy: reportWinLegacy, WIN_GAMES: WIN_GAMES, MAX_NAME: MAX_NAME };
 })(typeof window !== 'undefined' ? window : globalThis);
