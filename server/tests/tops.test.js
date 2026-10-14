@@ -52,22 +52,39 @@ test('рекорд времени хранится в хранилище и пе
 
 function roomWith(game, members, state) {
   const wallet = { wins: [], recordWin(uid, g) { this.wins.push(uid + ':' + g); } };
-  const m = new RoomManager({ engine: loadEngine(), wallet });
+  const clock = { t: 1000000 };
+  const m = new RoomManager({ engine: loadEngine(), wallet, now: () => clock.t });
+  m.clock = clock;
   const room = { game, fields: { meta: JSON.stringify({ members }) } };
   return { m, wallet, room, doc: { state: JSON.stringify(state) } };
 }
 const duo = [{ uid: 'A', seat: 0 }, { uid: 'B', seat: 1 }];
 
+const playing = { state: JSON.stringify({ gameOver: false, phase: 'battle' }) };
 test('победа онлайн в «Морском бое»: засчитывается один раз за партию, только за флот', () => {
   const t = roomWith('battleship', duo, { gameOver: true, reason: 'fleet', winner: 1 });
+  t.m.watchWins(t.room, playing); t.m.clock.t += 60000;
   t.m.watchWins(t.room, t.doc); t.m.watchWins(t.room, t.doc);
   assert.deepStrictEqual(t.wallet.wins, ['B:battleship']);
   const c = roomWith('battleship', duo, { gameOver: true, reason: 'concede', winner: 0 });
+  c.m.watchWins(c.room, playing); c.m.clock.t += 60000;
   c.m.watchWins(c.room, c.doc);
   assert.deepStrictEqual(c.wallet.wins, [], 'сдача не считается победой');
-  t.m.watchWins(t.room, { state: JSON.stringify({ gameOver: false }) });
+  t.m.watchWins(t.room, playing); t.m.clock.t += 60000;
   t.m.watchWins(t.room, t.doc);
   assert.strictEqual(t.wallet.wins.length, 2, 'после реванша новая победа засчитывается');
+  t.m.watchWins(t.room, playing); t.m.clock.t += 5000;
+  t.m.watchWins(t.room, { state: JSON.stringify({ gameOver: true, reason: 'fleet', winner: 0 }) });
+  assert.strictEqual(t.wallet.wins.length, 2, 'партия за 5 секунд — не победа (скрипт)');
+});
+
+test('зрители не в счёт: победа только если за столом сидят двое живых', () => {
+  const t = roomWith('blackjack', [{ uid: 'A', seat: 0 }, { uid: 'W', seat: null }], { phase: 'settled', round: 1, seats: [{ hands: [{ outcome: 'win' }] }] });
+  t.m.watchWins(t.room, t.doc);
+  assert.deepStrictEqual(t.wallet.wins, [], 'второй аккаунт-зритель не делает партию «онлайн»');
+  const bad = roomWith('blackjack', duo, { phase: 'settled', round: 1, seats: [null, 5] });
+  bad.m.watchWins(bad.room, bad.doc);                          // кривой документ не роняет стол
+  assert.deepStrictEqual(bad.wallet.wins, []);
 });
 
 test('победа онлайн в «Ятзи»: за столом не меньше двоих, «один остался» не считается', () => {
@@ -98,13 +115,17 @@ test('победа онлайн в покере: банк выигран на в
   assert.deepStrictEqual(wins, ['A:poker-simple'], 'только вскрытие и не отменённая раздача');
 });
 
-test('топы: накопленные победы уходят в хранилище пачкой, при сбое повторяются', async () => {
+test('топы: накопленные победы уходят пачкой; при неоднозначном сбое не повторяются (лучше недосчитать, чем засчитать дважды); не больше 40 в сутки', async () => {
   const clock = { t: 1 }, { ledger, svc } = await mk(clock);
   svc.recordWin('A', 'yahtzee'); svc.recordWin('A', 'yahtzee'); svc.recordWin('B', 'battleship'); svc.recordWin('B', 'nope');
   let fail = 1; const add = ledger.addWins.bind(ledger);
   ledger.addWins = async (g, u, n) => { if (fail-- > 0) throw new Error('down'); return add(g, u, n); };
   await svc.flushTops();
   await svc.flushTops();
-  assert.strictEqual(ledger.winsTop.get('yahtzee|A') + (ledger.winsTop.get('battleship|B') || 0), 3);
+  const total = (ledger.winsTop.get('yahtzee|A') || 0) + (ledger.winsTop.get('battleship|B') || 0);
+  assert.ok(total >= 1 && total <= 3, 'не больше, чем было побед: ' + total);
   assert.strictEqual(ledger.winsTop.has('nope|B'), false);
+  for (let i = 0; i < 60; i++) svc.recordWin('C', 'poker-simple');
+  await svc.flushTops();
+  assert.strictEqual(ledger.winsTop.get('poker-simple|C'), 40, 'суточный предел');
 });

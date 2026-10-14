@@ -10,11 +10,17 @@
     var el = doc.createElement('aside'), shown = false, loadedAt = 0, loading = false, rows = null;
     el.className = 'rw'; el.hidden = true;
     // На телефоне плашка раскрывается по нажатию (список столбиком), на широком экране всегда развёрнута
-    el.setAttribute('tabindex', '0');
-    function toggle() { el.classList.toggle('open'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); }
-    el.setAttribute('aria-expanded', 'false');
+    var narrow = function () { try { return root.matchMedia('(max-width: 1039px)').matches; } catch (e) { return true; } };
+    // Кнопкой плашка становится только на телефоне (там она раскрывается); на широком экране она всегда открыта и в обходе с клавиатуры не участвует
+    function syncRole() {
+      if (narrow()) { el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); }
+      else { el.removeAttribute('role'); el.removeAttribute('tabindex'); el.removeAttribute('aria-expanded'); }
+    }
+    function toggle() { if (!narrow()) return; el.classList.toggle('open'); syncRole(); }
+    syncRole();
+    root.addEventListener('resize', syncRole);
     el.addEventListener('click', toggle);
-    el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { if (!narrow()) return; e.preventDefault(); toggle(); } });
     var kind = opts.kind === 'wins' ? 'wins' : 'balance', titleKey = kind === 'wins' ? 'rating.wins' : 'rating.top.balance';
     el.setAttribute('aria-label', t(titleKey));
     doc.body.appendChild(el);
@@ -56,7 +62,8 @@
       else if (rows && !shown) show();
     }
     root.setInterval(tick, 1000);
-    C.onChange(function () { loadedAt = 0; tick(); });
+    var lastWho = '';
+    C.onChange(function () { var st = C.getState(), who = st.status + '|' + (st.user ? st.user.uid : ''); if (who !== lastWho) { lastWho = who; loadedAt = 0; } tick(); });
     tick();
   }
 

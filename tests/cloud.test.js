@@ -143,6 +143,20 @@ test('конфликт: изменились обе стороны — окно 
   assert.equal(b.reloads.n, before, 'страница не перезагружается');
 });
 
+test('конфликт: прогресс объединяется — на совпадающих ключах главнее устройство, чего на устройстве нет, берётся из облака', async () => {
+  const cloud = makeCloud();
+  const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();
+  a.S.set('game:minesweeper:best', { novice: 42 }); a.W.add(1000, 'win'); await a.C.syncNow();       // в облаке рекорд «Сапёра»
+  const b = device(cloud); b.W.add(300, 'win'); b.S.set('game:mines:best', { x: 1 });                 // гость на другом устройстве поиграл в другое
+  b.C.start(); await b.C.signIn(); await tick();
+  assert.equal(b.C.getState().conflict, null, 'окна нет');
+  assert.deepEqual(plain(b.S.get('game:minesweeper:best', null)), { novice: 42 }, 'рекорд из облака не потерян');
+  assert.deepEqual(plain(b.S.get('game:mines:best', null)), { x: 1 }, 'своё осталось');
+  const snap = cloudSnapshot(cloud).data;
+  assert.ok(snap['game:minesweeper:best'] && snap['game:mines:best'], 'в облаке теперь оба');
+  assert.equal(snap['platform:wallet'].balance, 5300, 'на совпадающем ключе главнее устройство');
+});
+
 test('конфликт при серверном балансе: тоже без окна, прогресс устройства', async () => {
   const cloud = makeCloud();
   const a = device(cloud); a.C.start(); await a.C.signIn(); await tick();

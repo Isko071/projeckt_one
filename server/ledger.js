@@ -72,9 +72,11 @@ class FirestoreLedger {
     return this.token;
   }
   // Запрос с таймаутом и повторами: сеть и 429/5xx повторяются до трёх раз с паузой, 401 один раз с новым токеном (записи в commit абсолютные, повтор безопасен)
-  async call(method, url, body) {
+  // once: без повторов (для прибавок increment повтор после неоднозначной ошибки засчитал бы второй раз)
+  async call(method, url, body, once) {
     let last = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const tries = once ? 1 : 3;
+    for (let attempt = 0; attempt < tries; attempt++) {
       try {
         const ctl = typeof AbortController === 'function' ? new AbortController() : null, timer = ctl ? setTimeout(() => ctl.abort(), this.timeoutMs) : null;
         let res;
@@ -88,7 +90,7 @@ class FirestoreLedger {
       } catch (e) {
         if (/^ledger-http-4/.test(String(e && e.message)) && !/401/.test(e.message)) throw e;
         last = e;
-        if (attempt < 2) await new Promise((r) => setTimeout(r, this.retryMs * (attempt + 1)));
+        if (attempt < tries - 1) await new Promise((r) => setTimeout(r, this.retryMs * (attempt + 1)));
       }
     }
     throw last || new Error('ledger-failed');
@@ -139,7 +141,7 @@ class FirestoreLedger {
     await this.call('POST', this.base + ':commit', { writes: [
       { update: { name, fields: { name: { stringValue: p.name }, avatar: { integerValue: String(p.avatar) }, icon: { stringValue: p.icon }, src: { stringValue: 'server' } } }, updateMask: { fieldPaths: ['name', 'avatar', 'icon', 'src'] } },
       { transform: { document: name, fieldTransforms: [{ fieldPath: 'wins', increment: { integerValue: String(Math.max(1, Math.floor(n))) } }] } }
-    ] });
+    ] }, true);
   }
   // Быстрая победа в «Сапёре»: ratings_fast/{уровень}/rows/{uid}, время в секундах
   async setFast(level, uid, seconds) {

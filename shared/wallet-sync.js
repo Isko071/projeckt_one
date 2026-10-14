@@ -99,7 +99,7 @@
     if (flushing) return Promise.resolve();
     flushing = true;
     function next() {
-      var item = queue[0] || (withSync ? { op: 'sync' } : null);
+      var item = withSync ? { op: 'sync' } : (queue[0] || null);       // первым всегда sync: только он несёт прогресс устройства (seed) для нового кошелька
       if (!item) return Promise.resolve();
       withSync = false;
       return rawCall(item).then(function (r) {

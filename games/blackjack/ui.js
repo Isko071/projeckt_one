@@ -239,9 +239,9 @@ function scheduleSeq(st) {
 function rewardOf(outcome) { return REWARD[outcome] || 0; }
 // Итог раздачи известен сразу, но на экране идёт неторопливая раздача: число на плашке меняется только после неё (app.resultAt)
 function holdBalance() { W.holdShown(Math.max(0, (app.resultAt || now()) - now()) + 300); }
-function grantReward(outcome) {
+function grantReward(outcome, round) {
   var want = rewardOf(outcome), r = want ? W.reward('blackjack', want, now()) : { granted: 0, capped: false, left: W.rewardStatus('blackjack', now()).left };
-  G.rw = { round: G.state.round, want: want, granted: r.granted, capped: r.capped, left: r.left };
+  G.rw = { round: round, want: want, granted: r.granted, capped: r.capped, left: r.left };
   if (want) W.countWin('blackjack');
   if (r.capped) notify(tr(r.granted > 0 ? 'cap.cut' : 'cap.reached', { n: fmt(r.granted) }), 6000);
 }
@@ -278,7 +278,7 @@ function lDispatch(action) {
     G.rw = null;
     scheduleSeq(st);
     holdBalance();                                  // баланс изменится на экране только когда раздача доиграна (карты дилера, итог)
-    if (mine) grantReward(mine.outcome);
+    if (mine) grantReward(mine.outcome, st.round);
   }
   return true;
 }
@@ -411,7 +411,7 @@ function onView(v) {
       G.rw = null;
       scheduleSeq(st);
       holdBalance();
-      if (h) grantReward(h.outcome);
+      if (h) grantReward(h.outcome, st.round);
       // победа онлайн в рейтинг: раздача выиграна у дилера, за столом не меньше двух игроков
       if (h && (h.outcome === 'win' || h.outcome === 'blackjack') && window.PlatformRating && G.view && (G.view.members || []).length >= 2) window.PlatformRating.reportWin('blackjack');
     }
@@ -677,7 +677,7 @@ function playHtml(D) {
   }
   var shoeW = L.desk ? 42 : (L.narrow ? 29 : 34);          // стопка вдвое меньше прежней (84/68/58)
   var shoe = '<div class="shoe" aria-hidden="true" style="width:' + shoeW + 'px;height:' + Math.round(shoeW * 1.4) + 'px"><i></i><i></i><i></i><i></i><i></i></div>';
-  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + center + meBox + pop + '</div>';
+  var felt = '<div class="felt" style="' + feltStyle(L) + '">' + shoe + dealerBox + plates + (center || '<span data-key="nocenter"></span>') + meBox + pop + '</div>';
 
   var notice = activeNotice();
   var noticeHtml = notice ? '<div class="notice" role="status">' + esc(notice) + '</div>' : '';
@@ -716,7 +716,8 @@ function gameHtml() {
   var D = describe();
   if (!D) return '<div class="page"><div class="dashed">…</div></div>';
   if (D.me === null) return '<div class="page"><div class="dashed">…</div></div>';
-  return topbarHtml() + bannerHtml() + playHtml(D);
+  // Место под баннер есть всегда: иначе появившийся баннер сдвигал узлы стола, и карты рисовались заново (раздача «повторялась»)
+  return topbarHtml() + (bannerHtml() || '<div data-key="nobanner" hidden></div>') + playHtml(D);
 }
 
 // ===== Окна =====
