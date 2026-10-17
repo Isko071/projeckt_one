@@ -114,7 +114,8 @@
         ownerUid = next ? next.uid : null;
         if (next) sys('owner', next.name);
       }
-      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
+      // пауза startDelayMs нужна, чтобы успели зайти остальные; стол заполнен — ждать некого, начать можно сразу
+      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? (members.length >= size ? now() - cfg.startDelayMs : now()) : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function readyIn() { return status === 'playing' && full && full.phase === 'settled' && settledAt ? Math.max(0, settledAt + cfg.readyWaitMs - now()) : -1; }
       function timersNow() {

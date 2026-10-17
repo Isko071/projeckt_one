@@ -120,7 +120,8 @@
         return JSON.stringify({ v: 1, game: 'blackjack', size: size, owner: ownerUid, fillBots: fillBots, round: full ? full.round : 0,
           members: members.map(function (m) { return { uid: m.uid, name: m.name, avatar: m.avatar, seat: m.seat }; }) });
       }
-      function touchReady() { readyAt = members.length >= 2 ? now() : 0; }
+      // пауза startDelayMs нужна, чтобы успели зайти остальные; стол заполнен — ждать некого, начать можно сразу
+      function touchReady() { readyAt = members.length >= 2 ? (members.length >= size ? now() - cfg.startDelayMs : now()) : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
         var f = { hostUid: env.uid, game: 'blackjack', status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', fillBots: fillBots, private: isPrivate, rev: rev, heartbeat: now(), startIn: startIn(), meta: meta() };
