@@ -79,6 +79,8 @@ test('очередь: награда, полученная до ответа с�
     assert.strictEqual(c.W.getBalance(), 5400);
     assert.ok(await until(() => c.S.status() === 'server'));
     assert.ok(await until(() => s.wallet.balanceOf('D') === 5400), 'награда доехала до сервера из очереди');
+    await wait(300);
+    assert.strictEqual(s.wallet.balanceOf('D'), 5400, 'и не засчиталась второй раз');
     assert.strictEqual(c.W.getBalance(), 5400);
     assert.deepStrictEqual(JSON.parse(c.data['platform:wallet-queue:D'] || '[]'), []);
   } finally { await s.close(); }
@@ -140,5 +142,18 @@ test('запрос с задержкой показа: сначала на эк�
     assert.deepStrictEqual(seen, [7000, 7250], 'сперва число «до выплаты», затем итог');
     assert.deepStrictEqual(held, [900]);
     assert.strictEqual(c.W.getBalance(), 7250);
+  } finally { await s.close(); }
+});
+
+test('очередь: у нового аккаунта (без переноса прогресса) награда до ответа сервера тоже засчитывается один раз', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger({ sinces: { E: Date.now() } }), config: { tickMs: 50 } });
+  try {
+    const c = client(s.port, 'E');
+    c.W.reward('blackjack', 400, Date.now());
+    assert.ok(await until(() => c.S.status() === 'server'));
+    assert.ok(await until(() => s.wallet.balanceOf('E') === 5400), 'награда доехала из очереди');
+    await wait(300);
+    assert.strictEqual(s.wallet.balanceOf('E'), 5400);
+    assert.strictEqual(c.W.getBalance(), 5400);
   } finally { await s.close(); }
 });

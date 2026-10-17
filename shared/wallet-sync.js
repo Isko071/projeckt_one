@@ -82,7 +82,7 @@
       pend[id] = { res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); }, CALL_MS) };
       // tz — часовой пояс игрока: сервер считает дни серии по его часам. seed (только при первой синхронизации) — прогресс игрока, с которого сервер начнёт его кошелёк
       var out = Object.assign({ id: id, t: 'wallet', tz: new Date().getTimezoneOffset() }, msg);
-      if (msg.op === 'sync' && W.exportState) { var st = W.exportState(); if (st.streak || st.best || st.playDay || (st.days && st.days.length) || Object.keys(st.wins || {}).length || Object.keys(st.plays || {}).length || st.balance !== W.CONFIG.start) out.seed = st; }
+      if (msg.op === 'sync' && W.exportState) { var st = W.exportState(); if (st.streak || st.best || st.playDay || (st.days && st.days.length) || Object.keys(st.wins || {}).length || Object.keys(st.plays || {}).length || st.balance !== W.CONFIG.start) { out.seed = st; msg.covered = queue.slice(); } }
       try { ws.send(JSON.stringify(out)); } catch (e) { delete pend[id]; rej(fail('offline')); }
     });
   }
@@ -104,6 +104,8 @@
       withSync = false;
       return rawCall(item).then(function (r) {
         if (queue[0] === item) { queue.shift(); saveQueue(); }
+        // кошелёк начат с присланного снимка: награды, которые в нём уже есть, второй раз не отправляются
+        if (item.covered && r.result && r.result.seeded) { queue = queue.filter(function (x) { return item.covered.indexOf(x) < 0; }); saveQueue(); }
         lastState = r.state;
         return next();
       }, function (e) {
