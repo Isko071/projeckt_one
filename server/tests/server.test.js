@@ -97,6 +97,34 @@ test('кабинет: /admin/wallets — баланс и партии всех �
   } finally { await s.close(); }
 });
 
+test('кабинет: POST /admin/balance — владелец меняет баланс игрока на сервере, игрок онлайн видит его сразу', async () => {
+  const { MemLedger } = require('../ledger');
+  const verify = async (t) => { const m = /^(.+):(.+)$/.exec(String(t)); if (!m) throw new Error('bad'); return { uid: m[1], email: m[2], emailVerified: true }; };
+  const s = await startServer({ verify, ledger: new MemLedger(), adminEmails: ['boss@x.com'], config: { tickMs: 50 } });
+  const post = (token, body) => fetch('http://localhost:' + s.port + '/admin/balance', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    const ws = new WebSocket('ws://localhost:' + s.port);
+    const pushed = [];
+    const ready = new Promise((r) => ws.on('message', (raw) => { const m = JSON.parse(String(raw)); if (m.t === 'ready') r(); if (m.t === 'wallet' && m.state) pushed.push(m.state.balance); }));
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'auth', token: 'A:a@x.com' })));
+    await ready;
+    await s.wallet.act('A', { op: 'sync' });
+    assert.strictEqual((await post('p2:other@x.com', { uid: 'A', balance: 1 })).status, 403, 'чужой аккаунт не может');
+    assert.strictEqual(s.wallet.balanceOf('A'), 5000);
+    assert.strictEqual((await post('boss:boss@x.com', { uid: 'A', balance: -5 })).status, 400);
+    assert.strictEqual((await post('boss:boss@x.com', { uid: 'A', balance: 1.5 })).status, 400);
+    assert.strictEqual((await post('boss:boss@x.com', { uid: 'nobody', balance: 100 })).status, 404, 'кошелька нет — не создаётся');
+    const r = await post('boss:boss@x.com', { uid: 'A', balance: 12345 });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual((await r.json()).balance, 12345);
+    assert.strictEqual(s.wallet.balanceOf('A'), 12345);
+    assert.ok(await (async () => { for (let i = 0; i < 50 && !pushed.includes(12345); i++) await new Promise((x) => setTimeout(x, 20)); return pushed.includes(12345); })(), 'игрок получил новый баланс');
+    assert.ok(s.manager.events.some((e) => e.type === 'admin' && e.info === '12345'), 'запись в журнале');
+    assert.strictEqual((await fetch('http://localhost:' + s.port + '/admin/balance', { headers: { Authorization: 'Bearer boss:boss@x.com' } })).status, 405, 'только POST');
+    ws.close();
+  } finally { await s.close(); }
+});
+
 test('кабинет: без ADMIN_EMAILS доступа нет ни у кого', async () => {
   const s = await startServer({ insecure: true });
   try {

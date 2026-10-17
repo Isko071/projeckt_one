@@ -51,12 +51,13 @@
   function docUrl(uid) { var cfg = window.FIREBASE_CONFIG; return 'https://firestore.googleapis.com/v1/projects/' + cfg.projectId + '/databases/' + window.FIREBASE_DATABASE + '/documents/users/' + encodeURIComponent(uid); }
   function editBalance(uid) {
     var row = st.rows.filter(function (r) { return r.uid === uid; })[0];
-    if (!row || st.saving || row.server) return;          // баланс на сервере: облачная копия его не меняет
+    if (!row || st.saving) return;
     var raw = window.prompt(tr('admin.edit.prompt', { name: row.name || row.uid.slice(0, 8), n: fmt(row.balance) }), String(Math.round(row.balance)));
     if (raw === null) return;
     var value = Number(String(raw).replace(/\s/g, ''));
     if (!L.withBalance('{"data":{}}', value).ok) { st.msg = { bad: true, key: 'admin.edit.invalid' }; render(); return; }
     st.saving = true; st.msg = null; render();
+    if (row.server) { saveOnServer(row, value); return; }      // серверный баланс: облачная копия на него не влияет, меняет сервер
     var token;
     Cloud.getToken().then(function (tk) { token = tk; return window.fetch(docUrl(uid), { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
       .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
@@ -70,6 +71,18 @@
       })
       .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); })
       .catch(function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
+  }
+
+  function saveOnServer(row, value) {
+    Cloud.getToken().then(function (tk) {
+      return window.fetch(serverUrl() + '/admin/balance', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: row.uid, balance: value }) });
+    }).then(function (res) {
+      if (res.status === 401 || res.status === 403) throw new Error('denied');
+      if (res.status === 404) throw new Error('notFound');
+      if (!res.ok) throw new Error('http');
+      return res.json();
+    }).then(function (d) { row.balance = d.balance; st.saving = false; st.msg = { bad: false, key: 'admin.edit.doneServer' }; render(); },
+      function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.srv.denied' : (e && e.message === 'notFound' ? 'admin.edit.notFound' : 'admin.edit.error') }; render(); });
   }
 
   // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------
@@ -130,7 +143,7 @@
     }).join('');
     var body = rows.map(function (r) {
       return '<tr><td class="nm">' + esc(r.name || tr('admin.noName')) + '<small>' + esc(r.uid.slice(0, 8)) + '</small></td><td>' + esc(fmtDate(r.createdAt)) + '</td><td>' + esc(fmtDate(r.lastSeen)) + '<small>' + esc(ago(r.lastSeen)) + '</small></td>' +
-        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr(r.server ? 'admin.edit.server' : 'admin.edit.btn')) + '"' + (r.server ? ' title="' + esc(tr('admin.edit.server')) + '"' : '') + (st.saving || r.server ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
+        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
     }).join('');
     return '<div class="cards">' + cards + '</div>' +
       '<div class="tools"><input id="q" type="search" value="' + esc(st.query) + '" placeholder="' + esc(tr('admin.search')) + '" aria-label="' + esc(tr('admin.search')) + '"><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button></div>' +

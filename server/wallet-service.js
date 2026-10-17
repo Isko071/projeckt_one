@@ -153,6 +153,15 @@ class WalletService {
     return out;
   }
 
+  // Владелец меняет баланс игрока (кнопка ✎ в кабинете). Только существующий кошелёк: новый должен начаться с переноса прогресса при первом входе игрока
+  async adminSetBalance(uid, value) {
+    if (typeof uid !== 'string' || !uid || uid.length > 128 || !Number.isInteger(value) || value < 0 || value > 10000000) throw fail('bad-request');
+    return this.run(uid, async () => {
+      if (!this.cache.has(uid)) { let doc; try { doc = await this.ledger.get('wallets', uid); } catch (e) { throw fail('ledger'); } if (!doc) throw fail('not-found'); }
+      return this.mutate(uid, () => { const cur = this.ctx.cur; cur.balance = value; cur.peak = Math.max(Number(cur.peak) || 0, value); this.ctx.out = cur; });
+    });
+  }
+
   // Выполнить fn(W) над состоянием игрока и записать результат вместе с extra-записями (залоги) одной операцией
   async mutate(uid, fn, extra, rid) {
     const state = await this.load(uid);
