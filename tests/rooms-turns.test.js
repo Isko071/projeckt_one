@@ -145,6 +145,22 @@ test('неактивный игрок в одновременном режиме
   assert.equal(st.round, 2, 'раунд закрыт: остальные уже записали очки');
 });
 
+test('выбывший игрок: его выход (страница и обрыв связи) не пишет в чат «вышел(а)» ещё раз', async () => {
+  const server = makeServer();
+  const { host, players } = await table(server, 3, 'sync');
+  const [p1, p2] = players;
+  host.send({ type: 'roll' }); host.send({ type: 'score', cat: 'chance' });
+  await p1.send({ type: 'roll' }); await step(server, host, players);
+  await p1.send({ type: 'score', cat: Y.allowedCategories(p1.getView().state.players[1], p1.getView().state.players[1].dice)[0] });
+  await step(server, host, players, 3000); await step(server, host, players, 2000);      // третий выбыл по неактивности
+  assert.equal(host.getView().state.players[2].active, false);
+  await p2.send({ type: 'leave' }); await p2.send({ type: 'leave' });
+  await step(server, host, players);
+  const sys = host.getView().chat.filter((m) => m.kind === 'sys').map((m) => m.code);
+  assert.equal(sys.filter((c) => c === 'out').length, 1);
+  assert.equal(sys.filter((c) => c === 'leave').length, 0, 'выбыл — уже значит ушёл');
+});
+
 test('выход игрока: ведущий отмечает место свободным, стол продолжается; закрытие хоста видно игрокам', async () => {
   const server = makeServer();
   const { host, players } = await table(server, 3, 'sync');

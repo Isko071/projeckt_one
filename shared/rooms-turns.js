@@ -202,6 +202,9 @@
           if (payload.type === 'close') { close(); return; }
         }
         if (payload.type === 'leave') {
+          // уже выбыл (неактивность, прошлый выход): повторный выход — со старой вкладки или по обрыву связи — в чат второй раз не пишется
+          var seatNow = status === 'playing' && full ? seatsOf(full)[m.seat] : null;
+          if (seatNow && !seatNow.active) return;
           sys('leave', m.name);
           if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (full) { apply({ type: 'leave', seat: m.seat }); }
