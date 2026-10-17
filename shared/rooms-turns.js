@@ -129,7 +129,8 @@
         });
         return out;
       }
-      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? now() : 0; }
+      // пауза startDelayMs нужна, чтобы успели зайти остальные; стол заполнен — ждать некого, начать можно сразу
+      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? (members.length >= size ? now() - cfg.startDelayMs : now()) : 0; }
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
         var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, stake: stake, rev: rev, heartbeat: now(), startIn: startIn(),
@@ -202,6 +203,9 @@
           if (payload.type === 'close') { close(); return; }
         }
         if (payload.type === 'leave') {
+          // уже выбыл (неактивность, прошлый выход): повторный выход — со старой вкладки или по обрыву связи — в чат второй раз не пишется
+          var seatNow = status === 'playing' && full ? seatsOf(full)[m.seat] : null;
+          if (seatNow && !seatNow.active) return;
           sys('leave', m.name);
           if (status === 'lobby') { members = members.filter(function (x) { return x.uid !== uid; }); members.forEach(function (x, i) { x.seat = i; }); touchReady(); dirty = true; }
           else if (full) { apply({ type: 'leave', seat: m.seat }); }

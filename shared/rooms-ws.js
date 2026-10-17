@@ -9,7 +9,7 @@
 //   game — 'blackjack' | 'yahtzee' (что показывать в списке и создавать).
 // api.onStatus(fn) — состояние связи: 'connecting' | 'open' | 'down' (для плашки «Сервер просыпается…»).
 (function (root) {
-  var CALL_MS = 20000;
+  var CALL_MS = 20000, ACT_MS = 10000, PING_MS = 15000, PING_WAIT_MS = 6000;
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
@@ -28,10 +28,11 @@
     var WS = env.WebSocket || (typeof WebSocket !== 'undefined' ? WebSocket : null);
     var uid = env.uid;
     var now = env.now || function () { return Date.now(); };
+    var T = Object.assign({ call: CALL_MS, act: ACT_MS, ping: PING_MS, pingWait: PING_WAIT_MS }, env.timing || {});   // timing — для тестов
     var docs = {};                     // код → { doc, at } последний документ комнаты от сервера
     var waiters = [];                  // ожидание нужного документа
     var rooms = {};                    // код → { ctrl-часть: poll, stopped, hello }
-    var pend = {}, seq = 0, ws = null, ready = null, state = 'down', retry = 0, retryTimer = null, statusFns = [], closedByUs = false;
+    var pend = {}, seq = 0, ws = null, ready = null, state = 'down', retry = 0, retryTimer = null, statusFns = [], closedByUs = false, checking = false;
 
     function setState(s) { if (state === s) return; state = s; statusFns.forEach(function (fn) { try { fn(s); } catch (e) { /* подписчик не должен ломать связь */ } }); }
     function active() { return Object.keys(rooms).some(function (c) { return !rooms[c].stopped; }); }
@@ -56,19 +57,42 @@
             else if (m.t === 'gone') goneRoom(m.code);
             else if (m.id && pend[m.id]) { var p = pend[m.id]; delete pend[m.id]; clearTimeout(p.timer); if (m.ok) p.res(m); else p.rej(fail(m.error || 'error')); }
           };
-          sock.onclose = function () {
-            if (ws === sock) { ws = null; ready = null; }
-            Object.keys(pend).forEach(function (id) { var p = pend[id]; delete pend[id]; clearTimeout(p.timer); p.rej(fail('offline')); });
-            if (!done) reject(fail('offline'));
-            if (closedByUs) { closedByUs = false; setState('down'); return; }
-            setState('down');
-            if (active()) scheduleRetry();
+          sock.onclose = function () { lost(sock); };
+          sock.lost = function () {
+            if (!done) { done = true; reject(fail('offline')); }
           };
           sock.onerror = function () { /* закрытие обработает onclose */ };
         }, function () { ready = null; setState('down'); reject(fail('denied')); });
       });
       ready.catch(function () { ready = null; });
       return ready;
+    }
+    // Связь пропала (закрытие сокета или он перестал отвечать): ждущие запросы отклоняются, через паузу — переподключение и возврат за столы
+    function lost(sock) {
+      if (sock.dead) return;
+      sock.dead = true;
+      if (sock.lost) sock.lost();
+      if (ws === sock) { ws = null; ready = null; }
+      Object.keys(pend).forEach(function (id) { var p = pend[id]; if (p.sock !== sock) return; delete pend[id]; clearTimeout(p.timer); p.rej(fail('offline')); });
+      if (closedByUs) { closedByUs = false; setState('down'); return; }
+      setState('down');
+      if (active()) scheduleRetry();
+    }
+    // На телефоне соединение часто умирает молча (смена сети, свёрнутый браузер): сокет числится открытым, а сообщения не доходят.
+    // Такой сокет закрываем сами, не дожидаясь, пока браузер заметит обрыв
+    function drop(sock) {
+      if (!sock || sock.dead) return;
+      try { sock.close(); } catch (e) { /* уже закрыт */ }
+      lost(sock);
+    }
+    // Проверка связи: короткий ping; нет ответа за T.pingWait — соединение считается мёртвым
+    function check() {
+      if (!active()) return;
+      if (!ws) { if (!ready && !retryTimer) connect().catch(function () { if (active()) scheduleRetry(); }); return; }
+      if (ws.readyState !== 1 || checking) return;
+      var sock = ws;
+      checking = true;
+      send(sock, { t: 'ping' }, T.pingWait).then(function () { checking = false; }, function () { checking = false; drop(sock); });
     }
     function scheduleRetry() {
       if (retryTimer) return;
@@ -84,14 +108,16 @@
         });
       });
     }
-    function call(msg) {
-      return connect().then(function (sock) {
-        return new Promise(function (res, rej) {
-          var id = ++seq;
-          pend[id] = { res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); }, CALL_MS) };
-          try { sock.send(JSON.stringify(Object.assign({ id: id }, msg))); } catch (e) { delete pend[id]; rej(fail('offline')); }
-        });
+    function send(sock, msg, ms) {
+      return new Promise(function (res, rej) {
+        var id = ++seq;
+        // ответа нет слишком долго — соединение, скорее всего, мёртвое: переподключаемся
+        pend[id] = { sock: sock, res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); drop(sock); }, ms) };
+        try { sock.send(JSON.stringify(Object.assign({ id: id }, msg))); } catch (e) { clearTimeout(pend[id].timer); delete pend[id]; rej(fail('offline')); drop(sock); }
       });
+    }
+    function call(msg) {
+      return connect().then(function (sock) { return send(sock, msg, msg.t === 'act' ? T.act : T.call); });
     }
     // Быстрая отправка без ответа (закрытие вкладки)
     function fire(msg) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); } catch (e) { /* страница закрывается */ } }
@@ -180,12 +206,18 @@
     }
     function listRooms() { return call({ t: 'list', game: env.game }).then(function (r) { return r.rooms || []; }); }
 
+    // Пока сидим за столом: проверка связи раз в T.ping и сразу при возврате на вкладку или в сеть
+    var pinger = setInterval(check, T.ping);
+    if (pinger && pinger.unref) pinger.unref();
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+    if (typeof root.addEventListener === 'function') root.addEventListener('online', check);
+
     return {
       createRoom: createRoom, joinRoom: joinRoom, listRooms: listRooms,
       onStatus: function (fn) { statusFns.push(fn); },
       status: function () { return state; },
       connect: connect,
-      shutdown: function () { closedByUs = true; if (retryTimer) clearTimeout(retryTimer); try { ws && ws.close(); } catch (e) { /* уже закрыт */ } }
+      shutdown: function () { closedByUs = true; clearInterval(pinger); if (retryTimer) clearTimeout(retryTimer); try { ws && ws.close(); } catch (e) { /* уже закрыт */ } }
     };
   }
 

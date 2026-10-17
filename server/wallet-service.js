@@ -47,6 +47,7 @@ class WalletService {
     this.queues = new Map();            // uid → хвост очереди операций (на игрока они идут по одной)
     this.shifts = new Map();            // uid → сдвиг дня (по часам игрока)
     this.seeds = new Map();             // uid → прогресс, присланный браузером при первой синхронизации
+    this.seeded = new Set();            // uid, чей новый кошелёк начат с присланного браузером: ответ на sync скажет об этом, и браузер не пришлёт награды из очереди второй раз
     this.rounds = new Map();            // uid → раунд «Мин» (с расположением мин: клиенту оно не отдаётся до конца раунда)
     this.rids = new Map();              // uid → идентификаторы уже применённых запросов (повтор того же запроса не начисляет второй раз)
     this.tzs = new Map();               // uid → { tz, since }: часовой пояс игрока меняется не чаще раза в 12 часов (иначе сменой пояса сбрасывались бы дневные пределы)
@@ -98,7 +99,7 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
+    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -128,6 +129,7 @@ class WalletService {
       try { since = await this.ledger.accountSince(uid); } catch (e) { throw fail('ledger'); }
       const old = since !== null && since < this.seedBefore;                  // нет документов аккаунта или он новый: перенос прогресса не положен, начинает с обычного старта
       let seed = !old ? null : (mine && typeof mine === 'object' && !this.pristine(mine) ? mine : await this.ledger.seed(uid));
+      if (seed && seed === mine) this.seeded.add(uid);
       if (typeof seed === 'number') seed = { balance: seed };
       state = this.W.sanitize(seed && typeof seed === 'object' ? seed : null);
       state.balance = Math.min(state.balance, SEED_CAP); state.peak = Math.max(state.balance, Math.min(state.peak, SEED_CAP));
@@ -189,7 +191,7 @@ class WalletService {
       // Повтор уже применённого запроса (вторая вкладка, потерянный ответ): состояние то же, второй раз не начисляется
       if (rid && m.op !== 'sync') { await this.load(uid); if ((this.rids.get(uid) || []).indexOf(rid) >= 0) return { state: await this.load(uid), result: null, dup: true }; }
       switch (m.op) {
-        case 'sync': return this.mutate(uid, () => null);
+        case 'sync': { const r = await this.mutate(uid, () => null); if (this.seeded.delete(uid)) r.result = { seeded: true }; return r; }
         case 'markPlayed': return this.mutate(uid, (W) => W.markPlayed(now), null, rid);
         case 'claimDaily': return this.mutate(uid, (W) => W.claimDaily(now), null, rid);
         case 'earn': {

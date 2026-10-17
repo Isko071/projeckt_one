@@ -145,6 +145,22 @@ test('неактивный игрок в одновременном режиме
   assert.equal(st.round, 2, 'раунд закрыт: остальные уже записали очки');
 });
 
+test('выбывший игрок: его выход (страница и обрыв связи) не пишет в чат «вышел(а)» ещё раз', async () => {
+  const server = makeServer();
+  const { host, players } = await table(server, 3, 'sync');
+  const [p1, p2] = players;
+  host.send({ type: 'roll' }); host.send({ type: 'score', cat: 'chance' });
+  await p1.send({ type: 'roll' }); await step(server, host, players);
+  await p1.send({ type: 'score', cat: Y.allowedCategories(p1.getView().state.players[1], p1.getView().state.players[1].dice)[0] });
+  await step(server, host, players, 3000); await step(server, host, players, 2000);      // третий выбыл по неактивности
+  assert.equal(host.getView().state.players[2].active, false);
+  await p2.send({ type: 'leave' }); await p2.send({ type: 'leave' });
+  await step(server, host, players);
+  const sys = host.getView().chat.filter((m) => m.kind === 'sys').map((m) => m.code);
+  assert.equal(sys.filter((c) => c === 'out').length, 1);
+  assert.equal(sys.filter((c) => c === 'leave').length, 0, 'выбыл — уже значит ушёл');
+});
+
 test('выход игрока: ведущий отмечает место свободным, стол продолжается; закрытие хоста видно игрокам', async () => {
   const server = makeServer();
   const { host, players } = await table(server, 3, 'sync');
@@ -222,6 +238,25 @@ test('начало игры: кнопка работает только когд
   await host.start();
   assert.equal(host.getView().status, 'playing', 'создатель начал игру после отсчёта');
   assert.equal(host.getView().state.players.length, 3);
+});
+
+test('начало игры: стол заполнился — отсчёта нет, начать можно сразу; кто-то вышел — снова ждём', async () => {
+  const server = makeServer();
+  const mk = (uid) => R.create({ fetch: server.fetch, getToken: async () => 'tok-' + uid, uid, projectId: 'p', db: 'd', game: T, gameId: 'yahtzee', now: () => server.now, rng: Math.random, options: Object.assign({}, FAST, { startDelayMs: 20000 }) });
+  const { code, host } = await mk('h').createRoom({ size: 3, name: 'Хост', mode: 'sync' });
+  const p1 = await mk('p1').joinRoom(code, { name: 'Аня' });
+  await step(server, host, [p1], 1000);
+  assert.ok(host.getView().startIn > 18000, 'есть свободное место: ждём остальных');
+  const p2 = await mk('p2').joinRoom(code, { name: 'Боря' });
+  await step(server, host, [p1, p2], 500);
+  assert.equal(host.getView().startIn, 0, 'стол полон: ждать некого');
+  await p2.leave();
+  await step(server, host, [p1], 500);
+  assert.ok(host.getView().startIn > 18000, 'место освободилось: отсчёт снова');
+  const p3 = await mk('p3').joinRoom(code, { name: 'Вика' });
+  await step(server, host, [p1, p3], 500);
+  await host.start();
+  assert.equal(host.getView().status, 'playing');
 });
 
 test('начало игры: если игрок вышел и остался один, отсчёт отменяется и начать нельзя', async () => {

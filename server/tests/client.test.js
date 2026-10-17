@@ -27,3 +27,37 @@ test('клиент rooms-ws: создание, вход, старт, перед�
     await b.send({ type: 'roll' });
   } finally { A.shutdown(); B.shutdown(); await s.close(); }
 });
+
+// Телефон сменил сеть: сокет числится открытым, но ничего не доходит. Клиент сам замечает это, переподключается и возвращается за стол
+test('клиент rooms-ws: молча умершее соединение заменяется новым', async () => {
+  const eng = loadEngine();
+  const s = await startServer({ insecure: true, config: { tickMs: 50, engineOptions: { startDelayMs: 0 } } });
+  const socks = [];
+  class FlakyWS extends WebSocket {
+    constructor(url) { super(url); this.frozen = false; socks.push(this); }
+    send(data) { if (!this.frozen) super.send(data); }
+    set onmessage(fn) { super.onmessage = (ev) => { if (!this.frozen) fn(ev); }; }
+    get onmessage() { return super.onmessage; }
+  }
+  const timing = { act: 300, ping: 200, pingWait: 150 };
+  const A = globalThis.PlatformRoomsWS.create({ url: 'ws://localhost:' + s.port, WebSocket, getToken: async () => 'test:A', uid: 'A', engine: eng.PlatformTurnRooms, engineEnv: { game: eng.YahtzeeTable, gameId: 'yahtzee' }, game: 'yahtzee' });
+  const B = globalThis.PlatformRoomsWS.create({ url: 'ws://localhost:' + s.port, WebSocket: FlakyWS, timing, getToken: async () => 'test:B', uid: 'B', engine: eng.PlatformTurnRooms, engineEnv: { game: eng.YahtzeeTable, gameId: 'yahtzee' }, game: 'yahtzee' });
+  const chat = (v) => (v.chat || []).filter((m) => m.kind === 'msg').map((m) => m.text);
+  try {
+    const { code, host } = await A.createRoom({ size: 2, mode: 'sync', name: 'Аня', avatar: 0 });
+    const b = await B.joinRoom(code, { name: 'Боря', avatar: 1 });
+    await until(() => host.getView().members.length === 2);
+    // действие в мёртвое соединение: ошибка через короткое время, а не вечное ожидание
+    socks[socks.length - 1].frozen = true;
+    await assert.rejects(b.send({ type: 'chat', text: 'потерялось', cid: 'c1' }));
+    await until(() => B.status() === 'open' && socks.length >= 2);
+    await b.send({ type: 'chat', text: 'дошло', cid: 'c2' });
+    await until(() => chat(host.getView()).includes('дошло'));
+    // без всяких действий: проверка связи сама находит мёртвое соединение
+    const n = socks.length;
+    socks[n - 1].frozen = true;
+    await until(() => socks.length > n && B.status() === 'open');
+    await b.send({ type: 'chat', text: 'снова тут', cid: 'c3' });
+    await until(() => chat(host.getView()).includes('снова тут'));
+  } finally { A.shutdown(); B.shutdown(); socks.forEach((w) => w.terminate()); await s.close(); }
+});

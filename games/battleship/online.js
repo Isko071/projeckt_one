@@ -27,7 +27,7 @@
   function isOwner() { var u = myUid(); return !!(G && G.view && u && G.view.owner === u); }
   function serverStatus(s) {
     if (!G && !on.busy) return;
-    if (s === 'open') { if (on.banner === 'server') on.banner = 'back'; } else on.banner = 'server';
+    if (s === 'open') { if (on.banner === 'server' || on.banner === 'offline') on.banner = 'back'; } else on.banner = 'server';
     if (isOn()) render();
   }
   function getRooms() {

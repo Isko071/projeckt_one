@@ -324,7 +324,7 @@ function isOwner() {
 }
 function serverStatus(s) {
   if (!(G && G.mode === 'online') && !app.busy) return;
-  if (s === 'open') { if (app.banner === 'server') app.banner = 'back'; } else if (app.banner !== 'relogin') app.banner = 'server';
+  if (s === 'open') { if (app.banner === 'server' || app.banner === 'offline') app.banner = 'back'; } else if (app.banner !== 'relogin') app.banner = 'server';
   render();
 }
 function getRooms() {

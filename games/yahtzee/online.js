@@ -37,7 +37,7 @@
   }
   function serverStatus(s) {
     if (!G && !on.busy) return;
-    if (s === 'open') { if (on.banner === 'server') on.banner = 'back'; } else on.banner = 'server';
+    if (s === 'open') { if (on.banner === 'server' || on.banner === 'offline') on.banner = 'back'; } else on.banner = 'server';
     if (isOn()) render();
   }
   function getRooms() {
@@ -147,7 +147,7 @@
           var rolled = p.rollsUsed > (G.lastRolls || 0) && p.rollsUsed > 0;
           on.heldKey = key; on.held = p.held.slice();
           if (rolled) spinFinish(p.dice, p.held);           // новый бросок: кубики крутятся и замедляются, как в одиночной игре
-          else if (spin.waiting) { spin.waiting = false; spin.active = false; spin.token++; spin.display = null; }
+          else stopSpinWait();
           G.lastRolls = p.rollsUsed;
         }
         if (v.state.gameOver && !G.counted) {
@@ -211,7 +211,7 @@
     G.lastAction = now();
     if (G.role === 'host') { G.ctrl.send(action); G.ctrl.tick().catch(function () { /* повторит таймер */ }); render(); return; }
     on.pending = true; render();
-    G.ctrl.send(action).catch(function () { on.pending = false; on.banner = 'offline'; render(); });
+    G.ctrl.send(action).catch(function () { on.pending = false; on.banner = 'offline'; stopSpinWait(); render(); });
   }
   function leaveGame(toScreen) {
     var g = G; chat.reset();
@@ -401,6 +401,8 @@
       if (spin.waiting) setTimeout(loop, 90);
     })();
   }
+  // бросок не дошёл до сервера: кубики останавливаются на прежних значениях, кнопку можно нажать снова
+  function stopSpinWait() { if (spin.waiting) { spin.waiting = false; spin.active = false; spin.token++; spin.display = null; } }
   function spinFinish(final, held) { // пришёл результат: кубики замедляются и останавливаются
     var token = ++spin.token;
     if (reducedMotion()) { spin.active = false; spin.waiting = false; spin.display = null; render(); return; }
