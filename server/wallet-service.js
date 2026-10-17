@@ -143,6 +143,16 @@ class WalletService {
     return state;
   }
 
+  // ---------- Личный кабинет владельца ----------
+  // Кошельки всех игроков: баланс и сыгранные партии (облачная копия прогресса при серверном балансе отстаёт, настоящее — здесь)
+  async adminWallets() {
+    const out = {};
+    const pick = (s) => ({ balance: Math.max(0, Math.floor(Number(s && s.balance) || 0)), plays: s && s.plays && typeof s.plays === 'object' ? Object.assign({}, s.plays) : {} });
+    (await this.ledger.list('wallets')).forEach((w) => { out[w.id] = pick(this.cache.get(w.id) || w.data); });
+    this.cache.forEach((st, uid) => { out[uid] = pick(st); });
+    return out;
+  }
+
   // Выполнить fn(W) над состоянием игрока и записать результат вместе с extra-записями (залоги) одной операцией
   async mutate(uid, fn, extra, rid) {
     const state = await this.load(uid);

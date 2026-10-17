@@ -31,15 +31,27 @@
       if (res.status === 401 || res.status === 403) throw new Error('denied');
       if (!res.ok) throw new Error('http');
       return res.json();
-    }).then(function (rows) { st.rows = L.parseQuery(rows); st.loadedAt = Date.now(); st.loading = false; render(); },
+    }).then(function (rows) {
+      var list = L.parseQuery(rows);
+      // баланс и партии с сервера (при серверном балансе облачная копия отстаёт); сервер недоступен — показываем облачную копию
+      return loadWallets().then(function (w) { return L.withServer(list, w); }, function () { return list; });
+    }).then(function (rows) { st.rows = rows; st.loadedAt = Date.now(); st.loading = false; render(); },
       function (e) { st.loading = false; st.error = e && e.message === 'denied' ? 'denied' : 'network'; render(); });
+  }
+
+  function loadWallets() {
+    var base = serverUrl();
+    if (!base) return Promise.reject(new Error('nourl'));
+    return Cloud.getToken().then(function (tk) { return window.fetch(base + '/admin/wallets', { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
+      .then(function (res) { if (!res.ok) throw new Error('http'); return res.json(); })
+      .then(function (d) { return d && d.wallets; });
   }
 
   // Временная правка баланса игрока: читаем запись, меняем только wallet.balance и пишем обратно (с проверкой, что запись не изменилась)
   function docUrl(uid) { var cfg = window.FIREBASE_CONFIG; return 'https://firestore.googleapis.com/v1/projects/' + cfg.projectId + '/databases/' + window.FIREBASE_DATABASE + '/documents/users/' + encodeURIComponent(uid); }
   function editBalance(uid) {
     var row = st.rows.filter(function (r) { return r.uid === uid; })[0];
-    if (!row || st.saving) return;
+    if (!row || st.saving || row.server) return;          // баланс на сервере: облачная копия его не меняет
     var raw = window.prompt(tr('admin.edit.prompt', { name: row.name || row.uid.slice(0, 8), n: fmt(row.balance) }), String(Math.round(row.balance)));
     if (raw === null) return;
     var value = Number(String(raw).replace(/\s/g, ''));
@@ -118,7 +130,7 @@
     }).join('');
     var body = rows.map(function (r) {
       return '<tr><td class="nm">' + esc(r.name || tr('admin.noName')) + '<small>' + esc(r.uid.slice(0, 8)) + '</small></td><td>' + esc(fmtDate(r.createdAt)) + '</td><td>' + esc(fmtDate(r.lastSeen)) + '<small>' + esc(ago(r.lastSeen)) + '</small></td>' +
-        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
+        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr(r.server ? 'admin.edit.server' : 'admin.edit.btn')) + '"' + (r.server ? ' title="' + esc(tr('admin.edit.server')) + '"' : '') + (st.saving || r.server ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
     }).join('');
     return '<div class="cards">' + cards + '</div>' +
       '<div class="tools"><input id="q" type="search" value="' + esc(st.query) + '" placeholder="' + esc(tr('admin.search')) + '" aria-label="' + esc(tr('admin.search')) + '"><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button></div>' +

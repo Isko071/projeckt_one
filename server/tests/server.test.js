@@ -80,6 +80,23 @@ test('кабинет: /admin/stats только для владельца, по�
   } finally { await s.close(); }
 });
 
+test('кабинет: /admin/wallets — баланс и партии всех игроков с сервера, только владельцу', async () => {
+  const { MemLedger } = require('../ledger');
+  const verify = async (t) => { const m = /^(.+):(.+)$/.exec(String(t)); if (!m) throw new Error('bad'); return { uid: m[1], email: m[2], emailVerified: true }; };
+  const s = await startServer({ verify, ledger: new MemLedger(), adminEmails: ['boss@x.com'], config: { tickMs: 50 } });
+  const get = (token) => fetch('http://localhost:' + s.port + '/admin/wallets', { headers: { Authorization: 'Bearer ' + token } });
+  try {
+    await s.wallet.act('A', { op: 'sync' });
+    await s.wallet.act('A', { op: 'countPlay', source: 'yahtzee' });
+    assert.strictEqual((await get('p2:other@x.com')).status, 403);
+    const r = await get('boss:boss@x.com');
+    assert.strictEqual(r.status, 200);
+    const w = (await r.json()).wallets;
+    assert.strictEqual(w.A.plays.yahtzee, 1);
+    assert.strictEqual(w.A.balance, 5000);
+  } finally { await s.close(); }
+});
+
 test('кабинет: без ADMIN_EMAILS доступа нет ни у кого', async () => {
   const s = await startServer({ insecure: true });
   try {

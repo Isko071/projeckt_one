@@ -27,8 +27,9 @@ async function startServer(o) {
   const server = http.createServer((req, res) => {
     const path = String(req.url || '').split('?')[0];
     if (path === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(Object.assign({ ok: true }, manager.stats()))); return; }
-    if (path === '/admin/stats') {
+    if (path === '/admin/stats' || path === '/admin/wallets') {
       // Личный кабинет владельца: только с токеном аккаунта из ADMIN_EMAILS (почта подтверждена Google), только с разрешённых сайтов
+      // /admin/stats — столы и события; /admin/wallets — баланс и сыгранные партии всех игроков с сервера (только чтение)
       const origin = req.headers.origin;
       const cors = origin && originOk(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'Authorization', 'Access-Control-Allow-Methods': 'GET' } : { 'Vary': 'Origin' };
       const send = (status, body) => { res.writeHead(status, Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, cors)); res.end(JSON.stringify(body)); };
@@ -37,7 +38,9 @@ async function startServer(o) {
       const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       verify(token).then((u) => {
         if (!admins.length || !u.emailVerified || admins.indexOf(String(u.email || '').toLowerCase()) < 0) { manager.counters.denied++; manager.event('denied', { uid: u.uid, info: 'admin' }); send(403, { error: 'forbidden' }); return; }
-        send(200, manager.adminReport());
+        if (path === '/admin/stats') { send(200, manager.adminReport()); return; }
+        if (!wallet) { send(409, { error: 'wallet-off' }); return; }
+        wallet.adminWallets().then((w) => send(200, { wallets: w }), () => send(500, { error: 'ledger' }));
       }, () => { manager.counters.denied++; send(401, { error: 'auth' }); });
       return;
     }

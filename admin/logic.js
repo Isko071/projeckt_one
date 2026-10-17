@@ -31,6 +31,19 @@
     return (Array.isArray(rows) ? rows : []).filter(function (r) { return r && r.document; }).map(function (r) { return parseDoc(r.document); });
   }
 
+  // При серверном балансе настоящие баланс и партии хранит сервер (облачная копия обновляется, только когда меняется что-то ещё):
+  // wallets — ответ /admin/wallets { uid: { balance, plays } }; строки, которые есть на сервере, берут числа оттуда и помечаются server
+  function withServer(rows, wallets) {
+    if (!wallets || typeof wallets !== 'object') return rows;
+    return rows.map(function (r) {
+      var w = Object.prototype.hasOwnProperty.call(wallets, r.uid) ? wallets[r.uid] : null;
+      if (!w || typeof w !== 'object') return r;
+      var plays = {}, total = 0;
+      GAMES.forEach(function (g) { var n = num(w.plays && w.plays[g]); plays[g] = n; total += n; });
+      return Object.assign({}, r, { balance: num(w.balance), plays: plays, total: total, server: true });
+    });
+  }
+
   function summary(rows, now) {
     var s = { players: rows.length, activeToday: 0, active7: 0, newToday: 0, new7: 0, plays: {}, total: 0 };
     GAMES.forEach(function (g) { s.plays[g] = 0; });
@@ -77,5 +90,5 @@
     return { ok: true, json: JSON.stringify(snap) };
   }
 
-  root.AdminLogic = { GAMES: GAMES, withBalance: withBalance, parseDoc: parseDoc, parseQuery: parseQuery, summary: summary, filterRows: filterRows, sortRows: sortRows };
+  root.AdminLogic = { GAMES: GAMES, withBalance: withBalance, withServer: withServer, parseDoc: parseDoc, parseQuery: parseQuery, summary: summary, filterRows: filterRows, sortRows: sortRows };
 })(typeof window !== 'undefined' ? window : globalThis);
