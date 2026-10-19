@@ -61,3 +61,24 @@ test('клиент rooms-ws: молча умершее соединение за
     await until(() => chat(host.getView()).includes('снова тут'));
   } finally { A.shutdown(); B.shutdown(); socks.forEach((w) => w.terminate()); await s.close(); }
 });
+
+// Сообщение входа потерялось (соединение открылось в умирающей сети): действия не ждут вечно, а уходят по следующему соединению
+test('клиент rooms-ws: потерянный вход — новое соединение, ждавший запрос не теряется', async () => {
+  const eng = loadEngine();
+  const s = await startServer({ insecure: true, config: { tickMs: 50, engineOptions: { startDelayMs: 0 } } });
+  const socks = [];
+  class LossyWS extends WebSocket {
+    constructor(url) { super(url); this.frozen = socks.length === 0; socks.push(this); }   // первое соединение «умирает» сразу
+    send(data) { if (!this.frozen) super.send(data); }
+    set onmessage(fn) { super.onmessage = (ev) => { if (!this.frozen) fn(ev); }; }
+    get onmessage() { return super.onmessage; }
+  }
+  const A = globalThis.PlatformRoomsWS.create({ url: 'ws://localhost:' + s.port, WebSocket: LossyWS, timing: { auth: 300 }, getToken: async () => 'test:A', uid: 'A', engine: eng.PlatformTurnRooms, engineEnv: { game: eng.YahtzeeTable, gameId: 'yahtzee' }, game: 'yahtzee' });
+  try {
+    const t0 = Date.now();
+    const { host } = await A.createRoom({ size: 2, mode: 'sync', name: 'Аня', avatar: 0 });
+    assert.ok(Date.now() - t0 < 5000, 'стол создан по второму соединению');
+    assert.strictEqual(host.getView().owner, 'A');
+    assert.ok(socks.length >= 2);
+  } finally { A.shutdown(); socks.forEach((w) => w.terminate()); await s.close(); }
+});
