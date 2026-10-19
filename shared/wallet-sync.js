@@ -13,8 +13,9 @@
 (function (root) {
   var W = root.PlatformWallet, Cloud = root.PlatformCloud, Store = root.PlatformStorage;
   var QKEY = 'platform:wallet-queue', KKEY = 'platform:wallet-server';
-  var CALL_MS = 20000, CONNECT_MS = 15000;
-  var status = 'local', fns = [], ws = null, uid = null, running = false, flushing = false, pend = {}, seq = 0, retry = 0, retryTimer = null, openTimer = null, lastState = null;
+  var tm = root.WALLET_SYNC_TIMING || {};      // только для проверок: короткие сроки
+  var CALL_MS = tm.call || 10000, CONNECT_MS = 15000, PING_MS = tm.ping || 15000, PING_WAIT_MS = tm.pingWait || 6000;
+  var status = 'local', fns = [], ws = null, uid = null, running = false, flushing = false, pend = {}, seq = 0, retry = 0, retryTimer = null, openTimer = null, lastState = null, checking = false;
   var queue = [];
   var synced = false;                        // сервер уже ответил на этой странице: до этого число баланса — копия из браузера, и экран показывает его притушенным
   var SERVER_GAMES = ['mines', 'poker-simple', 'poker'];              // игры, которые уже умеют работать на серверном балансе
@@ -52,7 +53,7 @@
       try { sock = new root.WebSocket(url()); } catch (e) { scheduleRetry(); return; }
       ws = sock;
       var opened = false;
-      openTimer = setTimeout(function () { if (!opened) { try { sock.close(); } catch (e) { /* уже закрыт */ } } }, CONNECT_MS);
+      openTimer = setTimeout(function () { if (!opened) drop(sock); }, CONNECT_MS);
       sock.onopen = function () { sock.send(JSON.stringify({ t: 'auth', token: token })); };
       sock.onmessage = function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
@@ -61,29 +62,56 @@
         else if (m.t === 'wallet' && m.state) { lastState = m.state; if (!queue.length && !flushing) W.applyServer(m.state); }
         else if (m.id && pend[m.id]) { var p = pend[m.id]; delete pend[m.id]; clearTimeout(p.timer); if (m.ok) p.res(m); else p.rej(fail(m.error || 'error')); }
       };
-      sock.onclose = function () {
-        clearTimeout(openTimer);
-        if (ws === sock) ws = null;
-        Object.keys(pend).forEach(function (id) { var p = pend[id]; delete pend[id]; clearTimeout(p.timer); p.rej(fail('offline')); });
-        if (running) { if (status === 'server') setStatus('connecting'); scheduleRetry(); }
-      };
+      sock.onclose = function () { lost(sock); };
       sock.onerror = function () { /* закрытие обработает onclose */ };
     }, function () { scheduleRetry(); });
+  }
+  // Связь пропала (сокет закрылся или перестал отвечать): ждущие запросы отклоняются, через паузу — переподключение
+  function lost(sock) {
+    if (sock.dead) return;
+    sock.dead = true;
+    if (ws === sock) { ws = null; clearTimeout(openTimer); }
+    Object.keys(pend).forEach(function (id) { var p = pend[id]; if (p.sock !== sock) return; delete pend[id]; clearTimeout(p.timer); p.rej(fail('offline')); });
+    if (running) { if (status === 'server') setStatus('connecting'); scheduleRetry(); }
+  }
+  // На телефоне соединение часто умирает молча (смена сети, свёрнутый браузер): сокет числится открытым, а ответы не приходят.
+  // Такой сокет закрываем сами, не дожидаясь, пока браузер заметит обрыв
+  function drop(sock) {
+    if (!sock || sock.dead) return;
+    try { sock.close(); } catch (e) { /* уже закрыт */ }
+    lost(sock);
+  }
+  // Проверка связи: короткий ping; нет ответа за PING_WAIT_MS — соединение мёртвое, переподключаемся
+  function check() {
+    if (!running) return;
+    if (!ws) { if (!retryTimer) connect(); return; }
+    if (ws.readyState !== 1 || checking || status !== 'server') return;
+    var sock = ws;
+    checking = true;
+    send(sock, { t: 'ping' }, PING_WAIT_MS).then(function () { checking = false; }, function () { checking = false; drop(sock); });
   }
   function scheduleRetry() {
     if (!running || retryTimer) return;
     var wait = Math.min(15000, 1000 * Math.pow(2, retry++));
     retryTimer = setTimeout(function () { retryTimer = null; connect(); }, wait);
   }
+  function send(sock, msg, ms) {
+    return new Promise(function (res, rej) {
+      var id = ++seq;
+      // ответа нет слишком долго — соединение, скорее всего, мёртвое: закрываем и переподключаемся
+      pend[id] = { sock: sock, res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); drop(sock); }, ms) };
+      try { sock.send(JSON.stringify(Object.assign({ id: id }, msg))); } catch (e) { clearTimeout(pend[id].timer); delete pend[id]; rej(fail('offline')); drop(sock); }
+    });
+  }
   function rawCall(msg) {
     return new Promise(function (res, rej) {
       if (!ws || ws.readyState !== 1) { rej(fail('offline')); return; }
-      var id = ++seq;
-      pend[id] = { res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); }, CALL_MS) };
+      var sock = ws, id = ++seq;
+      pend[id] = { sock: sock, res: res, rej: rej, timer: setTimeout(function () { delete pend[id]; rej(fail('timeout')); drop(sock); }, CALL_MS) };
       // tz — часовой пояс игрока: сервер считает дни серии по его часам. seed (только при первой синхронизации) — прогресс игрока, с которого сервер начнёт его кошелёк
       var out = Object.assign({ id: id, t: 'wallet', tz: new Date().getTimezoneOffset() }, msg);
       if (msg.op === 'sync' && W.exportState) { var st = W.exportState(); if (st.streak || st.best || st.playDay || (st.days && st.days.length) || Object.keys(st.wins || {}).length || Object.keys(st.plays || {}).length || st.balance !== W.CONFIG.start) { out.seed = st; msg.covered = queue.slice(); } }
-      try { ws.send(JSON.stringify(out)); } catch (e) { delete pend[id]; rej(fail('offline')); }
+      try { sock.send(JSON.stringify(out)); } catch (e) { clearTimeout(pend[id].timer); delete pend[id]; rej(fail('offline')); drop(sock); }
     });
   }
 
@@ -123,7 +151,7 @@
       flushing = false;
       if (status === 'server') setStatus('connecting');
       // Соединение закрываем: сработает обычное переподключение с паузой и всё продолжится (без этого статус «ждём сервер» оставался бы навсегда)
-      try { ws && ws.close(); } catch (e) { /* уже закрыт */ }
+      drop(ws);
     });
   }
 
@@ -187,6 +215,9 @@
     var resyncTimer = null;
     Cloud.onChange(function () { if (status !== 'server' || resyncTimer) return; resyncTimer = setTimeout(function () { resyncTimer = null; if (status === 'server' && !flushing) flush(true); }, 2000); });
   }
-  if (root.addEventListener) root.addEventListener('online', function () { if (running && !ws) connect(); });
+  if (root.addEventListener) root.addEventListener('online', check);
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+  var pinger = setInterval(check, PING_MS);
+  if (pinger && pinger.unref) pinger.unref();
   refresh();
 })(typeof window !== 'undefined' ? window : globalThis);
