@@ -41,11 +41,14 @@ function createGame(levelId) {
   };
 }
 
-// Расставляет мины, кроме клетки safeIndex
+// Расставляет мины, кроме клетки safeIndex и её соседей: первое нажатие открывает целую область, а не одну цифру
+// (если поле слишком тесное для этого, свободной остаётся только сама клетка)
 function placeMines(game, safeIndex, rng) {
   rng = rng || Math.random;
   var size = game.cols * game.rows, candidates = [];
-  for (var i = 0; i < size; i++) if (i !== safeIndex) candidates.push(i);
+  var safe = [safeIndex].concat(neighbors(game.cols, game.rows, safeIndex));
+  if (size - safe.length < game.mines) safe = [safeIndex];
+  for (var i = 0; i < size; i++) if (safe.indexOf(i) < 0) candidates.push(i);
   // Частичное перемешивание Фишера — Йетса: берём первые game.mines клеток
   for (var k = 0; k < game.mines; k++) {
     var j = k + Math.floor(rng() * (candidates.length - k));
