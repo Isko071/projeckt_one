@@ -143,6 +143,25 @@ class WalletService {
     return state;
   }
 
+  // ---------- Личный кабинет владельца ----------
+  // Кошельки всех игроков: баланс и сыгранные партии (облачная копия прогресса при серверном балансе отстаёт, настоящее — здесь)
+  async adminWallets() {
+    const out = {};
+    const pick = (s) => ({ balance: Math.max(0, Math.floor(Number(s && s.balance) || 0)), plays: s && s.plays && typeof s.plays === 'object' ? Object.assign({}, s.plays) : {} });
+    (await this.ledger.list('wallets')).forEach((w) => { out[w.id] = pick(this.cache.get(w.id) || w.data); });
+    this.cache.forEach((st, uid) => { out[uid] = pick(st); });
+    return out;
+  }
+
+  // Владелец меняет баланс игрока (кнопка ✎ в кабинете). Только существующий кошелёк: новый должен начаться с переноса прогресса при первом входе игрока
+  async adminSetBalance(uid, value) {
+    if (typeof uid !== 'string' || !uid || uid.length > 128 || !Number.isInteger(value) || value < 0 || value > 10000000) throw fail('bad-request');
+    return this.run(uid, async () => {
+      if (!this.cache.has(uid)) { let doc; try { doc = await this.ledger.get('wallets', uid); } catch (e) { throw fail('ledger'); } if (!doc) throw fail('not-found'); }
+      return this.mutate(uid, () => { const cur = this.ctx.cur; cur.balance = value; cur.peak = Math.max(Number(cur.peak) || 0, value); this.ctx.out = cur; });
+    });
+  }
+
   // Выполнить fn(W) над состоянием игрока и записать результат вместе с extra-записями (залоги) одной операцией
   async mutate(uid, fn, extra, rid) {
     const state = await this.load(uid);

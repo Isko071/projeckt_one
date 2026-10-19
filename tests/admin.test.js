@@ -86,3 +86,15 @@ test('таблица игроков строится из списка игр, �
   const src = fs.readFileSync(path.join(__dirname, '..', 'admin', 'admin.js'), 'utf8');
   assert.ok(!/r\.plays\.(yahtzee|minesweeper|blackjack)/.test(src), 'колонки партий должны браться из AdminLogic.GAMES');
 });
+
+test('серверный баланс: баланс и партии берутся с сервера, облачная копия — только для тех, кого на сервере нет', () => {
+  const rows = L.parseQuery([doc('a', { name: 'Аня', balance: 7500, plays: { yahtzee: 0, mines: 3 } }), doc('b', { name: 'Боря', balance: 6000, plays: { blackjack: 2 } })]);
+  const out = plain(L.withServer(rows, { a: { balance: 9100, plays: { yahtzee: 1, mines: 5, 'battleship-easy': 4 } }, x: { balance: 1 } }));
+  assert.equal(out[0].balance, 9100);
+  assert.deepEqual(out[0].plays, { yahtzee: 1, minesweeper: 0, blackjack: 0, 'poker-simple': 0, battleship: 0, mines: 5 });
+  assert.equal(out[0].total, 6);
+  assert.equal(out[0].server, true);
+  assert.equal(out[1].balance, 6000, 'на сервере нет — облачная копия');
+  assert.equal(out[1].server, undefined);
+  assert.equal(L.withServer(rows, null), rows, 'сервер не ответил — как было');
+});

@@ -31,8 +31,20 @@
       if (res.status === 401 || res.status === 403) throw new Error('denied');
       if (!res.ok) throw new Error('http');
       return res.json();
-    }).then(function (rows) { st.rows = L.parseQuery(rows); st.loadedAt = Date.now(); st.loading = false; render(); },
+    }).then(function (rows) {
+      var list = L.parseQuery(rows);
+      // баланс и партии с сервера (при серверном балансе облачная копия отстаёт); сервер недоступен — показываем облачную копию
+      return loadWallets().then(function (w) { return L.withServer(list, w); }, function () { return list; });
+    }).then(function (rows) { st.rows = rows; st.loadedAt = Date.now(); st.loading = false; render(); },
       function (e) { st.loading = false; st.error = e && e.message === 'denied' ? 'denied' : 'network'; render(); });
+  }
+
+  function loadWallets() {
+    var base = serverUrl();
+    if (!base) return Promise.reject(new Error('nourl'));
+    return Cloud.getToken().then(function (tk) { return window.fetch(base + '/admin/wallets', { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
+      .then(function (res) { if (!res.ok) throw new Error('http'); return res.json(); })
+      .then(function (d) { return d && d.wallets; });
   }
 
   // Временная правка баланса игрока: читаем запись, меняем только wallet.balance и пишем обратно (с проверкой, что запись не изменилась)
@@ -45,6 +57,7 @@
     var value = Number(String(raw).replace(/\s/g, ''));
     if (!L.withBalance('{"data":{}}', value).ok) { st.msg = { bad: true, key: 'admin.edit.invalid' }; render(); return; }
     st.saving = true; st.msg = null; render();
+    if (row.server) { saveOnServer(row, value); return; }      // серверный баланс: облачная копия на него не влияет, меняет сервер
     var token;
     Cloud.getToken().then(function (tk) { token = tk; return window.fetch(docUrl(uid), { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
       .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
@@ -58,6 +71,18 @@
       })
       .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); })
       .catch(function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
+  }
+
+  function saveOnServer(row, value) {
+    Cloud.getToken().then(function (tk) {
+      return window.fetch(serverUrl() + '/admin/balance', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: row.uid, balance: value }) });
+    }).then(function (res) {
+      if (res.status === 401 || res.status === 403) throw new Error('denied');
+      if (res.status === 404) throw new Error('notFound');
+      if (!res.ok) throw new Error('http');
+      return res.json();
+    }).then(function (d) { row.balance = d.balance; st.saving = false; st.msg = { bad: false, key: 'admin.edit.doneServer' }; render(); },
+      function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.srv.denied' : (e && e.message === 'notFound' ? 'admin.edit.notFound' : 'admin.edit.error') }; render(); });
   }
 
   // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------

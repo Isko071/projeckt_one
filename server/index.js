@@ -27,18 +27,34 @@ async function startServer(o) {
   const server = http.createServer((req, res) => {
     const path = String(req.url || '').split('?')[0];
     if (path === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(Object.assign({ ok: true }, manager.stats()))); return; }
-    if (path === '/admin/stats') {
+    if (path === '/admin/stats' || path === '/admin/wallets' || path === '/admin/balance') {
       // Личный кабинет владельца: только с токеном аккаунта из ADMIN_EMAILS (почта подтверждена Google), только с разрешённых сайтов
+      // /admin/stats — столы и события; /admin/wallets — баланс и сыгранные партии всех игроков с сервера; POST /admin/balance { uid, balance } — поменять баланс игрока
       const origin = req.headers.origin;
-      const cors = origin && originOk(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'Authorization', 'Access-Control-Allow-Methods': 'GET' } : { 'Vary': 'Origin' };
+      const cors = origin && originOk(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST' } : { 'Vary': 'Origin' };
       const send = (status, body) => { res.writeHead(status, Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, cors)); res.end(JSON.stringify(body)); };
       if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
       if (!originOk(origin)) { send(403, { error: 'origin' }); return; }
-      const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-      verify(token).then((u) => {
-        if (!admins.length || !u.emailVerified || admins.indexOf(String(u.email || '').toLowerCase()) < 0) { manager.counters.denied++; manager.event('denied', { uid: u.uid, info: 'admin' }); send(403, { error: 'forbidden' }); return; }
-        send(200, manager.adminReport());
-      }, () => { manager.counters.denied++; send(401, { error: 'auth' }); });
+      const post = path === '/admin/balance';
+      if (req.method !== (post ? 'POST' : 'GET')) { send(405, { error: 'method' }); return; }
+      let raw = '', big = false;
+      req.on('data', (c) => { if (big) return; raw += c; if (raw.length > 2000) big = true; });
+      req.on('end', () => {
+        const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        verify(token).then((u) => {
+          if (!admins.length || !u.emailVerified || admins.indexOf(String(u.email || '').toLowerCase()) < 0) { manager.counters.denied++; manager.event('denied', { uid: u.uid, info: 'admin' }); send(403, { error: 'forbidden' }); return; }
+          if (path === '/admin/stats') { send(200, manager.adminReport()); return; }
+          if (!wallet) { send(409, { error: 'wallet-off' }); return; }
+          if (!post) { wallet.adminWallets().then((w) => send(200, { wallets: w }), () => send(500, { error: 'ledger' })); return; }
+          let b = null; try { b = big ? null : JSON.parse(raw); } catch (e) { b = null; }
+          if (!b || typeof b !== 'object') { send(400, { error: 'bad-request' }); return; }
+          wallet.adminSetBalance(b.uid, b.balance).then((r) => {
+            manager.pushWallet(b.uid, r.state);                                  // игрок онлайн — новый баланс сразу у него на экране
+            manager.event('admin', { uid: b.uid, info: String(r.state.balance) });
+            send(200, { balance: r.state.balance });
+          }, (e) => { const code = (e && e.code) || 'error'; send(code === 'bad-request' ? 400 : code === 'not-found' ? 404 : 500, { error: code }); });
+        }, () => { manager.counters.denied++; send(401, { error: 'auth' }); });
+      });
       return;
     }
     res.writeHead(404); res.end();
