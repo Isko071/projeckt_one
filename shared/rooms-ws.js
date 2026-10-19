@@ -9,7 +9,7 @@
 //   game — 'blackjack' | 'yahtzee' (что показывать в списке и создавать).
 // api.onStatus(fn) — состояние связи: 'connecting' | 'open' | 'down' (для плашки «Сервер просыпается…»).
 (function (root) {
-  var CALL_MS = 20000, ACT_MS = 10000, PING_MS = 15000, PING_WAIT_MS = 6000;
+  var CALL_MS = 20000, ACT_MS = 10000, PING_MS = 15000, PING_WAIT_MS = 6000, AUTH_MS = 8000, WAIT_MS = 20000;
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
@@ -28,7 +28,7 @@
     var WS = env.WebSocket || (typeof WebSocket !== 'undefined' ? WebSocket : null);
     var uid = env.uid;
     var now = env.now || function () { return Date.now(); };
-    var T = Object.assign({ call: CALL_MS, act: ACT_MS, ping: PING_MS, pingWait: PING_WAIT_MS }, env.timing || {});   // timing — для тестов
+    var T = Object.assign({ call: CALL_MS, act: ACT_MS, ping: PING_MS, pingWait: PING_WAIT_MS, auth: AUTH_MS, wait: WAIT_MS }, env.timing || {});   // timing — для тестов
     var docs = {};                     // код → { doc, at } последний документ комнаты от сервера
     var waiters = [];                  // ожидание нужного документа
     var rooms = {};                    // код → { ctrl-часть: poll, stopped, hello }
@@ -48,7 +48,8 @@
           var sock;
           try { sock = new WS(env.url); } catch (e) { reject(fail('offline')); return; }
           ws = sock;
-          sock.onopen = function () { sock.send(JSON.stringify({ t: 'auth', token: token })); };
+          // ответ на вход не пришёл (сообщение потерялось в умирающей сети): иначе все действия ждали бы этот вход вечно
+          sock.onopen = function () { sock.send(JSON.stringify({ t: 'auth', token: token })); setTimeout(function () { if (!done) drop(sock); }, T.auth); };
           sock.onmessage = function (ev) {
             var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
             if (m.t === 'ready') { done = true; retry = 0; setState('open'); resolve(sock); resubscribe(); }
@@ -116,8 +117,16 @@
         try { sock.send(JSON.stringify(Object.assign({ id: id }, msg))); } catch (e) { clearTimeout(pend[id].timer); delete pend[id]; rej(fail('offline')); drop(sock); }
       });
     }
+    // Пока соединение восстанавливается, запрос ещё не отправлен: неудачная попытка входа его не теряет, он ждёт следующую (не дольше T.wait)
     function call(msg) {
-      return connect().then(function (sock) { return send(sock, msg, msg.t === 'act' ? T.act : T.call); });
+      var until = now() + T.wait;
+      function attempt() {
+        return connect().then(function (sock) { return send(sock, msg, msg.t === 'act' ? T.act : T.call); }, function (e) {
+          if (!e || e.code !== 'offline' || now() >= until) throw e;
+          return new Promise(function (r) { setTimeout(r, 500); }).then(attempt);
+        });
+      }
+      return attempt();
     }
     // Быстрая отправка без ответа (закрытие вкладки)
     function fire(msg) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); } catch (e) { /* страница закрывается */ } }
@@ -158,8 +167,10 @@
       if (parts.length === 2 && method === 'GET') {
         var d = docs[code];
         if (!d) return res(404);
-        // сервер и браузер живут по разным часам: «свежесть» считаем по времени получения документа
-        return res(200, encodeDoc(Object.assign({}, d.doc, { heartbeat: d.at }), 'projects/p/databases/d/documents/rooms/' + code));
+        // сервер и браузер живут по разным часам: «свежесть» считаем по времени получения документа.
+        // Пока нет связи у нас самих, документы не приходят не потому, что стол брошен: стол «свежий», пока не переподключимся
+        // (после переподключения сервер пришлёт свежий документ, а если стола уже нет — ответит, что его нет)
+        return res(200, encodeDoc(Object.assign({}, d.doc, { heartbeat: state === 'open' ? d.at : now() }), 'projects/p/databases/d/documents/rooms/' + code));
       }
       if (parts[2] === 'actions' && method === 'POST') {
         var payload;

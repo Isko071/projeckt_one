@@ -11,16 +11,21 @@ const root = path.join(__dirname, '..', '..');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms) { const t = Date.now(); while (Date.now() - t < (ms || 3000)) { if (fn()) return true; await wait(20); } return false; }
 
-function client(port, uid, initial) {
+// Клиенты останавливаются после каждой проверки: иначе после закрытия сервера они продолжали бы переподключаться и держать процесс
+const clients = [];
+test.afterEach(() => { clients.splice(0).forEach((S) => { try { S.stop(); } catch (e) { /* уже остановлен */ } }); });
+
+function client(port, uid, initial, extra) {
   const data = {};
   Object.keys(initial || {}).forEach((k) => { data[k] = JSON.stringify(initial[k]); });
-  const ctx = vm.createContext({
-    JSON, Promise, Math, Object, Array, Number, String, Error, Date, isFinite, parseInt, setTimeout, clearTimeout, WebSocket,
+  const ctx = vm.createContext(Object.assign({
+    JSON, Promise, Math, Object, Array, Number, String, Error, Date, isFinite, parseInt, setTimeout, clearTimeout, setInterval, clearInterval, WebSocket,
     PlatformStorage: { get: (k, d) => (k in data ? JSON.parse(data[k]) : d), set: (k, v) => { data[k] = JSON.stringify(v); return true; } },
     PlatformCloud: { getState: () => ({ status: 'signedIn', user: { uid } }), onChange: () => {}, getToken: () => Promise.resolve('test:' + uid) },
     GAME_SERVER_URL: 'ws://localhost:' + port
-  });
+  }, extra || {}));
   ['shared/wallet.js', 'shared/wallet-sync.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
+  clients.push(ctx.PlatformWalletSync);
   return { W: ctx.PlatformWallet, S: ctx.PlatformWalletSync, data };
 }
 
@@ -156,4 +161,31 @@ test('очередь: у нового аккаунта (без переноса 
     assert.strictEqual(s.wallet.balanceOf('E'), 5400);
     assert.strictEqual(c.W.getBalance(), 5400);
   } finally { await s.close(); }
+});
+
+// Телефон сменил сеть: сокет кошелька числится открытым, но ответы не приходят. Ход в «Минах» не висит: ошибка быстро, переподключение, игра продолжается
+test('мёртвое соединение кошелька замечается и заменяется новым', async () => {
+  const s = await startServer({ insecure: true, ledger: new MemLedger(), config: { tickMs: 50 } });
+  const socks = [];
+  class FlakyWS extends WebSocket {
+    constructor(u) { super(u); this.frozen = false; socks.push(this); }
+    send(data) { if (!this.frozen) super.send(data); }
+    set onmessage(fn) { super.onmessage = (ev) => { if (!this.frozen) fn(ev); }; }
+    get onmessage() { return super.onmessage; }
+  }
+  const c = client(s.port, 'F', null, { WebSocket: FlakyWS, WALLET_SYNC_TIMING: { call: 400, ping: 200, pingWait: 150 } });
+  try {
+    assert.ok(await until(() => c.S.status() === 'server'));
+    socks[socks.length - 1].frozen = true;
+    const t0 = Date.now();
+    await assert.rejects(c.S.call('minesStart', { bet: 100, mines: 3 }));
+    assert.ok(Date.now() - t0 < 2000, 'ошибка быстро, а не через 20 секунд');
+    assert.ok(await until(() => c.S.status() === 'server' && socks.length >= 2, 4000), 'переподключились');
+    const r = await c.S.call('minesState', {});
+    assert.ok(r && r.state, 'запросы снова проходят');
+    // без всяких действий: проверка связи сама находит мёртвое соединение
+    const n = socks.length;
+    socks[n - 1].frozen = true;
+    assert.ok(await until(() => socks.length > n && c.S.status() === 'server', 4000));
+  } finally { c.S.stop(); socks.forEach((w) => { try { w.close(); } catch (e) { /* уже закрыт */ } }); await s.close(); }
 });

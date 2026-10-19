@@ -218,6 +218,8 @@ document.addEventListener('keydown', function (e) {
 });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function (s) {
   if (s === 'server' && app.err === 'offline' && app.screen === 'start') app.err = '';
+  // Связь вернулась посреди раунда: спрашиваем у сервера, что с раундом (последний ход мог пройти), и убираем «нет связи»
+  if (s === 'server' && app.err === 'offline' && app.screen === 'game' && app.srv && !app.busy) { app.busy = true; resync(''); }
   if (app.screen === 'start') render();
   // Страницу перезагрузили посреди раунда: сервер помнит его, продолжаем
   if (s === 'server' && !app.round && !app.busy) {
