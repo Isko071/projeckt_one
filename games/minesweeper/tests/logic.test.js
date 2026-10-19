@@ -88,6 +88,8 @@ test('первое нажатие всегда безопасно: любая к
         assert.equal(r.exploded, false, id + ': взрыв на первом нажатии в клетке ' + first);
         assert.equal(g.status === 'playing' || g.status === 'won', true);
         assert.equal(g.layout[first], false);
+        assert.equal(g.counts[first], 0, id + ': первое нажатие открывает область (рядом мин нет), клетка ' + first);
+        assert.ok(g.openedCount > 1 || g.status === 'won', id + ': открылась не одна клетка');
       }
     }
   });
