@@ -21,7 +21,7 @@ function doc(uid, o) {
 
 test('запись игрока разбирается: ник, баланс, партии, даты', () => {
   const r = L.parseQuery([doc('abc123', { name: 'Аня', balance: 7500, plays: { yahtzee: 3, blackjack: 4 }, createdAt: NOW - DAY, lastSeen: NOW - 1000 })])[0];
-  assert.deepEqual(plain(r), { uid: 'abc123', name: 'Аня', balance: 7500, streak: 0, createdAt: NOW - DAY, lastSeen: NOW - 1000, plays: { yahtzee: 3, minesweeper: 0, blackjack: 4, 'poker-simple': 0, battleship: 0, mines: 0 }, total: 7 });
+  assert.deepEqual(plain(r), { uid: 'abc123', name: 'Аня', balance: 7500, streak: 0, createdAt: NOW - DAY, lastSeen: NOW - 1000, plays: { yahtzee: 3, minesweeper: 0, blackjack: 4, 'poker-simple': 0, battleship: 0, mines: 0, '2048': 0 }, total: 7 });
 });
 
 test('старая запись без новых полей: визит берётся из updatedAt, регистрации нет', () => {
@@ -47,7 +47,7 @@ test('итоги: активные и новые за сутки и неделю
     doc('b', { name: 'Б', balance: 1, plays: { minesweeper: 5, blackjack: 1 }, createdAt: NOW - 3 * DAY, lastSeen: NOW - 3 * DAY }),
     doc('c', { name: 'В', balance: 1, plays: {}, createdAt: NOW - 30 * DAY, lastSeen: NOW - 30 * DAY })
   ]);
-  assert.deepEqual(plain(L.summary(rows, NOW)), { players: 3, activeToday: 1, active7: 2, newToday: 1, new7: 2, plays: { yahtzee: 2, minesweeper: 5, blackjack: 1, 'poker-simple': 0, battleship: 0, mines: 0 }, total: 8 });
+  assert.deepEqual(plain(L.summary(rows, NOW)), { players: 3, activeToday: 1, active7: 2, newToday: 1, new7: 2, plays: { yahtzee: 2, minesweeper: 5, blackjack: 1, 'poker-simple': 0, battleship: 0, mines: 0, '2048': 0 }, total: 8 });
 });
 
 test('поиск по нику и коду, сортировка по колонкам', () => {
@@ -91,7 +91,7 @@ test('серверный баланс: баланс и партии берутс
   const rows = L.parseQuery([doc('a', { name: 'Аня', balance: 7500, plays: { yahtzee: 0, mines: 3 } }), doc('b', { name: 'Боря', balance: 6000, plays: { blackjack: 2 } })]);
   const out = plain(L.withServer(rows, { a: { balance: 9100, plays: { yahtzee: 1, mines: 5, 'battleship-easy': 4 } }, x: { balance: 1 } }));
   assert.equal(out[0].balance, 9100);
-  assert.deepEqual(out[0].plays, { yahtzee: 1, minesweeper: 0, blackjack: 0, 'poker-simple': 0, battleship: 0, mines: 5 });
+  assert.deepEqual(out[0].plays, { yahtzee: 1, minesweeper: 0, blackjack: 0, 'poker-simple': 0, battleship: 0, mines: 5, '2048': 0 });
   assert.equal(out[0].total, 6);
   assert.equal(out[0].server, true);
   assert.equal(out[1].balance, 6000, 'на сервере нет — облачная копия');

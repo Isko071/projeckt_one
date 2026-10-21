@@ -28,10 +28,12 @@ const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59
 const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
-const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'] };
+const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'], '2048': ['t512', 't1024', 't2048'] };
+// 2048: партию сервер не видит, поэтому награда за плитку — только раз за партию и не раньше, чем её реально собрать от начала партии
+const G2048_MIN_MS = { t512: 60000, t1024: 150000, t2048: 300000 };
 const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
 const POKER_SRC = 'poker-simple', BOT_STACK = 5000, PK_PHASES = ['preflop', 'flop', 'turn', 'river'];
-const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple'];
+const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048'];
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
@@ -61,6 +63,7 @@ class WalletService {
     this.fastDay = new Map();           // uid → { day, n }: сколько рекордов «Сапёра» принято сегодня
     this.flushingRatings = false; this.flushingTops = false;
     this.msStart = new Map();           // uid → когда начата последняя партия «Сапёра»
+    this.g48 = new Map();               // uid → { t, got } начало последней партии 2048 и уже выданные в ней награды
     this.rated = new Map();             // uid → баланс, который ждёт отправки в рейтинг
     this.ratedLast = new Map();         // uid → что уже отправлено
     this.rateTimer = null;
@@ -99,7 +102,7 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
+    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.g48.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -226,6 +229,11 @@ class WalletService {
             this.experts.set(uid, e);
             if (!ok) return this.mutate(uid, (W) => { W.countWin('minesweeper'); return { granted: 0, capped: true }; }, null, rid);
           }
+          if (m.source === '2048') {
+            const g = this.g48.get(uid);
+            if (!g || g.got.indexOf(m.level) >= 0 || now - g.t < G2048_MIN_MS[m.level]) return this.mutate(uid, () => ({ granted: 0, capped: true }), null, rid);
+            g.got.push(m.level);
+          }
           const earned = await this.mutate(uid, (W) => W.earn(m.source, W.CONFIG.rewards[m.source][m.level], now, expert), null, rid);
           if (m.source === 'minesweeper') { try { await this.noteFast(uid, m.level, m.time, now); } catch (e) { /* награда уже выдана: рекорд лучше потерять, чем показать ложную ошибку */ } this.msStart.delete(uid); }      // каждой победе нужна своя отметка начала партии
           return earned;
@@ -240,6 +248,7 @@ class WalletService {
         case 'countPlay': case 'countWin':
           if (typeof m.source !== 'string' || COUNT_SOURCES.indexOf(m.source) < 0) throw fail('bad-request');
           if (m.op === 'countPlay' && m.source === 'minesweeper') this.msStart.set(uid, now);
+          if (m.op === 'countPlay' && m.source === '2048') this.g48.set(uid, { t: now, got: [] });
           return this.mutate(uid, (W) => (m.op === 'countPlay' ? W.countPlay(m.source) : W.countWin(m.source)), null, rid);
         default: throw fail('bad-request');
       }
