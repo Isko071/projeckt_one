@@ -32,6 +32,10 @@
       titleKey: 'games.mines.title', descriptionKey: 'games.mines.description'
     },
     {
+      id: '2048', status: 'available', path: 'games/2048/', cover: 'games/2048/cover.svg',
+      titleKey: 'games.2048.title', descriptionKey: 'games.2048.description'
+    },
+    {
       id: 'next', status: 'soon', path: 'games/next/', cover: 'assets/covers/soon.svg',
       titleKey: 'games.next.title', descriptionKey: 'games.next.description'
     }
