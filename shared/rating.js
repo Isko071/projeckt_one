@@ -102,7 +102,7 @@
   }
 
   // Игры, где считаются победы онлайн
-  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
+  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'];
 
   // Победы онлайн теперь фиксирует сервер по итогу стола, браузер их больше не присылает (вызовы из игр остаются, но ничего не делают)
   function reportWin() { return Promise.resolve(false); }

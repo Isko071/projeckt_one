@@ -70,7 +70,7 @@ test('победа онлайн: запись одним commit с прибав�
   assert.match(calls[1].url, /documents\/ratings_wins\/yahtzee:runQuery$/);
   assert.deepEqual(plain(top), [{ uid: 'u1', name: 'Аня', avatar: 2, icon: '', wins: 7 }]);
   assert.equal(JSON.parse(calls[1].init.body).structuredQuery.orderBy[0].field.fieldPath, 'wins');
-  assert.deepEqual(plain(R.WIN_GAMES), ['yahtzee', 'blackjack', 'poker-simple', 'battleship']);
+  assert.deepEqual(plain(R.WIN_GAMES), ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers']);
 });
 
 test('серверный баланс: игрок пишет только имя, аватар и значок (маска полей), а в топе остаются строки сервера', async () => {

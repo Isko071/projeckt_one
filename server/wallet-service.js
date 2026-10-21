@@ -23,7 +23,7 @@ const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // нагр�
 const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:00:00Z');
 // Топы: победы онлайн (их фиксирует сервер за столом) и быстрые победы в «Сапёре». Партию «Сапёра» сервер не видит, поэтому время принимается, только если оно не меньше правдоподобного
 // предела уровня (секунды) и не больше, чем игрок мог играть с момента первого хода (сервер ставит отметку на первом ходе партии) плюс запас
-const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'];
+const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'];
 const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 2;
 const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
@@ -31,9 +31,9 @@ const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 6
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'], '2048': ['t512', 't1024', 't2048'] };
 // 2048: партию сервер не видит, поэтому награда за плитку — только раз за партию и не раньше, чем её реально собрать от начала партии
 const G2048_MIN_MS = { t512: 60000, t1024: 150000, t2048: 300000 };
-const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 } };
+const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 }, 'checkers-easy': { win: 250 }, 'checkers-expert': { win: 500 } };
 const POKER_SRC = 'poker-simple', BOT_STACK = 5000, PK_PHASES = ['preflop', 'flop', 'turn', 'river'];
-const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048'];
+const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048', 'checkers', 'checkers-easy', 'checkers-expert'];
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
