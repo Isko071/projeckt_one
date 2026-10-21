@@ -146,3 +146,21 @@ test('много случайных партий: фигур не прибавл
     assert.ok(st.gameOver || n === 400);
   }
 });
+
+test('пограничные случаи: две шашки подряд не бьются, через свою не прыгнуть, простая назад без взятия не ходит', () => {
+  assert.deepEqual(moves(pos({ W: ['a1'], b: ['c3', 'd4'], B: ['h8'] })).filter((m) => m.includes(':')), [], 'дамка не бьёт две шашки подряд');
+  assert.deepEqual(moves(pos({ w: ['c3'], b: ['d4', 'e5'] })).filter((m) => m.includes(':')), [], 'простая тоже');
+  assert.ok(!moves(pos({ w: ['c3', 'd4'], b: ['h8'] })).some((m) => m.startsWith('c3:')), 'через свою не прыгают');
+  assert.deepEqual(moves(pos({ w: ['d4'], b: ['h8'] })), ['d4-c5', 'd4-e5'], 'назад без взятия нельзя');
+});
+
+test('шашка, взятием дошедшая до последнего ряда без продолжения, становится дамкой и ход заканчивается', () => {
+  const st = pos({ w: ['c7'], b: ['d8', 'b8', 'h2'] });
+  // c7 не бьёт (за d8 и b8 нет клеток) — просто ходов-взятий нет; проверим взятие на последний ряд
+  const st2 = pos({ w: ['e6'], b: ['d7', 'h2'] });
+  const r = C.reduce(st2, { type: 'move', seat: 0, path: [sq('e6'), sq('c8')] });
+  assert.equal(r.ok, true);
+  assert.equal(r.state.board[sq('c8')], 2);
+  assert.equal(r.state.current, 1);
+  assert.ok(st);
+});
