@@ -4,10 +4,10 @@
 // Сокеты сюда не заходят: подключение — любой объект { uid, send(obj) }, поэтому менеджер проверяется тестами без сети.
 const { MemStore, decodeFields } = require('./memstore');
 
-const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede'];
-const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship'];
+const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede', 'move'];
+const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship', 'checkers'];
 const POKER = ['poker', 'poker-simple'];
-const STAKE_GAMES = ['yahtzee', 'battleship'];     // в каких играх за столом бывает ставка
+const STAKE_GAMES = ['yahtzee', 'battleship', 'checkers'];     // в каких играх за столом бывает ставка
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
 
@@ -26,6 +26,7 @@ class RoomManager {
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));
+    this.apis.checkers = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Checkers, gameId: 'checkers' }));
     // Серверный баланс: стек за покерным столом берётся залогом перед каждой раздачей, а после неё возвращается с итогом
     const pk = this.wallet ? { gate: (code, asks) => this.pokerGate(code, asks), onSettle: (code, list, voided) => this.pokerSettle(code, list, voided) } : {};
     this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, pk, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
@@ -34,7 +35,7 @@ class RoomManager {
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
-    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
+    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
   event(type, o) {
@@ -136,7 +137,7 @@ class RoomManager {
     if (d.status === 'closed') throw fail('closed');
     const member = this.isMember(room, conn.uid);
     if (!member) {
-      if ((game === 'yahtzee' || game === 'battleship') && d.status !== 'lobby') throw fail('started');
+      if ((game === 'yahtzee' || game === 'battleship' || game === 'checkers') && d.status !== 'lobby') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.status !== 'lobby' && d.phase !== 'settled' && d.phase !== 'waiting') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
@@ -219,6 +220,10 @@ class RoomManager {
       if (!st.gameOver || st.reason !== 'fleet' || !(st.winner >= 0)) return null;
       return [uidAt(st.winner)];
     }
+    if (room.game === 'checkers') {                  // победа по правилам: у соперника нет шашек или ходов (сдача и выход не в счёт)
+      if (!st.gameOver || (st.reason !== 'pieces' && st.reason !== 'blocked') || !(st.winner >= 0)) return null;
+      return [uidAt(st.winner)];
+    }
     if (room.game === 'blackjack') {
       if (st.phase !== 'settled') return null;
       return (Array.isArray(st.seats) ? st.seats : []).map((s, i) => ((s && Array.isArray(s.hands) && s.hands.some((h) => h && (h.outcome === 'win' || h.outcome === 'blackjack')) ? uidAt(i) : null)));
@@ -227,7 +232,7 @@ class RoomManager {
   }
   // Защита от накрутки: побеждать нужно живых соперников, сидящих за столом (зрители и боты не в счёт), а партия «Ятзи» и «Морского боя» не может быть мгновенной
   watchWins(room, d) {
-    if (['yahtzee', 'battleship', 'blackjack'].indexOf(room.game) < 0) return;
+    if (['yahtzee', 'battleship', 'blackjack', 'checkers'].indexOf(room.game) < 0) return;
     try {
       let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
       if (!st || typeof st !== 'object') return;
@@ -237,7 +242,7 @@ class RoomManager {
       if (room.winKey === key) return;
       room.winKey = key;
       const since = room.playSince; room.playSince = 0;
-      const minMs = { yahtzee: 90000, battleship: 45000 }[room.game] || 0;
+      const minMs = { yahtzee: 90000, battleship: 45000, checkers: 40000 }[room.game] || 0;
       if (minMs && (!since || this.now() - since < minMs)) return;
       const seated = this.members(room).filter((m) => m.seat !== null && m.seat !== undefined && m.seat >= 0);
       let players = seated;
@@ -348,7 +353,7 @@ class RoomManager {
     const seen = entries.filter(([, h]) => h.seen).map(([uid]) => uid), pot = entries.filter(([, h]) => h.seen).reduce((a, [, h]) => a + h.amount, 0);
     const seatOf = (u) => { const m = members.filter((x) => x.uid === u)[0]; return m ? m.seat : 99; };
     let winners = [];
-    if (room.game === 'battleship') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);
+    if (room.game === 'battleship' || room.game === 'checkers') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);     // в шашках ничья (winner −1): победителей нет, ставки возвращаются
     else if (room.game === 'yahtzee') {
       const rows = this.engine.YahtzeeTable.standings(JSON.parse(JSON.stringify(st))).filter((r) => r.active);
       const max = Math.max.apply(null, rows.map((r) => r.total));

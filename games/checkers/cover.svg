@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="900" text-anchor="middle">
+<defs>
+<radialGradient id="bg" cx="50%" cy="35%" r="85%"><stop offset="0" stop-color="oklch(0.55 0.09 50)"/><stop offset="1" stop-color="oklch(0.32 0.06 40)"/></radialGradient>
+<radialGradient id="w" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="oklch(0.88 0.02 85)"/></radialGradient>
+<radialGradient id="b" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="oklch(0.45 0.04 30)"/><stop offset="1" stop-color="oklch(0.2 0.02 30)"/></radialGradient>
+<pattern id="sq" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="oklch(0.9 0.04 80)"/><rect width="20" height="20" x="20" fill="oklch(0.56 0.07 55)"/><rect width="20" height="20" y="20" fill="oklch(0.56 0.07 55)"/></pattern>
+</defs>
+<rect width="200" height="250" fill="url(#bg)"/>
+<g transform="translate(100 150) rotate(-12) translate(-80 -60)">
+<rect x="-8" y="-8" width="176" height="136" rx="10" fill="oklch(0.38 0.06 45)"/>
+<rect width="160" height="120" fill="url(#sq)"/>
+<g stroke-width="2.5">
+<circle cx="30" cy="10" r="8.5" fill="url(#b)" stroke="oklch(0.15 0.02 30)"/><circle cx="70" cy="10" r="8.5" fill="url(#b)" stroke="oklch(0.15 0.02 30)"/><circle cx="110" cy="10" r="8.5" fill="url(#b)" stroke="oklch(0.15 0.02 30)"/>
+<circle cx="50" cy="30" r="8.5" fill="url(#b)" stroke="oklch(0.15 0.02 30)"/><circle cx="130" cy="30" r="8.5" fill="url(#b)" stroke="oklch(0.15 0.02 30)"/>
+<circle cx="10" cy="90" r="8.5" fill="url(#w)" stroke="oklch(0.75 0.03 80)"/><circle cx="50" cy="90" r="8.5" fill="url(#w)" stroke="oklch(0.75 0.03 80)"/><circle cx="130" cy="90" r="8.5" fill="url(#w)" stroke="oklch(0.75 0.03 80)"/>
+<circle cx="30" cy="110" r="8.5" fill="url(#w)" stroke="oklch(0.75 0.03 80)"/><circle cx="110" cy="110" r="8.5" fill="url(#w)" stroke="oklch(0.75 0.03 80)"/>
+</g>
+<circle cx="90" cy="70" r="13" fill="url(#w)" stroke="oklch(0.75 0.03 80)" stroke-width="3"/>
+<path d="M81 74 L83 63 L87 68 L90 61 L93 68 L97 63 L99 74Z" fill="oklch(0.78 0.16 85)" stroke="oklch(0.5 0.12 70)" stroke-width="1.5"/>
+</g>
+<text x="100" y="58" font-size="40" fill="#fff" stroke="oklch(0.25 0.05 40)" stroke-width="8" paint-order="stroke" stroke-linejoin="round">ШАШКИ</text>
+</svg>

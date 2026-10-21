@@ -4,7 +4,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var dialog = $('rating-dialog'), body = $('rating-body');
   var TOP = 30, SECTION = 5, token = 0, tab = 'balance';
-  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship'], LEVELS = ['novice', 'amateur', 'expert'];
+  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'], LEVELS = ['novice', 'amateur', 'expert'];
   var tabsEl = $('rating-tabs');
 
   function fmt(n) { return Number(n).toLocaleString('ru-RU'); }

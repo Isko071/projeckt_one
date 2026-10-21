@@ -32,6 +32,10 @@
       titleKey: 'games.mines.title', descriptionKey: 'games.mines.description'
     },
     {
+      id: 'checkers', status: 'available', path: 'games/checkers/', cover: 'games/checkers/cover.svg',
+      titleKey: 'games.checkers.title', descriptionKey: 'games.checkers.description'
+    },
+    {
       id: '2048', status: 'available', path: 'games/2048/', cover: 'games/2048/cover.svg',
       titleKey: 'games.2048.title', descriptionKey: 'games.2048.description'
     },
