@@ -6,7 +6,7 @@ var CATALOG_URL = '../../index.html';
 var tr = function (key, params) { return window.I18n.t('games.checkers.' + key, params); };
 var C = window.Checkers, P = window.PlatformProfile, W = window.PlatformWallet;
 var appEl = document.getElementById('app');
-var WIN_REWARD = { easy: 250, expert: 500 };       // награда за победу над ботом; за день не больше PlatformWallet.CONFIG.rewardCaps['checkers-<уровень>']
+var WIN_REWARD = { easy: 250, medium: 350, expert: 500 };       // награда за победу над ботом; за день не больше PlatformWallet.CONFIG.rewardCaps['checkers-<уровень>']
 var STEP_MS = 190;                                 // анимация хода: столько на каждый прыжок
 
 var app = { screen: 'start', mode: 'bot', level: 'easy', color: 'w', rules: false, confirm: false, ctrl: null, path: [], shownTurn: -1 };
@@ -130,7 +130,7 @@ function modalHtml() {
 // ===== Старт =====
 var LOGO = '<div class="logo-ck" aria-hidden="true"><i></i><i class="d">' + pieceSvg('b', false) + '</i><i></i><i class="d">' + pieceSvg('w', true) + '</i><i></i><i class="d"></i></div>';
 function segHtml(act, items, sel) {
-  return '<div class="modes">' + items.map(function (it) { return '<button class="mode-btn" data-act="' + act + '" data-v="' + it + '" aria-pressed="' + (sel === it) + '">' + esc(tr('start.' + act + '.' + it)) + '</button>'; }).join('') + '</div>';
+  return '<div class="modes seg">' + items.map(function (it) { return '<button class="mode-btn" data-act="' + act + '" data-v="' + it + '" aria-pressed="' + (sel === it) + '">' + esc(tr('start.' + act + '.' + it)) + '</button>'; }).join('') + '</div>';
 }
 function startHtml() {
   return '<div class="start"><div class="brand-row"><div class="brand">' + LOGO + '<h1>' + esc(tr('title')) + '</h1></div>' +
@@ -138,7 +138,7 @@ function startHtml() {
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
       ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
-    (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div>' + segHtml('level', ['easy', 'expert'], app.level) + '</div>' +
+    (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div>' + segHtml('level', ['easy', 'medium', 'expert'], app.level) + '</div>' +
       '<div class="field"><div class="field-title">' + esc(tr('start.color')) + '</div>' + segHtml('color', ['w', 'b'], app.color) + '</div>' : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
@@ -166,7 +166,7 @@ function botController(level, color) {
       var r = C.reduce(st, window.CheckersBot.choose(C.view(st), 1, level));
       ctrl.busy = false;
       if (r.ok) { st = r.state; settle(); emit(); botMove(); }
-    }, 650);
+    }, { easy: 650, medium: 500, expert: 200 }[level]);           // сложный сам думает до 0,8 с: пауза короче, чтобы ход не тянулся
   }
   reset();
   ctrl = {
@@ -255,7 +255,7 @@ appEl.addEventListener('click', function (e) {
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
     case 'play': startGame(botController(app.level, app.color)); break;
-    case 'level': app.level = val === 'expert' ? 'expert' : 'easy'; render(); break;
+    case 'level': app.level = val === 'expert' || val === 'medium' ? val : 'easy'; render(); break;
     case 'color': app.color = val === 'b' ? 'b' : 'w'; render(); break;
     case 'mode': app.mode = val === 'online' ? 'online' : 'bot'; render(); break;
     case 'exit': { var v2 = ctrl.view(); if (!v2.gameOver) { app.confirm = true; render(); } else toMenu(); break; }

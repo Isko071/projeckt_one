@@ -31,9 +31,9 @@ const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 6
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'], '2048': ['t512', 't1024', 't2048'] };
 // 2048: партию сервер не видит, поэтому награда за плитку — только раз за партию и не раньше, чем её реально собрать от начала партии
 const G2048_MIN_MS = { t512: 60000, t1024: 150000, t2048: 300000 };
-const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 }, 'checkers-easy': { win: 250 }, 'checkers-expert': { win: 500 } };
+const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 }, 'checkers-easy': { win: 250 }, 'checkers-medium': { win: 350 }, 'checkers-expert': { win: 500 } };
 const POKER_SRC = 'poker-simple', BOT_STACK = 5000, PK_PHASES = ['preflop', 'flop', 'turn', 'river'];
-const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048', 'checkers', 'checkers-easy', 'checkers-expert'];
+const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048', 'checkers', 'checkers-easy', 'checkers-medium', 'checkers-expert'];
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }

@@ -136,3 +136,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .scrim { z-index: 30; }
 @media (max-width: 360px) { .player .tag { display: none; } .player { gap: 8px; padding: 6px 10px; } }
 .pc.taken { opacity: .35; }
+/* Уровень и цвет — в одну строку: короткие варианты */
+.modes.seg { flex-direction: row; }
+.modes.seg .mode-btn { flex: 1 1 0; min-width: 0; text-align: center; padding-left: 6px; padding-right: 6px; }

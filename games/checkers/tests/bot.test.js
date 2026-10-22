@@ -10,11 +10,11 @@ const ctx = vm.createContext({ JSON, Math, Object, Array, Number, String, Error,
 const C = ctx.Checkers, Bot = ctx.CheckersBot;
 function rngOf(seed) { let s = seed; return () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; }
 
-function play(levels, seed) {
+function play(levels, seed, ms) {
   const rng = rngOf(seed);
   let st = C.init([{ id: 'a' }, { id: 'b' }], { white: seed % 2 }, rng), n = 0;
   while (!st.gameOver && n < 300) {
-    const a = Bot.choose(C.view(st), st.current, levels[st.current], rng, 40);
+    const a = Bot.choose(C.view(st), st.current, levels[st.current], rng, ms || 40);
     const r = C.reduce(st, a);
     assert.equal(r.ok, true, 'бот ходит по правилам: ' + JSON.stringify(a));
     st = r.state; n++;
@@ -26,7 +26,19 @@ test('бот всегда делает законный ход и доигрыв
   for (let g = 0; g < 6; g++) { const st = play(['easy', 'easy'], g + 1); assert.ok(st.gameOver || st.turns === 300); }
 });
 
-test('эксперт уверенно обыгрывает лёгкого', () => {
+test('средний уверенно обыгрывает лёгкого', () => {
+  let wins = 0, losses = 0;
+  for (let g = 0; g < 8; g++) { const st = play(['medium', 'easy'], 300 + g); if (st.winner === 0) wins++; else if (st.winner === 1) losses++; }
+  assert.ok(wins >= 6 && losses === 0, 'средний: ' + wins + ' побед, ' + losses + ' поражений из 8');
+});
+
+test('сложный обыгрывает среднего', () => {
+  let wins = 0, losses = 0;
+  for (let g = 0; g < 6; g++) { const st = play(['expert', 'medium'], 500 + g, 120); if (st.winner === 0) wins++; else if (st.winner === 1) losses++; }
+  assert.ok(wins >= 4 && losses <= 1, 'сложный: ' + wins + ' побед, ' + losses + ' поражений из 6');
+});
+
+test('сложный уверенно обыгрывает лёгкого', () => {
   let wins = 0, losses = 0;
   const G = 12;
   for (let g = 0; g < G; g++) {
