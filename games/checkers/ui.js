@@ -136,7 +136,7 @@ function startHtml() {
   return '<div class="start"><div class="brand-row"><div class="brand">' + LOGO + '<h1>' + esc(tr('title')) + '</h1></div>' +
     '<div class="top-actions">' + catalogLinkHtml() + themeButtonHtml('theme-btn') + '</div></div>' +
     '<div class="muted-text">' + esc(tr('sub')) + '</div>' +
-    '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes">' +
+    '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes duo">' +
       ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
     (app.mode === 'bot' ? '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div>' + segHtml('level', ['easy', 'medium', 'expert'], app.level) + '</div>' +
       '<div class="field"><div class="field-title">' + esc(tr('start.color')) + '</div>' + segHtml('color', ['w', 'b'], app.color) + '</div>' : '') +
