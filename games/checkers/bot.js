@@ -1,6 +1,7 @@
 // Компьютерный соперник для шашек. Работает только с видом стола (Checkers.view) и ходами по правилам (Checkers.movesOf).
 //   CheckersBot.choose(view, seat, level, rng, ms) → { type: 'move', seat, path }
-//   level: 'easy' — почти наугад (взятия обязательны и так, из них берёт побольше); 'expert' — перебор на несколько ходов вперёд (альфа-бета)
+//   level: 'easy' — почти наугад (взятия обязательны и так, из них берёт побольше); 'medium' — на 3 полухода вперёд, иногда ошибается;
+//          'expert' (на экране «Сложный») — перебор вглубь, сколько успеет за 0,8 с (альфа-бета)
 (function (root) {
   var C = root.Checkers, N = 8;
 
@@ -46,35 +47,42 @@
     return alpha;
   }
 
-  // ms — сколько можно думать эксперту (по умолчанию 300 мс): глубина растёт, пока хватает времени
+  // Перебор с углублением: глубина растёт, пока хватает времени (ms) и не больше maxDepth; оценки ходов последней досчитанной глубины
+  function scoreMoves(board, side, moves, ms, maxDepth) {
+    var best = null, budget = { left: 400000, until: Date.now() + ms };
+    for (var depth = 2; depth <= maxDepth; depth++) {
+      var scored = [];
+      for (var k = 0; k < moves.length; k++) scored.push({ m: moves[k], v: -search(apply(board, moves[k], side), -side, depth - 1, -1e9, 1e9, budget) });
+      if (budget.left <= 0 && best) break;                      // глубина не досчитана: оставляем прошлый результат
+      best = scored;
+      var top = Math.max.apply(null, scored.map(function (x) { return x.v; }));
+      if (budget.left <= 0 || Math.abs(top) > 50000) break;
+    }
+    return best;
+  }
+  // Случайный из ходов, которые не хуже лучшего больше чем на slack (чтобы партии не повторялись, а средний иногда ошибался)
+  function pickNear(scored, slack, rng) {
+    var top = Math.max.apply(null, scored.map(function (x) { return x.v; }));
+    var pool = scored.filter(function (x) { return x.v >= top - slack; });
+    return pool[Math.floor(rng() * pool.length)].m;
+  }
+
+  // level: 'easy' — лёгкий, 'medium' — средний, 'expert' — сложный. ms — сколько можно думать сложному (по умолчанию 800 мс)
   function choose(view, seat, level, rng, ms) {
     rng = rng || Math.random;
     var side = C.sideOf(view, seat), moves = C.movesOf(view.board, side);
     if (!moves.length) return { type: 'concede', seat: seat };
     var pick;
-    if (level !== 'expert') {
+    if (moves.length === 1) pick = moves[0];
+    else if (level === 'expert') pick = pickNear(scoreMoves(view.board, side, moves, ms || 800, 12), 2, rng);
+    else if (level === 'medium') {
+      // средний: смотрит на 3 полухода вперёд (и доигрывает размены), выбирает из почти равных; иногда (каждый пятый ход) играет небрежнее
+      pick = pickNear(scoreMoves(view.board, side, moves, 150, 3), rng() < 0.2 ? 60 : 8, rng);
+    } else {
       // лёгкий: из взятий берёт самое длинное, иначе случайный ход; иногда (каждый третий) — без раздумий
       var max = Math.max.apply(null, moves.map(function (m) { return m.captured.length; }));
       var pool = rng() < 0.67 ? moves.filter(function (m) { return m.captured.length === max; }) : moves;
       pick = pool[Math.floor(rng() * pool.length)];
-    } else if (moves.length === 1) pick = moves[0];
-    else {
-      // эксперт: углубляемся, пока хватает бюджета перебора; при равенстве — случайный из лучших (чтобы партии не повторялись)
-      var best = null;
-      var budget = { left: 400000, until: Date.now() + (ms || 300) };
-      for (var depth = 2; depth <= 10; depth++) {
-        var scored = [], alpha = -Infinity;
-        for (var k = 0; k < moves.length; k++) {
-          var v = -search(apply(view.board, moves[k], side), -side, depth - 1, -1e9, 1e9, budget);
-          scored.push({ m: moves[k], v: v });
-          if (v > alpha) alpha = v;
-        }
-        if (budget.left <= 0 && best) break;                    // глубина не досчитана: оставляем прошлый результат
-        var top = Math.max.apply(null, scored.map(function (x) { return x.v; }));
-        best = scored.filter(function (x) { return x.v >= top - 2; }).map(function (x) { return x.m; });
-        if (budget.left <= 0 || Math.abs(top) > 50000) break;
-      }
-      pick = best[Math.floor(rng() * best.length)];
     }
     return { type: 'move', seat: seat, path: pick.path.slice() };
   }
