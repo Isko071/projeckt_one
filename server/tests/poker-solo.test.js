@@ -106,9 +106,9 @@ test('покер: новый стол посреди раздачи — пост
 
 test('покер: выигрыш против ботов упирается в дневной предел, дальше играют без аконов', async () => {
   const { wallet, ledger } = await mk({ A: 1000 });
-  // дневной предел: половина баланса на начало дня = 500
+  // дневной предел: половина баланса на начало дня, но не меньше 2500; считается чистый выигрыш — баланс не может вырасти больше чем на предел
   let total = 0, freeSeen = false;
-  for (let g = 0; g < 40 && !freeSeen; g++) {
+  for (let g = 0; g < 120 && !freeSeen; g++) {
     let r = await op(wallet, 'A', g === 0 ? { op: 'pokerStart', size: 2, ante: 50 } : { op: 'pokerNext' }).catch(() => null);
     if (!r || !r.result.poker) break;
     if (r.result.poker.free) { freeSeen = true; break; }
@@ -116,5 +116,5 @@ test('покер: выигрыш против ботов упирается в �
     total += r.result.poker.st.seats[0].net;
   }
   const s = await ledger.get('wallets', 'A');
-  assert.ok(s.balance <= 1000 + 500, 'выигрыш за день не больше половины баланса: ' + s.balance);
+  assert.ok(s.balance <= 1000 + 2500, 'чистый выигрыш за день не больше предела: ' + s.balance);
 });

@@ -343,7 +343,7 @@ class WalletService {
   pokerSettle(r, W, now) {
     const me = r.st.seats[0], payout = me.total + me.net;
     let rw = { capped: false, granted: 0 };
-    if (payout > 0 && !r.free) { const cr = W.capPayout(POKER_SRC, payout, r.spent, now); rw = { capped: cr.capped, granted: cr.granted }; }
+    if (!r.free && (payout > 0 || r.spent > 0)) { const cr = W.capPayout(POKER_SRC, payout, r.spent, now); rw = { capped: cr.capped, granted: cr.granted }; }     // и проигрыш: он возвращает дневной лимит
     if (me.net > 0 && !r.free) W.countWin(POKER_SRC);
     r.spent = 0;
     return rw;
