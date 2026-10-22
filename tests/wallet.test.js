@@ -203,7 +203,7 @@ test('победы в играх на ставки: countWin попадает в
   assert.equal(W.getBalance(), 5000);
 });
 
-test('ограничение выигрыша в игре с ботом: половина баланса на начало дня, потом выплата не больше ставки', () => {
+test('ограничение выигрыша в игре с ботом: половина баланса на начало дня (не меньше 2500), потом выплата не больше ставки', () => {
   const W = load({ localStorage: fakeBackend() });
   const now = D(2026, 10, 1);
   assert.deepEqual(plain(W.capStatus(now)), { limit: 2500, used: 0, left: 2500 }, 'до первой ставки: половина текущего баланса');
@@ -246,7 +246,31 @@ test('ограничение выигрыша: повреждённые данн
   const backend = fakeBackend();
   backend.data['platform:wallet'] = JSON.stringify({ balance: 1000, capDay: 'вчера', capBase: -5, capUsed: 'много' });
   const W = load({ localStorage: backend });
-  assert.deepEqual(plain(W.capStatus(D(2026, 10, 1))), { limit: 500, used: 0, left: 500 });
+  assert.deepEqual(plain(W.capStatus(D(2026, 10, 1))), { limit: 2500, used: 0, left: 2500 }, 'при балансе 1000 лимит не меньше 2500');
+});
+
+test('ограничение выигрыша считается чистыми: проигранные раздачи возвращают лимит; маленький баланс — не меньше 2500', () => {
+  const backend = fakeBackend();
+  backend.data['platform:wallet'] = JSON.stringify({ balance: 2000 });
+  const W = load({ localStorage: backend });
+  const now = D(2026, 10, 3);
+  W.capStart(now);
+  assert.equal(W.capStatus(now).limit, 2500, 'половина от 2000 — всего 1000, но лимит не меньше 2500');
+  // +600, −600, +700: на деле в плюсе на 700, лимит израсходован на 700, а не на 1300
+  W.spend(300, 'poker-simple', now); W.capPayout('poker-simple', 900, 300, now);
+  W.spend(600, 'poker-simple', now); W.capPayout('poker-simple', 0, 600, now);
+  assert.equal(W.capStatus(now).used, 0, 'проигрыш вернул лимит');
+  W.spend(300, 'poker-simple', now); W.capPayout('poker-simple', 1000, 300, now);
+  assert.equal(W.capStatus(now).used, 700);
+  // ничья (вернулась своя ставка) лимит не меняет; частичный возврат (делёж банка меньше ставки) — возвращает разницу
+  W.spend(200, 'poker-simple', now); W.capPayout('poker-simple', 200, 200, now);
+  assert.equal(W.capStatus(now).used, 700);
+  W.spend(400, 'poker-simple', now); W.capPayout('poker-simple', 100, 400, now);
+  assert.equal(W.capStatus(now).used, 400);
+  // больше, чем выиграли, лимит не «растёт»: использовано не меньше нуля
+  W.spend(1000, 'poker-simple', now); W.capPayout('poker-simple', 0, 1000, now);
+  assert.equal(W.capStatus(now).used, 0);
+  assert.equal(W.capStatus(now).left, 2500);
 });
 
 test('онлайн-предел: за день начисляется не больше 5 000, на следующий день счётчик сбрасывается', () => {

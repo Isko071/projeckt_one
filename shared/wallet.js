@@ -7,7 +7,7 @@
 //   PlatformWallet.canAfford(n)            → хватает ли
 //   PlatformWallet.spend(n, source)        → true/false (ставка, списание)
 //   PlatformWallet.add(n, source)          → пополнение (выигрыш в игре на аконы)
-//   PlatformWallet.capStatus(now)          → { limit, used, left }: сколько ещё можно выиграть сегодня в игре с ограничением (половина баланса на начало дня)
+//   PlatformWallet.capStatus(now)          → { limit, used, left }: сколько ещё можно выиграть сегодня в игре с ограничением (половина баланса на начало дня, не меньше capMin; считается чистый выигрыш)
 //   PlatformWallet.onlineStatus(now) / onlineWin(source, profit, now) → дневной предел выигрыша за онлайн-столом (onlineCap): { granted, capped, left }
 //   PlatformWallet.capStart(now)           → зафиксировать баланс на начало дня (вызывать перед первой ставкой дня)
 //   PlatformWallet.capPayout(source, payout, bet, now) → выплата с ограничением выигрыша → { paid, net, granted, capped, left }
@@ -29,7 +29,8 @@
     dailyMax: 2000,     // потолок (достигается на 7-й день)
     rewards: { minesweeper: { novice: 100, amateur: 250, expert: 300 }, yahtzee: { easy: 100, hard: 250 }, '2048': { t512: 50, t1024: 150, t2048: 400 } }, // награды за победу в одиночных играх
     onlineCap: 5000,    // в онлайн-блэкджеке за день можно выиграть (чистыми) не больше этой суммы
-    capShare: 0.5,      // в игре с ботом за день можно выиграть не больше этой доли баланса (на начало дня)
+    capShare: 0.5,      // в игре с ботом за день можно выиграть (чистыми) не больше этой доли баланса на начало дня…
+    capMin: 2500,       // …но не меньше этой суммы (иначе при маленьком балансе лимит кончался за пару раздач)
     rewardCaps: { blackjack: 3000, 'battleship-easy': 2500, 'battleship-expert': 5000, 'checkers-easy': 1250, 'checkers-expert': 2500 }, // игры без ставок: сколько наград можно получить за день (по играм)
     earnDailyCap: 1500, // сколько можно заработать в одиночных играх за день
     milestones: { 7: 1000, 14: 2000 }, // разовые бонусы за длину серии: дальше только бонус дня
@@ -199,10 +200,10 @@
     return true;
   }
 
-  // Ограничение выигрыша в игре с ботом: за день не больше capShare баланса, каким он был перед первой ставкой дня
+  // Ограничение выигрыша в игре с ботом: чистый выигрыш за день не больше capShare баланса, каким он был перед первой ставкой дня (и не меньше capMin)
   function capOf(s, today) {
     var base = s.capDay === today ? s.capBase : s.balance, used = s.capDay === today ? s.capUsed : 0;
-    var limit = Math.floor(base * CONFIG.capShare);
+    var limit = Math.max(CONFIG.capMin, Math.floor(base * CONFIG.capShare));
     return { limit: limit, used: used, left: Math.max(0, limit - used) };
   }
   function capStatus(now) { return capOf(load(), dayOf(now)); }
@@ -220,6 +221,7 @@
     var left = capOf(s, today).left, granted = profit > 0 ? Math.min(profit, left) : 0;
     var paid = profit > 0 ? bet + granted : payout;
     if (profit > 0) s.capUsed += granted;
+    else if (profit < 0) s.capUsed = Math.max(0, s.capUsed + profit);          // проигранная раздача возвращает лимит: считается чистый выигрыш за день
     if (paid > 0) { s.balance += paid; record(s, source || 'win', paid, now); }
     save(s);
     return { paid: paid, net: paid - bet, granted: granted, capped: profit > 0 && granted < profit, left: Math.max(0, left - granted) };
