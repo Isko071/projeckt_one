@@ -89,3 +89,8 @@ html.pl-arrive::after { content: ""; position: fixed; inset: 0; z-index: 2000; b
 /* Пока сервер не ответил, число баланса — копия из браузера: показываем притушенным, чтобы не выдавать его за настоящее */
 .bal, .bal-chip, .bal-line, .stackline, #wallet-open, .wallet-balance { transition: opacity .35s ease; }
 html.wallet-wait :is(.bal, .bal-chip, .bal-line, .stackline, #wallet-open, .wallet-balance) { opacity: .45; }
+
+/* Принудительная тёмная тема браузера (Samsung Internet, «тёмная тема для сайтов» в Chrome) перекрашивает и картинки:
+   рисованные обложки и значки она принимает за иконки и инвертирует (белые карты становятся тёмными). Картинки просим не трогать —
+   у сайта своя тёмная тема, а обложки одинаково хороши на любом фоне. */
+img { color-scheme: only light; }
