@@ -152,7 +152,7 @@ test('подписчики получают новый баланс; слома�
 test('награды: настроены для сапёра, ятзи и 2048 и укладываются в дневной лимит', () => {
   const W = load({ localStorage: fakeBackend() });
   const r = plain(W.CONFIG.rewards);
-  assert.deepEqual(r, { minesweeper: { novice: 100, amateur: 250, expert: 300 }, yahtzee: { easy: 100, hard: 250 }, '2048': { t512: 50, t1024: 150, t2048: 400 } });
+  assert.deepEqual(r, { minesweeper: { novice: 100, amateur: 250, expert: 300 }, yahtzee: { easy: 100, hard: 250 }, '2048': { t512: 50, t1024: 150, t2048: 400 }, blocks: { s1000: 50, s2500: 150, s5000: 400 } });
   const now = D(2026, 8, 1);
   // 3 победы любителя и новичок: 250*3 = 750, затем 100, ещё 3 победы любителя упираются в лимит 1500
   for (let i = 0; i < 3; i++) assert.equal(W.earn('minesweeper', r.minesweeper.amateur, now).granted, 250);

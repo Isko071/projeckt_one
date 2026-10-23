@@ -36,3 +36,23 @@ test('2048: награда за плитку — после начала пар�
   await earn('t512');
   assert.strictEqual(await bal(), b0 + 250);
 });
+
+test('«Блоки»: награда за очки — после начала партии, не раньше правдоподобного времени, раз за партию; партии 2048 и «Блоков» не мешают друг другу', async () => {
+  const clock = { t: Date.UTC(2026, 9, 23, 9) }, ledger = new MemLedger(), svc = new WalletService({ ledger, now: () => clock.t });
+  await svc.init();
+  const bal = async () => (await svc.load('A')).balance;
+  await svc.act('A', { op: 'sync' });
+  const b0 = await bal();
+  await svc.act('A', { op: 'countPlay', source: 'blocks' });
+  clock.t += 30000;
+  await svc.act('A', { op: 'earn', source: 'blocks', level: 's1000' });
+  assert.strictEqual(await bal(), b0, 'за 30 секунд 1000 очков не набрать');
+  await svc.act('A', { op: 'countPlay', source: '2048' });          // параллельно начата партия 2048 — отметка «Блоков» не сбрасывается
+  clock.t += 40000;
+  await svc.act('A', { op: 'earn', source: 'blocks', level: 's1000' });
+  assert.strictEqual(await bal(), b0 + 50);
+  await svc.act('A', { op: 'earn', source: 'blocks', level: 's1000' });
+  assert.strictEqual(await bal(), b0 + 50, 'второй раз за партию — нет');
+  await svc.act('A', { op: 'earn', source: '2048', level: 't512' });
+  assert.strictEqual(await bal(), b0 + 50, '2048 начата только 40 секунд назад');
+});

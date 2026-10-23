@@ -40,6 +40,10 @@
       titleKey: 'games.2048.title', descriptionKey: 'games.2048.description'
     },
     {
+      id: 'blocks', status: 'available', path: 'games/blocks/', cover: 'games/blocks/cover.webp',
+      titleKey: 'games.blocks.title', descriptionKey: 'games.blocks.description'
+    },
+    {
       id: 'next', status: 'soon', path: 'games/next/', cover: 'assets/covers/soon.webp',
       titleKey: 'games.next.title', descriptionKey: 'games.next.description'
     }
