@@ -188,7 +188,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .slot.nofit .piece { opacity: .35; filter: grayscale(.7); }
 .slot.sel { border-color: var(--accent); background: var(--accent-soft); }
 .slot.lifted .piece { opacity: .25; }
-.piece { --cell: min(5vw, 24px); display: grid; grid-template-columns: repeat(var(--w), var(--cell)); grid-template-rows: repeat(var(--h), var(--cell)); gap: 2px; pointer-events: none; }
+.slot { container-type: inline-size; }
+.piece { --cell: min(5vw, 24px); --cell: min(24px, calc((100cqw - 8px) / 5 - 2px));    /* до 5 клеток в ширину помещаются в ячейку лотка */ display: grid; grid-template-columns: repeat(var(--w), var(--cell)); grid-template-rows: repeat(var(--h), var(--cell)); gap: 2px; pointer-events: none; }
 .piece i { border-radius: 4px; }
 .piece i:not(.b) { visibility: hidden; }
 .drag { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; will-change: transform; }
