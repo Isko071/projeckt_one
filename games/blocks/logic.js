@@ -67,20 +67,76 @@
     for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) if (canPlace(grid, piece, x, y)) return true;
     return false;
   }
-  // Новые три фигуры: случайные, но хоть одна должна помещаться, если такая вообще бывает (иначе партия кончалась бы внезапно)
+  // Поставить фигуру на копию поля и убрать заполненные линии → { grid, lines }
+  function applyVirtual(grid, piece, x, y) {
+    var g = grid.slice(), lines = 0, k, j, full;
+    piece.cells.forEach(function (c) { g[(y + c[1]) * N + x + c[0]] = 1; });
+    var clear = {};
+    for (k = 0; k < N; k++) {
+      full = true; for (j = 0; j < N; j++) if (!g[k * N + j]) full = false;
+      if (full) { lines++; for (j = 0; j < N; j++) clear[k * N + j] = true; }
+      full = true; for (j = 0; j < N; j++) if (!g[j * N + k]) full = false;
+      if (full) { lines++; for (j = 0; j < N; j++) clear[j * N + k] = true; }
+    }
+    Object.keys(clear).forEach(function (i) { g[i] = 0; });
+    return { grid: g, lines: lines };
+  }
+  // Лучшее место для фигуры: больше очищенных линий, потом — ближе к уже занятым клеткам (не дробит поле). null — никуда не помещается
+  function bestSpot(grid, piece) {
+    var best = null;
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      if (!canPlace(grid, piece, x, y)) continue;
+      var r = applyVirtual(grid, piece, x, y), touch = 0;
+      piece.cells.forEach(function (c) {
+        var cx = x + c[0], cy = y + c[1];
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = cx + d[0], ny = cy + d[1]; if (nx < 0 || ny < 0 || nx >= N || ny >= N || grid[ny * N + nx]) touch++; });
+      });
+      var v = r.lines * 100 + touch;
+      if (!best || v > best.v) best = { v: v, x: x, y: y, grid: r.grid, lines: r.lines };
+    }
+    return best;
+  }
+  // Можно ли поставить все фигуры по очереди (в каком-нибудь порядке), каждую на лучшее место
+  function solvable(grid, pieces) {
+    if (!pieces.length) return true;
+    return pieces.some(function (p, i) {
+      var spot = bestSpot(grid, p);
+      return spot && solvable(spot.grid, pieces.slice(0, i).concat(pieces.slice(i + 1)));
+    });
+  }
+  function makePiece(shape, color) { return { id: shape.id, cells: shape.cells.map(function (c) { return c.slice(); }), color: color }; }
+  // Удобный набор, когда места мало: каждая следующая фигура помещается после предыдущих, лучше всего — та, что закрывает линии
+  function helpfulTray(state, rng) {
+    var grid = state.grid, tray = [];
+    for (var k = 0; k < 3; k++) {
+      var options = [];
+      SHAPES.forEach(function (sh) {
+        var spot = bestSpot(grid, sh);
+        if (spot) options.push({ sh: sh, spot: spot, v: spot.lines * 3 + sh.cells.length * 0.2 + rng() * 1.5 });
+      });
+      if (!options.length) break;
+      options.sort(function (a, b) { return b.v - a.v; });
+      var pick = options[Math.floor(rng() * Math.min(3, options.length))];       // из трёх лучших — чтобы наборы не повторялись
+      tray.push(makePiece(pick.sh, randomPiece(state, rng).color));
+      grid = pick.spot.grid;
+    }
+    while (tray.length < 3) tray.push(randomPiece(state, rng));
+    // порядок в лотке перемешиваем: удобная фигура не всегда слева
+    for (var i = tray.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), t = tray[i]; tray[i] = tray[j]; tray[j] = t; }
+    return tray;
+  }
+  // Новые три фигуры. Пока места много — случайные (но все три должны вместе помещаться);
+  // когда места мало (меньше TIGHT свободных клеток) или случайные не помещаются — удобные: те, что точно встанут и закрывают линии
+  var TIGHT = 34;
   function refill(state, rng) {
-    var tray = null;
-    for (var attempt = 0; attempt < 30; attempt++) {
-      var t = [randomPiece(state, rng), randomPiece(state, rng), randomPiece(state, rng)];
-      if (t.some(function (p) { return fitsAnywhere(state.grid, p); })) { tray = t; break; }
-      tray = tray || t;
+    var free = state.grid.filter(function (v) { return !v; }).length;
+    if (free >= TIGHT) {
+      for (var attempt = 0; attempt < 12; attempt++) {
+        var t = [randomPiece(state, rng), randomPiece(state, rng), randomPiece(state, rng)];
+        if (solvable(state.grid, t)) { state.tray = t; return; }
+      }
     }
-    if (!tray.some(function (p) { return fitsAnywhere(state.grid, p); })) {
-      // случай не подобрал: первой ставим фигуру, которая точно помещается (если такая есть)
-      var fit = SHAPES.filter(function (sh) { return fitsAnywhere(state.grid, sh); });
-      if (fit.length) { var sh = fit[Math.floor(rng() * fit.length)]; tray[0] = { id: sh.id, cells: sh.cells.map(function (c) { return c.slice(); }), color: tray[0].color }; }
-    }
-    state.tray = tray;
+    state.tray = helpfulTray(state, rng);
   }
 
   function create(rng) {
@@ -176,5 +232,5 @@
     return { rows: rows, cols: cols };
   }
 
-  root.Blocks = { SIZE: N, SHAPES: SHAPES, MILESTONES: MILESTONES, COMBO_KEEP: COMBO_KEEP, create: create, canPlace: canPlace, fitsAnywhere: fitsAnywhere, place: place, lineScore: lineScore, newMilestones: newMilestones, sanitize: sanitize, plain: plain, sizeOf: sizeOf, preview: preview };
+  root.Blocks = { solvable: solvable, TIGHT: TIGHT, SIZE: N, SHAPES: SHAPES, MILESTONES: MILESTONES, COMBO_KEEP: COMBO_KEEP, create: create, canPlace: canPlace, fitsAnywhere: fitsAnywhere, place: place, lineScore: lineScore, newMilestones: newMilestones, sanitize: sanitize, plain: plain, sizeOf: sizeOf, preview: preview };
 })(typeof window !== 'undefined' ? window : globalThis);

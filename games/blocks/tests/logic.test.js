@@ -142,3 +142,21 @@ test('долгие случайные партии: очки не уменьша
     assert.ok(s.over);
   }
 });
+
+test('мало места: новые фигуры удобные — все три можно поставить по очереди (если на поле вообще есть куда)', () => {
+  const rng = seeded(21);
+  let tight = 0;
+  for (let k = 0; k < 120; k++) {
+    // плотное поле со свободными участками
+    const rows = []; for (let y = 0; y < 8; y++) rows.push([...'########'].map(() => (rng() < 0.62 ? '#' : '.')).join(''));
+    const s = state(rows, [piece(['#']), null, null]);
+    const free = s.grid.findIndex((v) => !v);
+    if (free < 0) continue;
+    const r = B.place(s, 0, free % 8, Math.floor(free / 8), rng);
+    const empty = r.state.grid.filter((v) => !v).length;
+    if (empty >= B.TIGHT || empty < 4) continue;
+    tight++;
+    assert.ok(B.solvable(r.state.grid, r.state.tray.filter(Boolean)), 'все три встают по очереди');
+  }
+  assert.ok(tight > 30, 'проверено тесных полей: ' + tight);
+});

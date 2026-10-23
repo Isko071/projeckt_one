@@ -2,14 +2,14 @@
 // Все надписи берутся из словаря (games/blocks/ru.js) по ключам games.blocks.*.
 // Поле и лоток рисуются один раз при входе в партию, дальше меняются только классы клеток (перетаскивание идёт без перерисовки страницы).
 // Перетаскивание: фигура едет над пальцем (на сенсорном экране выше на две клетки, чтобы её было видно), на поле — тень и подсветка линий.
-// Клавиатура: 1–3 — выбрать фигуру, стрелки — двигать, Enter — поставить, Esc — отменить.
+// Управление только перетаскиванием (палец или мышь), как в Block Blast. Вид игры свой, синий, в любой теме сайта.
 var CATALOG_URL = '../../index.html';
 var SAVE_KEY = 'game:blocks:save', BEST_KEY = 'game:blocks:best';
 var B = window.Blocks, W = window.PlatformWallet, N = B.SIZE;
 var tr = function (key, params) { return window.I18n.t('games.blocks.' + key, params); };
 
 var appEl = document.getElementById('app');
-var app = { screen: 'start', modal: null, game: null, best: num(window.PlatformStorage.get(BEST_KEY, 0)), toast: null, sel: -1, cur: { x: 0, y: 0 } };
+var app = { screen: 'start', modal: null, game: null, best: num(window.PlatformStorage.get(BEST_KEY, 0)), toast: null };
 var drag = null;                 // { slot, el, dx, dy, x, y, ok, pointerId }
 
 function num(v) { v = Number(v); return isFinite(v) && v >= 0 ? Math.floor(v) : 0; }
@@ -22,13 +22,6 @@ var GRID_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/>' +
   '<rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>';
 function catalogLinkHtml() { return '<a class="theme-btn" href="' + CATALOG_URL + '" data-leave aria-label="' + esc(tr('toCatalog')) + '" title="' + esc(tr('toCatalog')) + '">' + GRID_SVG + '</a>'; }
-function themeButtonHtml() {
-  var dark = window.PlatformTheme.isDark();
-  var icon = dark
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 13.2A8.5 8.5 0 1 1 10.8 3a6.7 6.7 0 0 0 10.2 10.2z"/></svg>';
-  return '<button class="theme-btn" data-act="theme" aria-label="' + esc(window.I18n.t(dark ? 'theme.toLight' : 'theme.toDark')) + '">' + icon + '</button>';
-}
 function balanceChipHtml() {
   var now = W.getBalance(), seen = W.shownBalance();
   return '<div class="bal" aria-label="' + esc(tr('balance', { n: fmtNum(now), unit: window.I18n.plural(now, 'wallet.unit') })) + '"><span class="coin" aria-hidden="true"></span><b data-bal>' + fmtNum(seen) + '</b></div>';
@@ -37,7 +30,7 @@ function balanceChipHtml() {
 // ===== Партия =====
 function loadSaved() { try { return B.sanitize(window.PlatformStorage.get(SAVE_KEY, null)); } catch (e) { return null; } }
 function save() { if (app.game && !app.game.over) window.PlatformStorage.set(SAVE_KEY, B.plain(app.game)); else window.PlatformStorage.remove(SAVE_KEY); }
-function newGame() { app.game = B.create(); app.modal = null; app.toast = null; app.sel = -1; save(); }
+function newGame() { app.game = B.create(); app.modal = null; app.toast = null; save(); }
 function noteBest() { if (app.game.score > app.best) { app.best = app.game.score; window.PlatformStorage.set(BEST_KEY, app.best); } }
 // Награда за очки 1000, 2500, 5000 — один раз за партию каждая; уровень нужен серверу, чтобы выдать её по своей таблице
 function rewardMilestones() {
@@ -59,7 +52,7 @@ function placeAt(slot, x, y) {
   var colors = before.grid.slice();                       // цвета клеток до очистки (вместе с только что поставленной фигурой)
   r.placed.forEach(function (i) { colors[i] = piece.color; });
   if (before.moves === 0) { W.markPlayed(); W.countPlay('blocks'); }      // партия началась с первого хода
-  app.game = r.state; app.sel = -1;
+  app.game = r.state;
   noteBest(); rewardMilestones(); save();
   paintBoard({ placed: r.placed, cleared: r.cleared.cells, colors: colors });
   paintTray(); renderHud();
@@ -72,7 +65,7 @@ function placeAt(slot, x, y) {
 var LOGO = '<div class="logo" aria-hidden="true">' + [1, 1, 0, 3, 0, 1, 2, 3, 0, 2, 2, 3].map(function (c) { return '<i class="' + (c ? 'b c' + c : '') + '"></i>'; }).join('') + '</div>';
 function startHtml() {
   var saved = app.game && !app.game.over && app.game.moves > 0, rw = W.CONFIG.rewards.blocks;
-  return '<div class="start"><div class="brand-row"><div class="top-actions">' + catalogLinkHtml() + '</div><div class="top-actions">' + themeButtonHtml() + '</div></div>' +
+  return '<div class="start"><div class="brand-row"><div class="top-actions">' + catalogLinkHtml() + '</div></div>' +
     '<div class="hero">' + LOGO + '<h1>' + esc(tr('title')) + '</h1><p class="muted-text">' + esc(tr('tagline')) + '</p></div>' +
     '<div class="scores"><div class="score-box"><small>' + esc(tr('best')) + '</small><b>' + fmtNum(app.best) + '</b></div>' +
       (saved ? '<div class="score-box"><small>' + esc(tr('saved')) + '</small><b>' + fmtNum(app.game.score) + '</b></div>' : '') + '</div>' +
@@ -85,41 +78,36 @@ function gameHtml() {
   var cells = '';
   for (var i = 0; i < N * N; i++) cells += '<i data-c="' + i + '"></i>';
   return '<div class="topbar"><div class="top-actions"><button class="theme-btn" data-act="menu" aria-label="' + esc(tr('toMenu')) + '">←</button></div>' +
-      '<div class="game-title">' + esc(tr('title')) + '</div>' +
       '<div class="top-actions" data-top>' + topActionsHtml() + '</div></div>' +
     '<div class="hud" data-hud></div>' +
     '<div class="board-wrap"><div class="board" role="application" tabindex="0" aria-label="' + esc(tr('board.label')) + '" aria-describedby="board-live">' + cells + '<div class="fx" aria-hidden="true"></div></div></div>' +
     '<div class="tray" role="group" aria-label="' + esc(tr('tray.label')) + '">' + [0, 1, 2].map(function (k) { return '<button class="slot" data-slot="' + k + '"></button>'; }).join('') + '</div>' +
     '<div class="msg" data-msg></div><div class="live" id="board-live" aria-live="polite"></div>';
 }
-function topActionsHtml() { return balanceChipHtml() + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules')) + '">?</button>' + themeButtonHtml(); }
+function topActionsHtml() { return balanceChipHtml() + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules')) + '">?</button><button class="theme-btn" data-act="restart" aria-label="' + esc(tr('newGame')) + '" title="' + esc(tr('newGame')) + '">↻</button>'; }
 function renderHud() {
   var h = appEl.querySelector('[data-hud]');
   if (!h || !app.game) return;
   var g = app.game;
-  h.innerHTML = '<div class="score-box"><small>' + esc(tr('score')) + '</small><b>' + fmtNum(g.score) + '</b></div>' +
-    '<div class="score-box"><small>' + esc(tr('best')) + '</small><b>' + fmtNum(app.best) + '</b></div>' +
-    (g.combo > 1 ? '<div class="combo" aria-label="' + esc(tr('combo.label', { n: g.combo })) + '">×' + g.combo + '</div>' : '') +
-    '<button class="btn-secondary small" data-act="restart">' + esc(tr('newGame')) + '</button>';
+  h.innerHTML = '<div class="best" aria-label="' + esc(tr('best') + ': ' + app.best) + '"><span class="crown" aria-hidden="true">♛</span>' + fmtNum(app.best) + '</div>' +
+    '<div class="score" aria-label="' + esc(tr('score') + ': ' + g.score) + '">' + fmtNum(g.score) + '</div>' +
+    '<div class="combo-slot">' + (g.combo > 1 ? '<span class="combo" aria-label="' + esc(tr('combo.label', { n: g.combo })) + '">' + esc(tr('combo', { n: g.combo })) + '</span>' : '') + '</div>';
   // сообщение о награде — под фигурами, на месте подсказки (поле не закрывает)
   var m = appEl.querySelector('[data-msg]');
   if (m) m.innerHTML = app.toast ? '<div class="toast' + (app.toast.dim ? ' dim' : '') + '" role="status">' + esc(app.toast.text) + '</div>'
-    : '<p class="hint-touch muted-text">' + esc(tr('hint.touch')) + '</p><p class="hint-keys muted-text">' + esc(tr('hint.keys')) + '</p>';
+    : '<p class="hint">' + esc(tr('hint')) + '</p>';
 }
 // Поле: занятые клетки цветом; при перетаскивании — тень фигуры и подсветка линий, которые исчезнут
 function paintBoard(anim) {
   var cells = appEl.querySelectorAll('.board [data-c]'), g = app.game.grid;
-  var ghost = {}, clear = {}, bad = false, dist = {};
-  var target = drag && drag.slot >= 0 ? drag : (app.sel >= 0 ? { slot: app.sel, x: app.cur.x, y: app.cur.y, kb: true } : null);
+  var ghost = {}, clear = {}, dist = {};
+  var target = drag && drag.slot >= 0 ? drag : null;
   if (target && target.x !== null) {
     var p = app.game.tray[target.slot], pv = p ? B.preview(g, p, target.x, target.y) : null;
     if (pv) {
       p.cells.forEach(function (c) { ghost[(target.y + c[1]) * N + target.x + c[0]] = p.color; });
       pv.rows.forEach(function (r) { for (var c = 0; c < N; c++) clear[r * N + c] = true; });
       pv.cols.forEach(function (c) { for (var r = 0; r < N; r++) clear[r * N + c] = true; });
-    } else if (target.kb && p) {
-      p.cells.forEach(function (c) { var x = target.x + c[0], y = target.y + c[1]; if (x < N && y < N) ghost[y * N + x] = p.color; });
-      bad = true;
     }
   }
   if (anim && anim.cleared && anim.cleared.length) {
@@ -131,9 +119,9 @@ function paintBoard(anim) {
   for (var i = 0; i < cells.length; i++) {
     var el = cells[i], v = g[i], cls = '';
     if (v) cls = 'b c' + v;
-    else if (ghost[i]) cls = 'ghost c' + ghost[i] + (bad ? ' bad' : '');
+    else if (ghost[i]) cls = 'ghost c' + ghost[i];
     if (v && clear[i]) cls += ' will';
-    if (ghost[i] && clear[i] && !bad) cls += ' will';
+    if (ghost[i] && clear[i]) cls += ' will';
     if (anim && anim.placed && anim.placed.indexOf(i) >= 0 && v) cls += ' pop';
     el.className = cls;
     el.style.animationDelay = '';
@@ -177,9 +165,8 @@ function paintTray() {
     var fits = p && B.fitsAnywhere(app.game.grid, p);
     el.innerHTML = p ? pieceHtml(p, true) : '';
     el.disabled = !p;
-    el.className = 'slot' + (p && !fits ? ' nofit' : '') + (app.sel === k ? ' sel' : '') + (drag && drag.slot === k ? ' lifted' : '');
+    el.className = 'slot' + (p && !fits ? ' nofit' : '') + (drag && drag.slot === k ? ' lifted' : '');
     el.setAttribute('aria-label', p ? tr(fits ? 'tray.piece' : 'tray.nofit', { n: k + 1, c: p.cells.length }) : tr('tray.empty', { n: k + 1 }));
-    el.setAttribute('aria-pressed', String(app.sel === k));
   }
 }
 
@@ -223,7 +210,7 @@ function render() {
   if (app.screen === 'game') { paintBoard(); paintTray(); renderHud(); }
   renderModal();
 }
-function openGame() { app.screen = 'game'; app.modal = app.game.over ? 'over' : null; app.sel = -1; render(); }
+function openGame() { app.screen = 'game'; app.modal = app.game.over ? 'over' : null; render(); }
 function toMenu() { cancelDrag(); app.screen = 'start'; app.modal = null; render(); }
 
 // ===== Перетаскивание =====
@@ -239,7 +226,6 @@ function startDrag(slot, e) {
   var touch = e.pointerType !== 'mouse';
   // фигура едет над пальцем: её середина по горизонтали под пальцем, а низ — выше пальца на клетку (на сенсорном экране)
   drag = { slot: slot, el: el, w: s.w * size, h: s.h * size, lift: touch ? s.h * size + size * 1.2 : s.h * size / 2, x: null, y: null, pointerId: e.pointerId };
-  app.sel = -1;
   moveDrag(e.clientX, e.clientY);
   paintTray();
 }
@@ -287,29 +273,9 @@ appEl.addEventListener('click', function (e) {
   }
 });
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape') {
-    if (app.modal && app.modal !== 'over') { app.modal = null; renderModal(); return; }
-    if (app.sel >= 0) { app.sel = -1; paintBoard(); paintTray(); }
-    return;
-  }
-  if (app.screen !== 'game' || app.modal || !app.game || e.altKey || e.ctrlKey || e.metaKey) return;
-  if (/^[1-3]$/.test(e.key)) {
-    var k = Number(e.key) - 1;
-    if (app.game.tray[k]) { app.sel = app.sel === k ? -1 : k; app.cur = { x: 0, y: 0 }; paintBoard(); paintTray(); }
-    e.preventDefault(); return;
-  }
-  if (app.sel < 0) return;
-  var p = app.game.tray[app.sel], s = B.sizeOf(p), mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-  if (mv) {
-    app.cur.x = Math.max(0, Math.min(N - s.w, app.cur.x + mv[0])); app.cur.y = Math.max(0, Math.min(N - s.h, app.cur.y + mv[1]));
-    paintBoard(); e.preventDefault();
-  } else if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    if (!placeAt(app.sel, app.cur.x, app.cur.y)) { var b = appEl.querySelector('.board'); if (b && !reduced()) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); } }
-  }
+  if (e.key === 'Escape' && app.modal && app.modal !== 'over') { app.modal = null; renderModal(); }
 });
 
-window.PlatformTheme.onChange(function () { render(); });
 W.onShown(function (v) { var els = appEl.querySelectorAll('.bal [data-bal]'); for (var i = 0; i < els.length; i++) els[i].textContent = fmtNum(v); });
 window.addEventListener('resize', function () { cancelDrag(); });
 app.game = loadSaved();
