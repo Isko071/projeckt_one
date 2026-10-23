@@ -98,8 +98,8 @@ root.LOCALES.ru = {
   'admin.ago.hour': '{n} ч назад',
   'admin.ago.day': '{n} дн назад',
   'footer.feedback': 'Обратная связь',
-  'footer.bug': 'Сообщить об ошибке',
-  'footer.idea': 'Предложить идею или игру',
+  'footer.telegram': 'Написать в Telegram',
+  'footer.telegramLabel': 'Написать в Telegram: ошибки, идеи, новые игры',
   'footer.stats': 'Считаем обезличенную статистику посещений.',
   'footer.copy': '© 2026 Игротека. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
 
