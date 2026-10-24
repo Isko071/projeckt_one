@@ -281,11 +281,20 @@ function exitHtml() {
     '<button class="btn-primary" data-act="menu" data-key="exit-ok">' + esc(tr('exit.ok')) + '</button></div></div></div>';
 }
 
+// Запись 0 в клетку: переспрашиваем — клетка закроется до конца партии (act — что делает «Записать 0»)
+function zeroHtml(cat, act) {
+  return '<div class="overlay" role="alertdialog" aria-modal="true" aria-label="' + esc(tr('zero.title')) + '"><div class="dialog">' +
+    '<h2>' + esc(tr('zero.title')) + '</h2><span class="muted-text">' + esc(tr('zero.text', { name: label(cat) })) + '</span>' +
+    '<div class="dialog-actions"><button class="btn-secondary" data-act="close" data-autofocus data-key="zero-cancel">' + esc(tr('cancel')) + '</button>' +
+    '<button class="btn-primary" data-act="' + act + '" data-key="zero-ok">' + esc(tr('zero.ok')) + '</button></div></div></div>';
+}
+
 function modalHtml() {
   if (app.screen === 'online' && window.YahtzeeOnlineUI) return window.YahtzeeOnlineUI.modalHtml();
   if (app.modal === 'rules') return rulesHtml();
   if (app.modal === 'confirm') return confirmHtml();
   if (app.modal === 'exit') return exitHtml();
+  if (app.modal === 'zero' && app.zeroCat) return zeroHtml(app.zeroCat, 'zeroOk');
   return '';
 }
 
@@ -416,7 +425,12 @@ appEl.addEventListener('click', function (e) {
   else if (btn.id === 'menu') toMenu();
   else if (btn.id === 'roll') { rollAnimated(); return; }
   else if (btn.hasAttribute('data-die')) toggleHold(game, Number(btn.getAttribute('data-die')));
-  else if (btn.hasAttribute('data-cat')) scoreCategory(game, btn.getAttribute('data-cat'));
+  else if (act === 'zeroOk') { var zc = app.zeroCat; app.modal = null; app.zeroCat = null; if (zc && isHumanTurn()) scoreCategory(game, zc); }
+  else if (btn.hasAttribute('data-cat')) {
+    var cat = btn.getAttribute('data-cat');
+    if (possibleScore(game.players[game.current], cat, game.dice) === 0) { app.modal = 'zero'; app.zeroCat = cat; }     // 0 очков: сначала спросим
+    else scoreCategory(game, cat);
+  }
   render();
   if (app.screen === 'game') continueIfCpu();
 });
