@@ -170,6 +170,7 @@ function botController(level, color) {
   }
   reset();
   ctrl = {
+    bot: true,
     local: true, seat: seat, busy: false,
     view: function () { return C.view(st); },
     send: function (a) { var r = C.reduce(st, a); if (!r.ok) return false; st = r.state; settle(); emit(); botMove(); return true; },
@@ -258,7 +259,7 @@ appEl.addEventListener('click', function (e) {
     case 'level': app.level = val === 'expert' || val === 'medium' ? val : 'easy'; render(); break;
     case 'color': app.color = val === 'b' ? 'b' : 'w'; render(); break;
     case 'mode': app.mode = val === 'online' ? 'online' : 'bot'; render(); break;
-    case 'exit': { var v2 = ctrl.view(); if (!v2.gameOver) { app.confirm = true; render(); } else toMenu(); break; }
+    case 'exit': { var v2 = ctrl.view(), untouched = ctrl.bot && v2.turns <= (ctrl.seat === v2.white ? 0 : 1); if (!v2.gameOver && !untouched) { app.confirm = true; render(); } else toMenu(); break; }      // с ботом до своего первого хода выходим без «Сдаться?»
     case 'stay': app.confirm = false; render(); break;
     case 'concede': app.confirm = false; ctrl.send({ type: 'concede', seat: ctrl.seat }); render(); break;
     case 'unselect': app.path = []; render(); break;

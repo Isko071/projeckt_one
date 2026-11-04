@@ -577,7 +577,15 @@ document.addEventListener('keydown', function (e) {
   if (app.modal) app.modal = null; else if (app.combos) app.combos = false; else if (app.rules) app.rules = false; else if (app.menu) app.menu = false; else if (app.sheet) { app.sheet = null; app.bet = []; } else return;
   render();
 });
-window.addEventListener('pagehide', function () { if (T) { try { T.leave(); } catch (e) { /* закрываем страницу */ } } });
+// «Назад» браузера за столом — как «Выйти из-за стола» в меню (посреди раздачи спросит подтверждение)
+window.PlatformLeave.onBack = function () {
+  if (!T || app.screen === 'start') return false;
+  if (app.modal || app.menu || app.sheet || app.rules || app.combos) { app.modal = null; app.menu = app.rules = app.combos = false; app.sheet = null; app.bet = []; render(); return true; }
+  if (T.inHand()) app.modal = 'leave'; else leaveTable();
+  render();
+  return true;
+};
+// Закрытие и перезагрузка вкладки — не выход из-за стола: сервер ждёт 45 секунд, а код стола остаётся в адресе (shared/rooms-ws.js)
 // Вернулись кнопкой «Назад»/«Вперёд» из кеша страницы: стол, с которого мы «ушли», остановлен, поэтому возвращаем игрока на стартовый экран
 window.addEventListener('pageshow', function (e) { if (e.persisted && T && T.stopped) { T = null; app.screen = 'start'; app.sitting = false; app.entering = false; app.menu = app.rules = app.combos = false; app.modal = app.sheet = null; app.bet = []; app.deal = null; render(); } });
 if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'start') render(); });

@@ -9,10 +9,10 @@ const { WalletService } = require('../wallet-service');
 const engine = loadEngine();
 function conn(uid) { const c = { uid, msgs: [], send(o) { this.msgs.push(o); } }; c.last = () => { const d = c.msgs.filter((m) => m.t === 'doc'); return d.length ? d[d.length - 1].doc : null; }; c.wallet = () => { const w = c.msgs.filter((m) => m.t === 'wallet'); return w.length ? w[w.length - 1].state : null; }; return c; }
 const settle = (ms) => new Promise((r) => setTimeout(r, ms || 40));
-async function mk(seeds) {
+async function mk(seeds, cfg) {
   const ledger = new MemLedger({ seeds: seeds || {} }), wallet = new WalletService({ ledger });
   await wallet.init();
-  const m = new RoomManager({ engine, wallet, config: { engineOptions: { startDelayMs: 0 }, strayMs: 50 } });
+  const m = new RoomManager({ engine, wallet, config: Object.assign({ engineOptions: { startDelayMs: 0 }, strayMs: 50, stakeMinMs: {} }, cfg || {}) });
   return { m, wallet, ledger };
 }
 const bal = async (wallet, uid) => (await wallet.act(uid, { op: 'sync' })).state.balance;
@@ -235,6 +235,18 @@ test('серия дней идёт по часам игрока, а не по ч
   t2 = Date.UTC(2026, 2, 11, 14, 0);
   const broke = await s2.act('B', { op: 'markPlayed', tz: 0 });
   assert.strictEqual(broke.state.streak, 1, 'с часами сервера серия рвалась (это и была ошибка)');
+});
+
+test('аудит: сменой часового пояса туда-обратно второй бонус дня не получить (день не идёт назад)', async () => {
+  const { svc } = await minesSvc();
+  const t = Date.UTC(2026, 2, 10, 11, 30); svc.now = () => t;     // 11:30 по Гринвичу: в UTC+13 уже 11 марта, в UTC+0 ещё 10-е
+  await svc.act('A', { op: 'markPlayed', tz: -780 });
+  const first = await svc.act('A', { op: 'claimDaily', tz: -780 });
+  svc.tzs.delete('A');                                             // запрет смены пояса в памяти сервера пропал (перезапуск, очистка)
+  const again = await svc.act('A', { op: 'markPlayed', tz: 0 });
+  const claim = await svc.act('A', { op: 'claimDaily', tz: 0 });
+  assert.strictEqual(again.state.playDay, '2026-03-11', 'день остался 11-м');
+  assert.strictEqual(claim.state.balance, first.state.balance, 'второго бонуса нет');
 });
 
 // ---------- Проверки по результатам аудита ----------

@@ -16,6 +16,9 @@ function makeVerifier(opts) {
   return async (token) => {
     const { payload } = await jwtVerify(String(token || ''), jwks, { issuer: 'https://securetoken.google.com/' + projectId, audience: projectId });
     if (!payload.sub) throw new Error('no-sub');
+    // На сайте вход только через Google: аккаунты, созданные другим способом (анонимные, по почте через ключ API), не пускаем
+    const provider = payload.firebase && payload.firebase.sign_in_provider;
+    if (provider !== 'google.com') throw new Error('provider');
     return { uid: String(payload.sub), email: String(payload.email || '').toLowerCase(), emailVerified: payload.email_verified === true };
   };
 }

@@ -270,7 +270,7 @@
         }
         if (payload.type === 'here') {                  // «Да, я играю»: отсчёт неактивности начинается заново
           var e0 = idle[m.seat];
-          if (e0 && e0.stage === 'asking') { e0.stage = 'idle'; e0.since = lastTick; strikes[uid] = 0; dirty = true; }
+          if (e0 && e0.stage === 'asking' && (e0.heres || 0) < 3) { e0.stage = 'idle'; e0.since = lastTick; e0.heres = (e0.heres || 0) + 1; strikes[uid] = 0; dirty = true; }     // один ход продлевается не больше трёх раз
           return;
         }
         if (PLAYER_ACTIONS.indexOf(payload.type) < 0) return;

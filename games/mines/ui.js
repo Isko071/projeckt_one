@@ -153,7 +153,7 @@ function gameHtml() {
     '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml() + '</div>' +
     '<div class="stats"><div class="stat"><small>' + esc(tr('mines')) + '</small><b>' + v.mines + '</b></div>' +
     '<div class="stat"><small>' + esc(tr('earned')) + '</small><b' + (app.fresh && v.earned ? ' class="bump"' : '') + '>' + fmt(v.earned) + '</b></div>' +
-    '<div class="stat"><small>' + esc(tr('next')) + '</small><b>' + esc(tr('plus', { n: v.next })) + '</b></div></div>' +
+    '<div class="stat"><small>' + esc(tr('next')) + '</small><b>' + (v.status === 'playing' ? esc(tr('plus', { n: v.next })) : '—') + '</b></div></div>' +      // раунд окончен: следующей клетки нет
     errHtml() + '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + take + result + '</div>';
 }
 

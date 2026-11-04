@@ -2,6 +2,7 @@
 // (shared/rooms.js для блэкджека, shared/rooms-turns.js для «Ятзи»). Создатель стола теперь обычный игрок: если он уходит,
 // роль «создателя» переходит следующему, а стол живёт, пока за ним есть люди.
 // Сокеты сюда не заходят: подключение — любой объект { uid, send(obj) }, поэтому менеджер проверяется тестами без сети.
+const crypto = require('node:crypto');
 const { MemStore, decodeFields } = require('./memstore');
 
 const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede', 'move'];
@@ -9,6 +10,26 @@ const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship', 'c
 const POKER = ['poker', 'poker-simple'];
 const STAKE_GAMES = ['yahtzee', 'battleship', 'checkers'];     // в каких играх за столом бывает ставка
 
+// Браузер и система коротко (без лишних подробностей): «Chrome 120 · Android», «Safari · iOS», «Samsung Internet · Android»
+function browserOf(ua) {
+  ua = String(ua || '');
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  const m = ua.match(/SamsungBrowser\/(\d+)/) ? ['Samsung Internet', ua.match(/SamsungBrowser\/(\d+)/)[1]] : ua.match(/YaBrowser\/(\d+)/) ? ['Яндекс', ua.match(/YaBrowser\/(\d+)/)[1]] : ua.match(/Edg\/(\d+)/) ? ['Edge', ua.match(/Edg\/(\d+)/)[1]] : ua.match(/OPR\/(\d+)/) ? ['Opera', ua.match(/OPR\/(\d+)/)[1]] : ua.match(/Firefox\/(\d+)/) ? ['Firefox', ua.match(/Firefox\/(\d+)/)[1]] : ua.match(/Chrome\/(\d+)/) ? ['Chrome', ua.match(/Chrome\/(\d+)/)[1]] : ua.match(/Version\/(\d+).*Safari/) ? ['Safari', ua.match(/Version\/(\d+).*Safari/)[1]] : null;
+  const tg = /Telegram/i.test(ua) ? ' (Telegram)' : '';
+  return m ? m[0] + ' ' + m[1] + tg + (os ? ' · ' + os : '') : (os || 'другой');
+}
+
+const STAKE_MIN_MS = { yahtzee: 90000, battleship: 45000, checkers: 40000 };     // партия короче этого — не в счёт (победа в топ; ставка при сдаче возвращается)
+// Ник игрока: без управляющих и невидимых символов (переворот текста, нулевая ширина, пустые хангыль-буквы), без оборванных эмодзи,
+// не длиннее 20 знаков; пустой — «Игрок» (как profile.defaultName в locales/ru.js). То же делает браузер (shared/profile.js)
+const NAME_BAD = /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u2028-\u202E\u2060-\u206F\u3164\uFE00-\uFE0E\uFEFF\uFFA0\uFFF0-\uFFFF]/g;
+function cleanName(v) {
+  const chars = Array.from(String(v === undefined || v === null ? '' : v).replace(NAME_BAD, '').replace(/[\uD800-\uDFFF]/g, (c, i, str) => (/[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(str.slice(i, i + 2)) || /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(str.slice(i - 1, i + 1)) ? c : '')).replace(/\s+/g, ' ').trim());
+  let out = '';
+  for (const ch of chars) { if ((out + ch).length > 20) break; out += ch; }
+  out = out.trim();
+  return out || 'Игрок';
+}
 function fail(code) { const e = new Error(code); e.code = code; return e; }
 
 class RoomManager {
@@ -16,13 +37,16 @@ class RoomManager {
     this.engine = opts.engine;
     this.now = opts.now || Date.now;
     this.wallet = opts.wallet || null;     // серверный кошелёк (server/wallet-service.js); без него ставки за столами выключены
-    this.cfg = Object.assign({ tickMs: 250, maxRooms: 300, graceMs: 45000, emptyMs: 600000, closedKeepMs: 5000, minStake: 25, maxStake: 100000, strayMs: 10000, engineOptions: {} }, opts.config || {});
+    this.cfg = Object.assign({ tickMs: 250, maxRooms: 300, graceMs: 45000, emptyMs: 600000, closedKeepMs: 5000, minStake: 25, maxStake: 100000, strayMs: 10000, maxLobbiesPerUid: 2, lobbyMs: 900000, engineOptions: {} }, opts.config || {});
     this.rooms = new Map();           // код → { game, host, subs: Set, fields, ticking, again, emptySince, closedAt }
     this.conns = new Set();
     this.graces = new Map();          // uid + код → таймер выхода после обрыва связи
+    this.misses = new Map();          // uid → { at, n }: неудачные входы по коду за последнюю минуту
     this.store = new MemStore({ onDoc: (code, f) => this.onDoc(code, f) });
     this.apis = {};
-    const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, options: this.cfg.engineOptions };
+    // Тасовка колоды онлайн-покера и коды столов — криптостойкий генератор (Math.random предсказуем по наблюдаемым картам)
+    const rng = opts.rng || (() => crypto.randomInt(0, 4294967296) / 4294967296);
+    const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, rng, options: this.cfg.engineOptions };
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));
@@ -35,6 +59,7 @@ class RoomManager {
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
+    this.clientErrors = new Map();     // ошибки из браузеров игроков: «текст|место» → { msg, where, stack, first, last, count, pages, browsers }
     this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
@@ -45,6 +70,25 @@ class RoomManager {
   }
   nameOf(room, uid) { const m = this.members(room).filter((x) => x.uid === uid)[0]; return m ? m.name : ''; }
   // Данные для кабинета: сводка, живые столы и последние события (новые сверху)
+  // ---------- Ошибки из браузеров игроков (для кабинета) ----------
+  // Одинаковые ошибки (текст + место) складываются в одну строку со счётчиком; хранится не больше 200 разных, самые старые уходят
+  reportError(r, ua) {
+    const str = (v, n) => String(v === undefined || v === null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').slice(0, n);
+    const msg = str(r.msg, 300), where = str(r.where, 200), page = str(r.page, 120).replace(/[?#].*$/, '');
+    if (!msg) return;
+    const key = msg + '|' + where, t = this.now();
+    let e = this.clientErrors.get(key);
+    if (!e) {
+      if (this.clientErrors.size >= 200) { let old = null; this.clientErrors.forEach((x, k) => { if (!old || x.last < this.clientErrors.get(old).last) old = k; }); this.clientErrors.delete(old); }
+      e = { msg, where, stack: str(r.stack, 800), first: t, last: t, count: 0, pages: [], browsers: [] };
+      this.clientErrors.set(key, e);
+    }
+    e.count++; e.last = t;
+    if (page && e.pages.indexOf(page) < 0 && e.pages.length < 6) e.pages.push(page);
+    const br = browserOf(ua);
+    if (br && e.browsers.indexOf(br) < 0 && e.browsers.length < 6) e.browsers.push(br);
+  }
+
   adminReport() {
     const tables = [];
     this.rooms.forEach((room, code) => {
@@ -54,7 +98,8 @@ class RoomManager {
     const t = this.now();
     return {
       now: t, startedAt: this.startedAt, uptimeMs: t - this.startedAt, rooms: this.rooms.size, conns: this.conns.size,
-      counters: JSON.parse(JSON.stringify(this.counters)), tables, events: this.events.slice().reverse()
+      counters: JSON.parse(JSON.stringify(this.counters)), tables, events: this.events.slice().reverse(),
+      clientErrors: Array.from(this.clientErrors.values()).sort((a, b) => b.last - a.last).slice(0, 100)
     };
   }
 
@@ -96,10 +141,18 @@ class RoomManager {
     return out.slice(0, 30);
   }
 
+  connsOf(uid) { let n = 0; this.conns.forEach((c) => { if (c.uid === uid) n++; }); return n; }
+  // Столы, которые создал этот игрок и которые ещё ждут соперников (идущие партии не в счёт)
+  lobbiesOf(uid) { const out = []; this.rooms.forEach((room, code) => { if (room.owner === uid && (room.fields || {}).status === 'lobby') out.push(code); }); return out; }
+
   async create(conn, game, o) {
     if (GAMES.indexOf(game) < 0) throw fail('bad-game');
+    // Один игрок держит не больше двух ждущих столов: новый закрывает самый старый (иначе один человек мог бы занять все места на сервере)
+    const mine = this.lobbiesOf(conn.uid);
+    while (mine.length >= this.cfg.maxLobbiesPerUid) { const old = mine.shift(); const r = this.rooms.get(old); if (r) this.remove(old); else break; }
+    if (this.lobbiesOf(conn.uid).length >= this.cfg.maxLobbiesPerUid) throw fail('busy');
     if (this.rooms.size >= this.cfg.maxRooms) throw fail('busy');
-    o = o || {};
+    o = Object.assign({}, o || {}, { name: cleanName(o && o.name) });
     let stake = 0;
     if (o.stake !== undefined && o.stake !== null && Number(o.stake) !== 0) {
       stake = Math.floor(Number(o.stake));
@@ -115,7 +168,7 @@ class RoomManager {
       size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
       owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: chips }
     });
-    const room = { game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0, stake: stake, holds: new Map(), settled: false, wasPlaying: false };
+    const room = { owner: conn.uid, createdAt: this.now(), game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0, stake: stake, holds: new Map(), settled: false, wasPlaying: false };
     if (stake) {
       const h = await this.takeStake(room, res.code, conn.uid);
       if (!h.ok) { this.store.drop(res.code); throw fail(h.error || 'no-funds'); }
@@ -123,16 +176,23 @@ class RoomManager {
     this.rooms.set(res.code, room);
     this.counters.created[game]++;
     this.counters.peakRooms = Math.max(this.counters.peakRooms, this.rooms.size);
-    this.event('create', { game, code: res.code, uid: conn.uid, name: String(o.name || '').slice(0, 20), info: o.private ? 'closed' : '' });
+    this.event('create', { game, code: res.code, uid: conn.uid, name: o.name, info: o.private ? 'closed' : '' });
     this.subscribe(room, res.code, conn);
     return res.code;
   }
 
+  // Неудачные попытки войти по коду: не больше 10 в минуту на игрока (код закрытого стола не подобрать перебором)
+  joinMiss(uid) {
+    const t = this.now(), m = this.misses.get(uid);
+    if (!m || t - m.at >= 60000) { this.misses.set(uid, { at: t, n: 1 }); return; }
+    m.n++;
+  }
   async join(conn, game, code, hello) {
     code = String(code || '').toUpperCase().trim();
+    const miss = this.misses.get(conn.uid);
+    if (miss && miss.n >= 10 && this.now() - miss.at < 60000) throw fail('slow-down');
     const room = this.rooms.get(code);
-    if (!room) throw fail('not-found');
-    if (room.game !== game) throw fail('wrong-game');
+    if (!room || room.game !== game) { this.joinMiss(conn.uid); throw fail('not-found'); }     // стол другой игры — тоже «не найден»: так не узнать, что код занят
     const d = room.fields || {};
     if (d.status === 'closed') throw fail('closed');
     const member = this.isMember(room, conn.uid);
@@ -141,12 +201,12 @@ class RoomManager {
       if (POKER.indexOf(game) >= 0 && d.status !== 'lobby' && d.phase !== 'settled' && d.phase !== 'waiting') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
-      hello = hello || {};
+      hello = Object.assign({}, hello || {}, { name: cleanName(hello && hello.name) });
       if (this.wallet && POKER.indexOf(game) >= 0) hello = Object.assign({}, hello, { chips: await this.pokerChips(conn.uid, d.ante) });
       if (room.stake) { const h = await this.takeStake(room, code, conn.uid); if (!h.ok) throw fail(h.error || 'no-funds'); }
       this.store.addAction(code, conn.uid, JSON.stringify({ type: 'hello', name: hello.name, avatar: hello.avatar, chips: hello.chips }), this.now());
       this.counters.joins++;
-      this.event('join', { game, code, uid: conn.uid, name: String(hello.name || '').slice(0, 20) });
+      this.event('join', { game, code, uid: conn.uid, name: hello.name });
       this.kick(code);
     }
     this.cancelGrace(conn.uid, code);
@@ -179,7 +239,8 @@ class RoomManager {
     code = String(code || '').toUpperCase();
     const room = this.rooms.get(code);
     if (!room) return;
-    if (this.isMember(room, conn.uid)) { this.counters.leaves++; this.event('leave', { game: room.game, code, uid: conn.uid, name: this.nameOf(room, conn.uid) }); this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); }
+    const other = Array.from(room.subs).some((c) => c !== conn && c.uid === conn.uid);       // тот же аккаунт ещё сидит за столом с другого устройства или вкладки: это не выход
+    if (!other && this.isMember(room, conn.uid)) { this.counters.leaves++; this.event('leave', { game: room.game, code, uid: conn.uid, name: this.nameOf(room, conn.uid) }); this.store.addAction(code, conn.uid, JSON.stringify({ type: 'leave' }), this.now()); this.kick(code); }
     room.subs.delete(conn); conn.rooms && conn.rooms.delete(code);
     this.cancelGrace(conn.uid, code);
   }
@@ -242,7 +303,7 @@ class RoomManager {
       if (room.winKey === key) return;
       room.winKey = key;
       const since = room.playSince; room.playSince = 0;
-      const minMs = { yahtzee: 90000, battleship: 45000, checkers: 40000 }[room.game] || 0;
+      const minMs = STAKE_MIN_MS[room.game] || 0;
       if (minMs && (!since || this.now() - since < minMs)) return;
       const seated = this.members(room).filter((m) => m.seat !== null && m.seat !== undefined && m.seat >= 0);
       let players = seated;
@@ -338,7 +399,7 @@ class RoomManager {
     room.holds.forEach((h, uid) => { if (uids.indexOf(uid) >= 0) h.seen = true; });
     let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
     if (d.status === 'closed') { if (!room.settled) this.refundAll(code, room); return; }
-    if (d.status === 'playing' && st && st.gameOver && !room.settled) { room.settled = true; this.queueStake(room, () => this.settleStake(code, room, st, members)); return; }
+    if (d.status === 'playing' && st && st.gameOver && !room.settled) { const since = room.playSince; room.settled = true; this.queueStake(room, () => this.settleStake(code, room, st, members, since)); return; }
     if (d.status === 'lobby') {
       if (room.settled) { room.settled = false; room.restaking = true; this.queueStake(room, () => this.restake(code, room, uids)); return; }
       const gone = Array.from(room.holds.entries()).filter(([uid, h]) => h.seen && uids.indexOf(uid) < 0 && h.owed === undefined);
@@ -347,9 +408,17 @@ class RoomManager {
   }
   // Итоги: «Морской бой» — победитель забирает банк; «Ятзи» — банк делят победители среди тех, кто остался за столом (вышедший ставку теряет).
   // Банк только из ставок тех, кто сидел за столом; залог того, кто так и не получил место, возвращается ему
-  async settleStake(code, room, st, members) {
+  // Партия, брошенная сразу (сдача или выход в первые секунды), — не игра: ставки возвращаются всем.
+  // Иначе аконы можно было бы переливать со своего второго аккаунта: поставил и сразу сдался
+  async settleStake(code, room, st, members, since) {
     const entries = Array.from(room.holds.entries());
     for (const [uid, h] of entries) if (!h.seen) await this.payStake(room, code, uid, h.amount, 'refund');
+    const natural = { yahtzee: ['finished'], battleship: ['fleet'], checkers: ['pieces', 'blocked'] }[room.game] || [];
+    const minMs = (this.cfg.stakeMinMs || STAKE_MIN_MS)[room.game] || 0;
+    if (natural.indexOf(st.reason) < 0 && (!since || this.now() - since < minMs)) {
+      for (const [uid, h] of entries) if (h.seen && room.holds.get(uid) === h) await this.payStake(room, code, uid, h.amount, 'refund');
+      return;
+    }
     const seen = entries.filter(([, h]) => h.seen).map(([uid]) => uid), pot = entries.filter(([, h]) => h.seen).reduce((a, [, h]) => a + h.amount, 0);
     const seatOf = (u) => { const m = members.filter((x) => x.uid === u)[0]; return m ? m.seat : 99; };
     let winners = [];
@@ -404,6 +473,7 @@ class RoomManager {
       this.wallet.refundOrphans(new Set(this.rooms.keys()), 120000).catch(() => {});     // залоги столов, которых нет (прошлый запуск сервера), через 2 минуты возвращаются
       this.wallet.gc();
     }
+    if (t - (this.lastMissSweep || 0) >= 60000) { this.lastMissSweep = t; this.misses.forEach((m, uid) => { if (t - m.at >= 60000) this.misses.delete(uid); }); }
     Array.from(this.rooms.keys()).forEach((code) => {
       const room = this.rooms.get(code), d = room.fields || {};
       if (d.status === 'closed') {
@@ -412,6 +482,8 @@ class RoomManager {
         return;
       }
       if (room.host.isEmpty()) { this.remove(code); return; }
+      if (d.status === 'lobby' && (d.players || 0) <= 1 && t - (room.lobbySince || (room.lobbySince = t)) >= this.cfg.lobbyMs) { this.remove(code); return; }     // 15 минут никто не пришёл — стол закрывается
+      if (d.status !== 'lobby' || (d.players || 0) > 1) room.lobbySince = 0;
       if (!room.subs.size) { if (!room.emptySince) room.emptySince = t; if (t - room.emptySince >= this.cfg.emptyMs) this.remove(code); }
       else room.emptySince = 0;
       if (room.stake || room.holds.size) this.sweepStake(code, room);
@@ -430,4 +502,4 @@ class RoomManager {
   stats() { return { rooms: this.rooms.size, conns: this.conns.size }; }
 }
 
-module.exports = { RoomManager, ACTIONS };
+module.exports = { RoomManager, ACTIONS, cleanName };

@@ -184,13 +184,20 @@
 
     function act(code, action) { return call({ t: 'act', code: code, action: action }); }
 
+    // Пока игрок сидит за столом, код стола стоит в адресе (#K7M4Q). Закрытие или перезагрузка вкладки — не выход: сервер ждёт 45 секунд,
+    // а игра при загрузке видит код в адресе и сама возвращает за тот же стол
+    function setHash(code) {
+      if (!root.history || !root.location) return;
+      try { root.history.replaceState(null, '', root.location.pathname + root.location.search + (code ? '#' + code : '')); } catch (e) { /* адрес не обязателен */ }
+    }
     function wrap(code, hello, ctrl) {
       var r = rooms[code] = { stopped: false, hello: hello, poll: ctrl.poll };
       function stopLocal() { r.stopped = true; ctrl.stop(); }
+      setHash(code);
       return Object.assign({}, ctrl, {
         server: true,
         stop: stopLocal,
-        leave: function () { stopLocal(); delete rooms[code]; fire({ t: 'leave', code: code }); return Promise.resolve(); },
+        leave: function () { stopLocal(); delete rooms[code]; fire({ t: 'leave', code: code }); if (String(root.location && root.location.hash).toUpperCase() === '#' + code) setHash(''); return Promise.resolve(); },
         close: function () { return this.leave(); },
         start: function () { return act(code, { type: 'start' }); },
         rematch: function () { return act(code, { type: 'rematch' }); },
@@ -222,6 +229,13 @@
     if (pinger && pinger.unref) pinger.unref();
     if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
     if (typeof root.addEventListener === 'function') root.addEventListener('online', check);
+    // Уход в каталог (PlatformLeave, переход по ссылке) — настоящий выход: сразу сообщаем серверу и убираем код стола из адреса
+    if (typeof root.addEventListener === 'function') {
+      root.addEventListener('platform-leave', function () {
+        Object.keys(rooms).forEach(function (code) { if (rooms[code] && !rooms[code].stopped) fire({ t: 'leave', code: code }); });
+        setHash('');
+      });
+    }
 
     return {
       createRoom: createRoom, joinRoom: joinRoom, listRooms: listRooms,

@@ -942,7 +942,8 @@ document.addEventListener('keydown', function (e) {
   else if (e.code === 'KeyS') { e.preventDefault(); appEl.querySelector('[data-act="stand"]').click(); }
 });
 window.addEventListener('resize', function () { if (app.screen === 'game') render(); });
-window.addEventListener('pagehide', function () { if (G && G.mode === 'online') { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
+// Закрытие и перезагрузка вкладки за серверным столом — не выход (shared/rooms-ws.js); стол, который держит сам браузер, закрываем
+window.addEventListener('pagehide', function () { if (G && G.mode === 'online' && G.role === 'host') { try { G.ctrl.close(); } catch (e) { /* закрываем страницу */ } } });
 
 W.onShown(function (v) {
   var chips = document.querySelectorAll('.bal-chip'), lines = document.querySelectorAll('.bal-line[data-bal]'), i;

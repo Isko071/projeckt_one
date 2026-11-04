@@ -379,7 +379,6 @@
     }
   });
   appEl.addEventListener('keydown', function (e) { if (e.target.id === 'ocode' && e.key === 'Enter') { e.preventDefault(); joinTable(on.code); } });
-  window.addEventListener('pagehide', function () { if (G) { try { G.room.leave(); } catch (e) { /* закрываем страницу */ } } });
   if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (app.screen === 'online' && on.screen === 'create') render(); });
   Cloud.onChange(function () {
     if (app.screen !== 'online') return;

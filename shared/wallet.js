@@ -150,9 +150,19 @@
   // Сдвиг календарного дня: сервер считает день игрока по часам игрока (а не по своим), иначе серия дней рвётся у тех, чей день начинается не по Гринвичу
   var dayShift = 0;
   function setDayShift(ms) { dayShift = Math.floor(Number(ms)) || 0; }
+  // Нижняя граница дня (только на сервере): день никогда не идёт назад относительно уже записанного в кошельке.
+  // Иначе сменой часового пояса туда-обратно можно было бы получать бонус дня и дневные награды по нескольку раз в сутки
+  var dayFloor = null;
+  function setDayFloor(v) { dayFloor = day(v); }
   function dayOf(now) {
     var d = new Date((now === undefined ? Date.now() : now) + dayShift);
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    var out = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    return dayFloor && out < dayFloor ? dayFloor : out;
+  }
+  // Самый поздний день, который уже есть в кошельке
+  function latestDay(st) {
+    var s = sanitize(st), list = [s.playDay, s.earnDay, s.capDay, s.onDay, s.rw.day, s.days[s.days.length - 1]].filter(Boolean).sort();
+    return list.length ? list[list.length - 1] : null;
   }
   // Сколько дней между двумя днями (b − a); полдень убирает влияние перехода на летнее время
   function daysBetween(a, b) {
@@ -378,7 +388,7 @@
 
   root.PlatformWallet = {
     KEY: KEY, CONFIG: CONFIG, sanitize: sanitize,
-    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, holdShown: holdShown, setServer: setServer, exportState: exportState, setDayShift: setDayShift, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
+    getBalance: getBalance, shownBalance: shownBalance, onShown: onShown, holdShown: holdShown, setServer: setServer, exportState: exportState, setDayShift: setDayShift, setDayFloor: setDayFloor, latestDay: latestDay, applyServer: applyServer, serverOn: serverOn, canAfford: canAfford, spend: spend, add: add, earn: earn, countWin: countWin, countPlay: countPlay,
     capStatus: capStatus, capStart: capStart, capPayout: capPayout, onlineStatus: onlineStatus, onlineWin: onlineWin,
     markPlayed: markPlayed, playedDays: playedDays, reward: reward, rewardStatus: rewardStatus, dailyStatus: dailyStatus, claimDaily: claimDaily,
     getLog: getLog, records: records, onChange: onChange, forget: forget

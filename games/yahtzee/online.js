@@ -559,6 +559,7 @@
     if (asking && app.modal === 'recap') return askHtml(G.view.seat);
     if (app.modal === 'recap') return recapHtml();
     if (app.modal === 'rules') return rulesBlock();
+    if (app.modal === 'zeroOnline' && on.zeroCat) return zeroHtml(on.zeroCat, 'zeroOnlineOk');
     if (app.modal === 'leaveOnline') {
       var host = G && G.role === 'host';
       return '<div class="overlay" role="alertdialog" aria-modal="true" aria-label="' + esc(tr(host ? 'online.confirmClose.title' : 'online.confirmLeave.title')) + '"><div class="dialog"><h2>' + esc(tr(host ? 'online.confirmClose.title' : 'online.confirmLeave.title')) + '</h2>' +
@@ -583,8 +584,13 @@
       on.held[i] = !on.held[i]; render();
       return true;
     }
-    if (btn.hasAttribute('data-ocat')) { send({ type: 'score', cat: btn.getAttribute('data-ocat') }); return true; }
+    if (btn.hasAttribute('data-ocat')) {
+      var oc = btn.getAttribute('data-ocat'), me = mine();
+      if (me && Yahtzee.possibleScore(me, oc, me.dice) === 0) { on.zeroCat = oc; app.modal = 'zeroOnline'; render(); return true; }    // 0 очков: сначала спросим
+      send({ type: 'score', cat: oc }); return true;
+    }
     switch (act) {
+      case 'zeroOnlineOk': { var zc = on.zeroCat; on.zeroCat = null; app.modal = null; if (zc) send({ type: 'score', cat: zc }); else render(); return true; }
       case 'oroll': {
         var p = mine();
         send(p && p.rollsUsed > 0 ? { type: 'roll', held: on.held.slice() } : { type: 'roll' });
@@ -640,7 +646,8 @@
     }
   });
   appEl.addEventListener('keydown', function (e) { if (e.target.id === 'ocode' && e.key === 'Enter') { e.preventDefault(); joinTable(on.code); } });
-  window.addEventListener('pagehide', function () { if (G) { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
+  // Закрытие и перезагрузка вкладки за серверным столом — не выход (shared/rooms-ws.js); стол, который держит сам браузер, закрываем
+  window.addEventListener('pagehide', function () { if (G && G.role === 'host') { try { G.ctrl.close(); } catch (e) { /* закрываем страницу */ } } });
   if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (isOn() && on.screen === 'create') render(); });
   Cloud.onChange(function () {
     if (!isOn()) return;

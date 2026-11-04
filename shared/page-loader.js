@@ -58,6 +58,7 @@
   function go(url) {
     if (going) return;
     going = true;
+    try { root.dispatchEvent(new Event('platform-leave')); } catch (e) { /* старый браузер */ }    // уходим со страницы сами: онлайн-стол сразу узнаёт о выходе (shared/rooms-ws.js)
     var el = overlay(), t0 = Date.now(), warmed = false, left = false;
     function leave() {
       if (left) return;

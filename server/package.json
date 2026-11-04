@@ -2,7 +2,7 @@
   "name": "igroteka-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Сервер онлайн-столов «Игротеки»: ведёт столы «Блэкджека» и «Ятзи» по WebSocket",
+  "description": "Сервер онлайн-столов «Партейки»: ведёт столы блэкджека, костей, покера, морского боя и шашек по WebSocket",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -277,3 +277,30 @@ test('серверный баланс (в том числе пока серве�
   assert.equal(d.W.getBalance(), 6777, 'копия баланса осталась (её заменит ответ сервера), чужой снимок её не затирает');
   assert.equal(d.S.get('game:x:best', null), 5, 'остальной прогресс из снимка применился');
 });
+
+test('лимит записей: недоигранная партия (…:save) в облако не уходит и не вызывает отправку, рекорд — уходит', async () => {
+  const cloud = makeCloud(), d = device(cloud);
+  d.S.set('game:2048:best', 1024);
+  d.C.start(); await d.C.signIn(); await tick();
+  const puts = () => cloud.calls.filter((m) => m === 'PATCH').length;
+  const before = puts();
+  d.S.set('game:2048:save', { board: [2, 4, 8] });
+  await d.C.syncNow(); await tick();
+  assert.equal(puts(), before, 'ход в недоигранной партии — без записи в базу');
+  assert.equal(cloudSnapshot(cloud).data['game:2048:save'], undefined);
+  d.S.set('game:2048:best', 2048);
+  await d.C.syncNow(); await tick();
+  assert.equal(cloudSnapshot(cloud).data['game:2048:best'], 2048, 'новый рекорд ушёл в облако');
+  assert.deepEqual(plain(d.S.get('game:2048:save', null)), { board: [2, 4, 8] }, 'сохранение осталось на устройстве');
+});
+
+test('объединение двух устройств: из двух рекордов остаётся лучший', () => {
+  const d = device(makeCloud());
+  const m = plain(d.PP.merge(
+    { v: 1, data: { 'game:2048:best': 4096, 'game:minesweeper:best': { novice: 20, amateur: null, expert: 300 }, 'game:blocks:best': 500 } },
+    { v: 1, data: { 'game:2048:best': 1024, 'game:minesweeper:best': { novice: 35, amateur: 90, expert: null }, 'game:mines:count': 5 } }));
+  assert.equal(m.data['game:2048:best'], 4096);
+  assert.equal(m.data['game:blocks:best'], 500);
+  assert.deepEqual(m.data['game:minesweeper:best'], { novice: 20, amateur: 90, expert: 300 });
+  assert.equal(m.data['game:mines:count'], 5);
+});

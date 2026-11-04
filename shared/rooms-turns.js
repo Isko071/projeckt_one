@@ -215,7 +215,8 @@
         if (payload.type === 'again') { doRematch(); return; }     // любой игрок может предложить новую игру после конца партии
         if (payload.type === 'here') {                      // «Да, я играю»: отсчёт неактивности начинается заново
           var e0 = idle[m.seat];
-          if (e0 && e0.stage === 'asking') { e0.stage = 'idle'; e0.since = lastTick; dirty = true; }
+          // продлить один и тот же ход можно не больше трёх раз: иначе можно тянуть время бесконечно и держать соперника за столом
+          if (e0 && e0.stage === 'asking' && (e0.heres || 0) < 3) { e0.stage = 'idle'; e0.since = lastTick; e0.heres = (e0.heres || 0) + 1; dirty = true; }
           return;
         }
         if (status !== 'playing' || game.PLAYER_ACTIONS.indexOf(payload.type) < 0) return;

@@ -4,14 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Игротека</title>
+<!-- seo: создано tools/seo.js, правьте там -->
+<title>Партейка — бесплатные игры онлайн: шашки, кости, сапёр, 2048, покер</title>
+<meta name="description" content="Бесплатные игры в браузере без установки: шашки, кости, сапёр, 2048, блоки, блэкджек, покер, морской бой и мины. Играйте с ботами или онлайн с друзьями, собирайте аконы и попадайте в рейтинг.">
+<link rel="canonical" href="https://isko071.github.io/projeckt_one/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Партейка">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="Партейка — бесплатные игры онлайн: шашки, кости, сапёр, 2048, покер">
+<meta property="og:description" content="Бесплатные игры в браузере без установки: шашки, кости, сапёр, 2048, блоки, блэкджек, покер, морской бой и мины. Играйте с ботами или онлайн с друзьями, собирайте аконы и попадайте в рейтинг.">
+<meta property="og:url" content="https://isko071.github.io/projeckt_one/">
+<meta property="og:image" content="https://isko071.github.io/projeckt_one/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Партейка","url":"https://isko071.github.io/projeckt_one/","description":"Бесплатные игры в браузере без установки: шашки, кости, сапёр, 2048, блоки, блэкджек, покер, морской бой и мины. Играйте с ботами или онлайн с друзьями, собирайте аконы и попадайте в рейтинг.","inLanguage":"ru","hasPart":[{"@type":"VideoGame","name":"Шашки","url":"https://isko071.github.io/projeckt_one/games/checkers/"},{"@type":"VideoGame","name":"Кости","url":"https://isko071.github.io/projeckt_one/games/yahtzee/"},{"@type":"VideoGame","name":"Сапёр","url":"https://isko071.github.io/projeckt_one/games/minesweeper/"},{"@type":"VideoGame","name":"2048","url":"https://isko071.github.io/projeckt_one/games/2048/"},{"@type":"VideoGame","name":"Блоки","url":"https://isko071.github.io/projeckt_one/games/blocks/"},{"@type":"VideoGame","name":"Блэкджек","url":"https://isko071.github.io/projeckt_one/games/blackjack/"},{"@type":"VideoGame","name":"Покер: Чожук","url":"https://isko071.github.io/projeckt_one/games/poker-simple/"},{"@type":"VideoGame","name":"Морской бой","url":"https://isko071.github.io/projeckt_one/games/battleship/"},{"@type":"VideoGame","name":"Мины","url":"https://isko071.github.io/projeckt_one/games/mines/"}]}</script>
+<!-- /seo -->
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-<link rel="stylesheet" href="shared/theme.css?v=167">
-<link rel="stylesheet" href="catalog/catalog.css?v=167">
+<link rel="stylesheet" href="shared/theme.css?v=173">
+<link rel="stylesheet" href="catalog/catalog.css?v=173">
 <!-- Хранилище и тема в <head>, чтобы тема применялась до первой отрисовки -->
-<script src="shared/storage.js?v=167"></script>
-<script src="shared/theme.js?v=167"></script>
-<script src="shared/page-loader.js?v=167"></script>
+<script src="shared/error-report.js?v=173"></script>
+<script src="shared/storage.js?v=173"></script>
+<script src="shared/theme.js?v=173"></script>
+<script src="shared/page-loader.js?v=173"></script>
 </head>
 <body>
 <noscript><p class="noscript" id="noscript">Для работы сайта нужен включённый JavaScript.</p></noscript>
@@ -93,6 +109,7 @@
         <a class="footer-tg" href="https://t.me/Isko0710" target="_blank" rel="noopener" data-i18n-aria-label="footer.telegramLabel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.4 11.8l11.3-4.4c.5-.2 1 .1.8.9l-1.9 9c-.1.6-.5.8-1 .5l-2.9-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.9z" fill="#fff"/></svg><span data-i18n="footer.telegram"></span></a>
       </nav>
     </div>
+    <nav class="footer-games" data-i18n-aria-label="footer.games"><a href="games/checkers/" data-i18n="games.checkers.title">Шашки</a><a href="games/yahtzee/" data-i18n="games.yahtzee.title">Кости</a><a href="games/minesweeper/" data-i18n="games.minesweeper.title">Сапёр</a><a href="games/2048/" data-i18n="games.2048.title">2048</a><a href="games/blocks/" data-i18n="games.blocks.title">Блоки</a><a href="games/blackjack/" data-i18n="games.blackjack.title">Блэкджек</a><a href="games/poker-simple/" data-i18n="games.poker-simple.title">Покер: Чожук</a><a href="games/battleship/" data-i18n="games.battleship.title">Морской бой</a><a href="games/mines/" data-i18n="games.mines.title">Мины</a></nav>
     <p class="footer-copy"><span data-i18n="footer.copy"></span> <span id="footer-stats" data-i18n="footer.stats" hidden></span></p>
   </footer>
 </div>
@@ -167,25 +184,25 @@
   </section>
 </dialog>
 
-<script src="locales/ru.js?v=167"></script>
-<script src="shared/i18n.js?v=167"></script>
-<script src="shared/profile.js?v=167"></script>
-<script src="shared/wallet.js?v=167"></script>
-<script src="shared/progress.js?v=167"></script>
-<script src="shared/sync-logic.js?v=167"></script>
+<script src="locales/ru.js?v=173"></script>
+<script src="shared/i18n.js?v=173"></script>
+<script src="shared/profile.js?v=173"></script>
+<script src="shared/wallet.js?v=173"></script>
+<script src="shared/progress.js?v=173"></script>
+<script src="shared/sync-logic.js?v=173"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="shared/firebase-config.js?v=167"></script>
-<script src="shared/analytics.js?v=167"></script>
-<script src="shared/rating.js?v=167"></script>
-<script src="shared/cloud.js?v=167"></script>
-<script src="shared/wallet-sync.js?v=167"></script>
-<script src="games/games.js?v=167"></script>
-<script src="catalog/logic.js?v=167"></script>
-<script src="catalog/catalog.js?v=167"></script>
-<script src="catalog/profile-ui.js?v=167"></script>
-<script src="catalog/wallet-ui.js?v=167"></script>
-<script src="catalog/account-ui.js?v=167"></script>
-<script src="catalog/rating-ui.js?v=167"></script>
+<script src="shared/firebase-config.js?v=173"></script>
+<script src="shared/analytics.js?v=173"></script>
+<script src="shared/rating.js?v=173"></script>
+<script src="shared/cloud.js?v=173"></script>
+<script src="shared/wallet-sync.js?v=173"></script>
+<script src="games/games.js?v=173"></script>
+<script src="catalog/logic.js?v=173"></script>
+<script src="catalog/catalog.js?v=173"></script>
+<script src="catalog/profile-ui.js?v=173"></script>
+<script src="catalog/wallet-ui.js?v=173"></script>
+<script src="catalog/account-ui.js?v=173"></script>
+<script src="catalog/rating-ui.js?v=173"></script>
 </body>
 </html>

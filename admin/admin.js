@@ -47,44 +47,6 @@
       .then(function (d) { return d && d.wallets; });
   }
 
-  // Временная правка баланса игрока: читаем запись, меняем только wallet.balance и пишем обратно (с проверкой, что запись не изменилась)
-  function docUrl(uid) { var cfg = window.FIREBASE_CONFIG; return 'https://firestore.googleapis.com/v1/projects/' + cfg.projectId + '/databases/' + window.FIREBASE_DATABASE + '/documents/users/' + encodeURIComponent(uid); }
-  function editBalance(uid) {
-    var row = st.rows.filter(function (r) { return r.uid === uid; })[0];
-    if (!row || st.saving) return;
-    var raw = window.prompt(tr('admin.edit.prompt', { name: row.name || row.uid.slice(0, 8), n: fmt(row.balance) }), String(Math.round(row.balance)));
-    if (raw === null) return;
-    var value = Number(String(raw).replace(/\s/g, ''));
-    if (!L.withBalance('{"data":{}}', value).ok) { st.msg = { bad: true, key: 'admin.edit.invalid' }; render(); return; }
-    st.saving = true; st.msg = null; render();
-    if (row.server) { saveOnServer(row, value); return; }      // серверный баланс: облачная копия на него не влияет, меняет сервер
-    var token;
-    Cloud.getToken().then(function (tk) { token = tk; return window.fetch(docUrl(uid), { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
-      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
-      .then(function (doc) {
-        var cur = doc.fields && doc.fields.data && doc.fields.data.stringValue, out = L.withBalance(cur, value);
-        if (!out.ok) throw new Error('data');
-        return window.fetch(docUrl(uid) + '?updateMask.fieldPaths=data&updateMask.fieldPaths=updatedAt&currentDocument.updateTime=' + encodeURIComponent(doc.updateTime), {
-          method: 'PATCH', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { data: { stringValue: out.json }, updatedAt: { integerValue: String(Date.now()) } } })
-        });
-      })
-      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); row.balance = value; st.saving = false; st.msg = { bad: false, key: 'admin.edit.done' }; render(); })
-      .catch(function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.edit.denied' : 'admin.edit.error' }; render(); });
-  }
-
-  function saveOnServer(row, value) {
-    Cloud.getToken().then(function (tk) {
-      return window.fetch(serverUrl() + '/admin/balance', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: row.uid, balance: value }) });
-    }).then(function (res) {
-      if (res.status === 401 || res.status === 403) throw new Error('denied');
-      if (res.status === 404) throw new Error('notFound');
-      if (!res.ok) throw new Error('http');
-      return res.json();
-    }).then(function (d) { row.balance = d.balance; st.saving = false; st.msg = { bad: false, key: 'admin.edit.doneServer' }; render(); },
-      function (e) { st.saving = false; st.msg = { bad: true, key: e && e.message === 'denied' ? 'admin.srv.denied' : (e && e.message === 'notFound' ? 'admin.edit.notFound' : 'admin.edit.error') }; render(); });
-  }
-
   // ---------- Вкладка «Сервер»: данные отдаёт сервер столов (только владельцу) ----------
   function serverUrl() { return String(window.GAME_SERVER_URL || '').replace(/^ws/, 'http').replace(/\/+$/, ''); }
   function loadServer(silent) {
@@ -94,8 +56,8 @@
     st.srvLoading = true; if (!silent) { st.srvError = null; render(); }
     Cloud.getToken().then(function (tk) { return window.fetch(base + '/admin/stats', { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
       .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
-      .then(function (d) { st.srv = d; st.srvError = null; st.srvLoading = false; if (st.tab === 'server') render(); },
-        function (e) { st.srvLoading = false; st.srvError = e && e.message === 'denied' ? 'denied' : 'network'; if (st.tab === 'server') render(); });
+      .then(function (d) { st.srv = d; st.srvError = null; st.srvLoading = false; if (st.tab !== 'players' || errorsFresh()) render(); },
+        function (e) { st.srvLoading = false; st.srvError = e && e.message === 'denied' ? 'denied' : 'network'; if (st.tab !== 'players') render(); });
   }
   function dur(ms) {
     var m = Math.floor(ms / 60000);
@@ -124,10 +86,41 @@
       '<h2 class="h2">' + esc(tr('admin.srv.events')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.srv.time')) + '</th><th>' + esc(tr('admin.srv.event')) + '</th><th>' + esc(tr('admin.srv.game')) + '</th><th>' + esc(tr('admin.srv.code')) + '</th><th>' + esc(tr('admin.srv.player')) + '</th></tr></thead><tbody>' +
       (events || '<tr><td colspan="5" class="empty">' + esc(tr('admin.srv.noEvents')) + '</td></tr>') + '</tbody></table></div>';
   }
+  // ---------- Вкладка «Ошибки»: что ломается у игроков (из браузеров) и на сервере ----------
+  var DAY_MS = 24 * 3600 * 1000;
+  function errorsFresh() {                       // сколько разных ошибок было за сутки (значок на вкладке)
+    var d = st.srv;
+    if (!d || !d.clientErrors) return 0;
+    return d.clientErrors.filter(function (e) { return d.now - e.last < DAY_MS; }).length;
+  }
+  function errorsHtml() {
+    if (st.srvError === 'nourl') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.nourl')) + '</p>';
+    if (st.srvError === 'denied') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.denied')) + '</p>';
+    if (!st.srv) return st.srvError ? '<p class="msg bad" role="alert">' + esc(tr('admin.srv.error')) + '</p><button type="button" class="btn" data-act="reloadSrv">' + esc(tr('admin.reload')) + '</button>' : '<p class="msg" role="status">' + esc(tr('admin.srv.loading')) + '</p>';
+    var d = st.srv, list = d.clientErrors || [], total = list.reduce(function (a, e) { return a + e.count; }, 0);
+    var srvErr = d.events.filter(function (e) { return e.type === 'error'; });
+    var cards = [[errorsFresh(), 'err.day'], [list.length, 'err.kinds'], [total, 'err.total'], [d.counters.errors, 'err.server']].map(function (x) {
+      return '<div class="card' + (x[1] === 'err.day' && x[0] ? ' warn' : '') + '"><b>' + fmt(x[0]) + '</b><span>' + esc(tr('admin.' + x[1])) + '</span></div>';
+    }).join('');
+    var rows = list.map(function (e) {
+      return '<tr><td>' + esc(fmtDate(e.last)) + '<small>' + esc(ago(e.last)) + '</small></td>' +
+        '<td class="wrap"><details><summary><b>' + esc(e.msg) + '</b>' + (e.where ? '<small>' + esc(e.where) + '</small>' : '') + '</summary>' + (e.stack ? '<pre>' + esc(e.stack) + '</pre>' : '') + '<small>' + esc(tr('admin.err.first', { time: fmtDate(e.first) })) + '</small></details></td>' +
+        '<td class="wrap">' + esc(e.pages.join(', ')) + '</td><td class="wrap">' + esc(e.browsers.join(', ')) + '</td><td class="n">' + fmt(e.count) + '</td></tr>';
+    }).join('');
+    var srows = srvErr.slice(0, 50).map(function (e) {
+      return '<tr><td>' + esc(fmtDate(e.t)) + '</td><td>' + esc(e.info ? (tr('admin.info.' + e.info) === 'admin.info.' + e.info ? e.info : tr('admin.info.' + e.info)) : '') + '</td><td>' + esc(e.game ? tr('admin.col.' + e.game) : '') + '</td><td class="wrap">' + esc(e.name || '') + (e.uid ? ' <small>' + esc(e.uid) + '</small>' : '') + '</td></tr>';
+    }).join('');
+    return '<div class="cards">' + cards + '</div><p class="note">' + esc(tr('admin.err.note', { up: dur(d.uptimeMs), time: fmtDate(d.now) })) + '</p>' +
+      '<h2 class="h2">' + esc(tr('admin.err.client')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.err.last')) + '</th><th>' + esc(tr('admin.err.msg')) + '</th><th>' + esc(tr('admin.err.pages')) + '</th><th>' + esc(tr('admin.err.browsers')) + '</th><th class="n">' + esc(tr('admin.err.count')) + '</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="5" class="empty">' + esc(tr('admin.err.none')) + '</td></tr>') + '</tbody></table></div>' +
+      '<h2 class="h2">' + esc(tr('admin.err.serverTitle')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.srv.time')) + '</th><th>' + esc(tr('admin.err.what')) + '</th><th>' + esc(tr('admin.srv.game')) + '</th><th>' + esc(tr('admin.srv.player')) + '</th></tr></thead><tbody>' +
+      (srows || '<tr><td colspan="4" class="empty">' + esc(tr('admin.err.serverNone')) + '</td></tr>') + '</tbody></table></div>';
+  }
   function tabsHtml() {
     var stats = '<a class="tab ext" href="https://dash.cloudflare.com/?to=/:account/web-analytics" target="_blank" rel="noopener">' + esc(tr('admin.tab.visits')) + ' ↗</a>';
-    return '<div class="tabs" role="tablist">' + ['players', 'server'].map(function (k) {
-      return '<button type="button" role="tab" class="tab" aria-selected="' + (st.tab === k) + '" data-tab="' + k + '">' + esc(tr('admin.tab.' + k)) + '</button>';
+    var fresh = errorsFresh();
+    return '<div class="tabs" role="tablist">' + ['players', 'server', 'errors'].map(function (k) {
+      return '<button type="button" role="tab" class="tab" aria-selected="' + (st.tab === k) + '" data-tab="' + k + '">' + esc(tr('admin.tab.' + k)) + (k === 'errors' && fresh ? ' <span class="badge">' + fresh + '</span>' : '') + '</button>';
     }).join('') + stats + '</div>';
   }
 
@@ -143,11 +136,10 @@
     }).join('');
     var body = rows.map(function (r) {
       return '<tr><td class="nm">' + esc(r.name || tr('admin.noName')) + '<small>' + esc(r.uid.slice(0, 8)) + '</small></td><td>' + esc(fmtDate(r.createdAt)) + '</td><td>' + esc(fmtDate(r.lastSeen)) + '<small>' + esc(ago(r.lastSeen)) + '</small></td>' +
-        '<td class="n">' + fmt(r.balance) + ' <button type="button" class="btn sm" data-edit="' + esc(r.uid) + '" aria-label="' + esc(tr('admin.edit.btn')) + '"' + (st.saving ? ' disabled' : '') + '>✎</button></td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
+        '<td class="n">' + fmt(r.balance) + '</td>' + L.GAMES.map(function (g) { return '<td class="n">' + r.plays[g] + '</td>'; }).join('') + '<td class="n">' + r.total + '</td></tr>';
     }).join('');
     return '<div class="cards">' + cards + '</div>' +
       '<div class="tools"><input id="q" type="search" value="' + esc(st.query) + '" placeholder="' + esc(tr('admin.search')) + '" aria-label="' + esc(tr('admin.search')) + '"><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button></div>' +
-      (st.msg ? '<p class="msg' + (st.msg.bad ? ' bad' : '') + '" role="status">' + esc(tr(st.msg.key)) + '</p>' : '') +
       '<p class="note">' + esc(tr('admin.note', { time: fmtDate(st.loadedAt), shown: rows.length })) + '</p>' +
       '<div class="tbl"><table><thead><tr>' + head('name', tr('admin.col.name')) + head('createdAt', tr('admin.col.created')) + head('lastSeen', tr('admin.col.seen')) + head('balance', tr('admin.col.balance'), 'n') +
       L.GAMES.map(function (g, i) { return head(g, String(i + 1), 'n', tr('admin.col.' + g)); }).join('') + head('total', tr('admin.col.total'), 'n') + '</tr></thead><tbody>' +
@@ -159,8 +151,9 @@
     if (c.status === 'unsupported') inner = '<p class="msg">' + esc(tr('admin.unsupported')) + '</p>';
     else if (c.status !== 'signedIn') inner = '<p class="msg">' + esc(tr('admin.signin.text')) + '</p><button type="button" class="btn primary" data-act="signin">' + esc(tr('admin.signin')) + '</button>';
     else if (st.tab === 'server') inner = tabsHtml() + serverHtml();
+    else if (st.tab === 'errors') inner = tabsHtml() + errorsHtml();
     else if (st.error === 'denied') inner = '<p class="msg bad" role="alert">' + esc(tr('admin.denied')) + '</p><button type="button" class="btn" data-act="signout">' + esc(tr('admin.signout')) + '</button>';
-    else if (st.error) inner = '<p class="msg bad" role="alert">' + esc(tr('admin.error')) + '</p><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button>';
+    else if (st.error) inner = tabsHtml() + '<p class="msg bad" role="alert">' + esc(tr('admin.error')) + '</p><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button>';     // вкладки «Сервер» и «Ошибки» нужны и тогда, когда список игроков не загрузился
     else if (!st.rows) inner = tabsHtml() + '<p class="msg" role="status">' + esc(tr('admin.loading')) + '</p>';
     else inner = tabsHtml() + tableHtml();
     var keep = document.activeElement && document.activeElement.id === 'q' ? document.activeElement.selectionStart : -1;
@@ -169,19 +162,18 @@
   }
 
   app.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-act], [data-sort], [data-tab], [data-edit]');
+    var b = e.target.closest('[data-act], [data-sort], [data-tab]');
     if (!b) return;
-    if (b.dataset.edit) { editBalance(b.dataset.edit); return; }
-    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server') loadServer(false); render(); return; }
+    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server' || st.tab === 'errors') loadServer(false); render(); return; }
     if (b.dataset.act === 'reloadSrv') { loadServer(false); return; }
     if (b.dataset.sort) { var k = b.dataset.sort; st.dir = st.sort === k ? (st.dir === 'asc' ? 'desc' : 'asc') : (k === 'name' ? 'asc' : 'desc'); st.sort = k; render(); return; }
     if (b.dataset.act === 'signin') Cloud.signIn().then(null, function () { render(); });
     else if (b.dataset.act === 'signout') { Cloud.signOut(true).then(function () { st.error = null; st.rows = null; render(); }); }
-    else if (b.dataset.act === 'reload') { if (st.tab === 'server') loadServer(false); else load(); }
+    else if (b.dataset.act === 'reload') { if (st.tab === 'server' || st.tab === 'errors') loadServer(false); else load(); }
   });
   app.addEventListener('input', function (e) { if (e.target.id === 'q') { st.query = e.target.value; render(); } });
 
-  setInterval(function () { if (st.tab === 'server' && !document.hidden && Cloud.getState().status === 'signedIn') loadServer(true); }, 10000);
+  setInterval(function () { if ((st.tab === 'server' || st.tab === 'errors') && !document.hidden && Cloud.getState().status === 'signedIn') loadServer(true); }, 10000);
 
   var loadedFor = null;
   Cloud.onChange(function (c) {

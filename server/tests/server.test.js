@@ -97,31 +97,36 @@ test('кабинет: /admin/wallets — баланс и партии всех �
   } finally { await s.close(); }
 });
 
-test('кабинет: POST /admin/balance — владелец меняет баланс игрока на сервере, игрок онлайн видит его сразу', async () => {
-  const { MemLedger } = require('../ledger');
+test('кабинет: менять баланс нельзя — адреса записи нет', async () => {
   const verify = async (t) => { const m = /^(.+):(.+)$/.exec(String(t)); if (!m) throw new Error('bad'); return { uid: m[1], email: m[2], emailVerified: true }; };
-  const s = await startServer({ verify, ledger: new MemLedger(), adminEmails: ['boss@x.com'], config: { tickMs: 50 } });
-  const post = (token, body) => fetch('http://localhost:' + s.port + '/admin/balance', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const s = await startServer({ verify, adminEmails: ['boss@x.com'], config: { tickMs: 50 } });
   try {
-    const ws = new WebSocket('ws://localhost:' + s.port);
-    const pushed = [];
-    const ready = new Promise((r) => ws.on('message', (raw) => { const m = JSON.parse(String(raw)); if (m.t === 'ready') r(); if (m.t === 'wallet' && m.state) pushed.push(m.state.balance); }));
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'auth', token: 'A:a@x.com' })));
-    await ready;
-    await s.wallet.act('A', { op: 'sync' });
-    assert.strictEqual((await post('p2:other@x.com', { uid: 'A', balance: 1 })).status, 403, 'чужой аккаунт не может');
-    assert.strictEqual(s.wallet.balanceOf('A'), 5000);
-    assert.strictEqual((await post('boss:boss@x.com', { uid: 'A', balance: -5 })).status, 400);
-    assert.strictEqual((await post('boss:boss@x.com', { uid: 'A', balance: 1.5 })).status, 400);
-    assert.strictEqual((await post('boss:boss@x.com', { uid: 'nobody', balance: 100 })).status, 404, 'кошелька нет — не создаётся');
-    const r = await post('boss:boss@x.com', { uid: 'A', balance: 12345 });
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual((await r.json()).balance, 12345);
-    assert.strictEqual(s.wallet.balanceOf('A'), 12345);
-    assert.ok(await (async () => { for (let i = 0; i < 50 && !pushed.includes(12345); i++) await new Promise((x) => setTimeout(x, 20)); return pushed.includes(12345); })(), 'игрок получил новый баланс');
-    assert.ok(s.manager.events.some((e) => e.type === 'admin' && e.info === '12345'), 'запись в журнале');
-    assert.strictEqual((await fetch('http://localhost:' + s.port + '/admin/balance', { headers: { Authorization: 'Bearer boss:boss@x.com' } })).status, 405, 'только POST');
-    ws.close();
+    const r = await fetch('http://localhost:' + s.port + '/admin/balance', { method: 'POST', headers: { Authorization: 'Bearer boss:boss@x.com', 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: 'A', balance: 99999 }) });
+    assert.strictEqual(r.status, 404);
+    const w = await fetch('http://localhost:' + s.port + '/admin/wallets', { method: 'POST', headers: { Authorization: 'Bearer boss:boss@x.com' } });
+    assert.strictEqual(w.status, 405, 'кабинет только читает');
+  } finally { await s.close(); }
+});
+
+test('ошибки из браузеров: принимаются только с сайта, одинаковые складываются, видны владельцу; спам ограничен', async () => {
+  const verify = async (t) => { const m = /^(.+):(.+)$/.exec(String(t)); if (!m) throw new Error('bad'); return { uid: m[1], email: m[2], emailVerified: true }; };
+  const s = await startServer({ verify, adminEmails: ['boss@x.com'], allowedOrigins: ['https://site.example'], config: { tickMs: 50 } });
+  const send = (body, origin) => fetch('http://localhost:' + s.port + '/report', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36' }, origin ? { Origin: origin } : {}), body: JSON.stringify(body) });
+  try {
+    assert.strictEqual((await send({ msg: 'x' }, 'https://evil.example')).status, 403, 'чужой сайт не пишет');
+    for (let i = 0; i < 3; i++) assert.strictEqual((await send({ msg: 'TypeError: a is undefined', where: '/games/blocks/ui.js:42:7', page: '/games/blocks/', stack: 'at f (ui.js:42)' }, 'https://site.example')).status, 204);
+    await send({ msg: '<img src=x onerror=alert(1)>', where: '/x.js:1', page: '/' }, 'https://site.example');
+    const r = await fetch('http://localhost:' + s.port + '/admin/stats', { headers: { Authorization: 'Bearer boss:boss@x.com', Origin: 'https://site.example' } });
+    const errs = (await r.json()).clientErrors;
+    const e = errs.find((x) => x.where === '/games/blocks/ui.js:42:7');
+    assert.strictEqual(e.count, 3, 'одинаковые сложились');
+    assert.deepStrictEqual(e.pages, ['/games/blocks/']);
+    assert.deepStrictEqual(e.browsers, ['Chrome 130 · Android']);
+    assert.strictEqual(errs.length, 2);
+    let blocked = 0;
+    for (let i = 0; i < 40; i++) if ((await send({ msg: 'spam ' + i }, 'https://site.example')).status === 429) blocked++;
+    assert.ok(blocked >= 10, 'больше 30 в минуту с одного адреса не принимается: отклонено ' + blocked);
+    assert.ok(s.manager.clientErrors.size <= 200);
   } finally { await s.close(); }
 });
 
