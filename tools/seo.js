@@ -14,7 +14,7 @@ const BASE = (process.argv[2] || 'https://partejka.pages.dev/').replace(/\/?$/, 
 const OLD = { host: 'isko071.github.io', prefix: '/projeckt_one' };
 const SITE = 'Партейка';
 // Коды подтверждения владельца сайта из Google Search Console и Яндекс Вебмастера (метатег, способ «HTML-тег»): только содержимое content="…"
-const VERIFY = { google: 'T8cgn7R1biajRy9zIVoNbFZgMY7BKPoujFjjUiJb9ds', yandex: '' };
+const VERIFY = { google: '2MiJKadnDOe0Y7kURBNsd4-zQC72_QKI7djZBmL57ks', yandex: '' };
 
 // path — страница; og — картинка превью 1200×630 (jpg); game — для разметки VideoGame
 const PAGES = [
