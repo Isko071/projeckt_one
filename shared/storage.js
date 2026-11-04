@@ -3,6 +3,21 @@
 // (приватный режим, запрет в браузере), всё продолжает работать, просто ничего не запоминается.
 // Подключается обычным <script>; в браузере создаёт глобальный PlatformStorage.
 (function (root) {
+  // Переезд с прежнего адреса (isko071.github.io/projeckt_one → partejka.pages.dev): старая страница передаёт прогресс гостя в адресе (#move=…).
+  // Принимаем его, только если на новом адресе ещё ничего не наиграно, и сразу убираем из адреса. Скрипт перехода — в tools/seo.js
+  function importMove() {
+    var loc = root.location, ls;
+    if (!loc || String(loc.hash).indexOf('#move=') !== 0) return;
+    try {
+      ls = root.localStorage;
+      var data = JSON.parse(decodeURIComponent(escape(root.atob(decodeURIComponent(loc.hash.slice(6))))));
+      var empty = !ls.getItem('platform:wallet') && !ls.getItem('platform:profile');
+      if (empty && data && typeof data === 'object') Object.keys(data).forEach(function (k) { if (/^(platform|game):/.test(k) && k !== 'platform:moved' && typeof data[k] === 'string') ls.setItem(k, data[k]); });
+    } catch (e) { /* не получилось — гость начнёт с нуля, сайт работает */ }
+    try { root.history.replaceState(null, '', loc.pathname + loc.search); } catch (e) { /* адрес не обязателен */ }
+  }
+  importMove();
+
   function createStorage(getBackend) {
     function backend() {
       try { return getBackend() || null; } catch (e) { return null; }

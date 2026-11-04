@@ -22,11 +22,26 @@ test('каждая доступная игра и главная: заголов
     const canon = (html.match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
     assert.ok(canon && canon.endsWith('/' + p), p + ': канонический адрес');
     assert.ok(sitemap.includes('<loc>' + canon + '</loc>'), p + ': в sitemap.xml');
-    const og = (html.match(/<meta property="og:image" content="[^"]*?\/projeckt_one\/([^"]+)"/) || html.match(/<meta property="og:image" content="https?:\/\/[^/]+\/(?:[^/"]+\/)?([^"]+)"/) || [])[1];
+    const base = canon.slice(0, canon.length - p.length), ogUrl = (html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || '';
+    const og = ogUrl.startsWith(base) ? ogUrl.slice(base.length) : null;      // адрес картинки = адрес сайта + путь в репозитории
     assert.ok(og && fs.existsSync(path.join(root, og)), p + ': картинка превью есть в репозитории (' + og + ')');
     JSON.parse((html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/) || [])[1]);
   });
   assert.equal((sitemap.match(/<loc>/g) || []).length, games.length + 1, 'в sitemap ровно главная и доступные игры');
+});
+
+test('robots.txt указывает на sitemap.xml того же сайта и закрывает кабинет', () => {
+  const robots = fs.readFileSync(path.join(root, 'robots.txt'), 'utf8');
+  const canon = (fs.readFileSync(path.join(root, 'index.html'), 'utf8').match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
+  assert.ok(robots.includes('Sitemap: ' + canon + 'sitemap.xml'));
+  assert.ok(robots.includes('Disallow: /admin/'));
+});
+
+test('переезд: на каждой странице есть переход со старого адреса, кабинет тоже', () => {
+  [''].concat(games.map((g) => g.path), ['admin/']).forEach((p) => {
+    const html = fs.readFileSync(path.join(root, p, 'index.html'), 'utf8');
+    assert.ok(html.includes('location.hostname!=="isko071.github.io"') && html.includes('location.replace("https://partejka.pages.dev/"'), p + ': скрипт перехода');
+  });
 });
 
 test('главная: внизу обычные ссылки на все игры (поисковик находит страницы без скриптов)', () => {

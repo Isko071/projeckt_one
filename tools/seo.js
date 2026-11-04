@@ -7,7 +7,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const BASE = (process.argv[2] || 'https://isko071.github.io/projeckt_one/').replace(/\/?$/, '/');
+const BASE = (process.argv[2] || 'https://partejka.pages.dev/').replace(/\/?$/, '/');
+// Прежний адрес сайта (GitHub Pages): страница оттуда сразу переходит на ту же страницу нового адреса.
+// В первый раз она забирает с собой прогресс гостя (аконы, рекорды, профиль) — у нового адреса своё хранилище браузера, иначе гость начал бы с нуля.
+// Новый адрес принимает его в shared/storage.js (#move=…), только если там ещё ничего нет
+const OLD = { host: 'isko071.github.io', prefix: '/projeckt_one' };
 const SITE = 'Партейка';
 // Коды подтверждения владельца сайта из Google Search Console и Яндекс Вебмастера (метатег, способ «HTML-тег»): только содержимое content="…"
 const VERIFY = { google: '', yandex: '' };
@@ -45,6 +49,16 @@ const PAGES = [
     desc: 'Игра «Мины» онлайн: выберите число мин на поле 5×5 и открывайте клетки — чем дальше, тем больше награда. Вовремя заберите выигрыш. Без реальных денег, бесплатно.' }
 ];
 
+function moveScript() {
+  return '<script>(function(){if(location.hostname!==' + JSON.stringify(OLD.host) + ')return;' +
+    'var p=location.pathname.replace(/^' + OLD.prefix.replace(/\//g, '\\/') + '\\/?/,""),h=location.hash,d="";' +
+    'try{if(!/^#[A-Z0-9]{5}$/i.test(h)&&!localStorage.getItem("platform:moved")){var o={},n=0;' +
+    'for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(/^(platform|game):/.test(k)){o[k]=localStorage.getItem(k);n++;}}' +
+    'if(n)d="#move="+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(o)))));localStorage.setItem("platform:moved","1");}}catch(e){}' +
+    'location.replace(' + JSON.stringify(BASE) + '+p+location.search+(d||h));})();</script>';
+}
+const EXTRA = ['admin/index.html'];        // страницы без блока seo, которым тоже нужен переход со старого адреса
+
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function block(p) {
   const url = BASE + p.path, img = BASE + p.og;
@@ -56,6 +70,7 @@ function block(p) {
         hasPart: PAGES.filter((x) => x.game).map((x) => ({ '@type': 'VideoGame', name: x.game, url: BASE + x.path })) };
   return [
     '<!-- seo: создано tools/seo.js, правьте там -->',
+    moveScript(),
     '<title>' + esc(p.title) + '</title>',
     '<meta name="description" content="' + esc(p.desc) + '">',
     '<link rel="canonical" href="' + url + '">',
@@ -81,6 +96,15 @@ PAGES.forEach((p) => {
   let html = fs.readFileSync(file, 'utf8');
   if (/<!-- seo[^]*?<!-- \/seo -->/.test(html)) html = html.replace(/<!-- seo[^]*?<!-- \/seo -->/, block(p));
   else html = html.replace(/<title>[^<]*<\/title>/, block(p));
+  fs.writeFileSync(file, html);
+});
+
+EXTRA.forEach((f) => {
+  const file = path.join(root, f), tag = '<!-- move: создано tools/seo.js -->';
+  let html = fs.readFileSync(file, 'utf8');
+  const blockText = tag + '\n' + moveScript() + '\n<!-- /move -->';
+  if (/<!-- move[^]*?<!-- \/move -->/.test(html)) html = html.replace(/<!-- move[^]*?<!-- \/move -->/, blockText);
+  else html = html.replace(/(<meta charset="utf-8">\n)/, '$1' + blockText + '\n');
   fs.writeFileSync(file, html);
 });
 

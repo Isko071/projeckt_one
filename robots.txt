@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /server/
+Disallow: /tools/
+Disallow: /tests/
+
+Sitemap: https://partejka.pages.dev/sitemap.xml

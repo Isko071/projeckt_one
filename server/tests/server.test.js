@@ -124,8 +124,8 @@ test('ошибки из браузеров: принимаются только 
     assert.deepStrictEqual(e.browsers, ['Chrome 130 · Android']);
     assert.strictEqual(errs.length, 2);
     let blocked = 0;
-    for (let i = 0; i < 40; i++) if ((await send({ msg: 'spam ' + i }, 'https://site.example')).status === 429) blocked++;
-    assert.ok(blocked >= 10, 'больше 30 в минуту с одного адреса не принимается: отклонено ' + blocked);
+    for (let i = 0; i < 70; i++) if ((await send({ msg: 'spam ' + i }, 'https://site.example')).status === 429) blocked++;
+    assert.ok(blocked >= 10, 'больше 60 в минуту с одного адреса не принимается: отклонено ' + blocked);
     assert.ok(s.manager.clientErrors.size <= 200);
   } finally { await s.close(); }
 });
@@ -162,5 +162,48 @@ test('сеть: без серверного кошелька запросы ко
     assert.strictEqual((await a.call({ t: 'wallet', op: 'sync' })).error, 'wallet-off');
     assert.strictEqual((await a.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns', stake: 100 } })).error, 'stakes-off');
     assert.ok((await a.call({ t: 'create', game: 'yahtzee', opts: { size: 2, mode: 'turns' } })).ok);
+  } finally { await s.close(); }
+});
+
+test('посетители: гости и вошедшие по дням, номер устройства без личных данных; в базу — одним документом на день', async () => {
+  const { MemLedger } = require('../ledger');
+  const verify = async (t) => { const m = /^(.+):(.+)$/.exec(String(t)); if (!m) throw new Error('bad'); return { uid: m[1], email: m[2], emailVerified: true }; };
+  const ledger = new MemLedger();
+  let s = await startServer({ verify, ledger, ratings: false, adminEmails: ['boss@x.com'], allowedOrigins: ['https://site.example'], config: { tickMs: 50 } });
+  const visit = (srv, body, origin) => fetch('http://localhost:' + srv.port + '/visit', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 SamsungBrowser/27.0 Chrome/130.0 Mobile Safari/537.36' }, origin === null ? {} : { Origin: origin || 'https://site.example' }), body: JSON.stringify(body) });
+  const report = async (srv) => (await fetch('http://localhost:' + srv.port + '/admin/visits', { headers: { Authorization: 'Bearer boss:boss@x.com', Origin: 'https://site.example' } })).json();
+  try {
+    assert.strictEqual((await visit(s, { d: 'guest00001', p: '' }, 'https://evil.example')).status, 403, 'чужой сайт не пишет');
+    await visit(s, { d: 'guest00001', p: '', s: 'google' });
+    await visit(s, { d: 'guest00001', p: '2048' });
+    await visit(s, { d: 'guest00001', p: '2048' });
+    await visit(s, { d: 'player0001', p: 'checkers', u: 'UID123' });
+    await visit(s, { d: 'BAD!', p: '' });
+    await visit(s, { d: 'lookonly01', p: 'checkers' });                 // гость только посмотрел
+    await visit(s, { d: 'guest00001', g: '2048' });                     // гость начал партию
+    const no = await fetch('http://localhost:' + s.port + '/admin/visits', { headers: { Authorization: 'Bearer joe:joe@x.com', Origin: 'https://site.example' } });
+    assert.strictEqual(no.status, 403, 'чужой аккаунт не видит');
+    let r = await report(s);
+    const today = r.days[r.days.length - 1];
+    assert.deepStrictEqual([today.devices, today.guests, today.signed, today.views, today.players, today.games], [3, 2, 1, 5, 1, 1]);
+    assert.ok(!r.devices.find((x) => x.d === 'lookonly01'), 'гость, который не играл, в список не попадает');
+    assert.strictEqual(r.totals.day.devices, 3, 'но в цифрах он есть');
+    assert.deepStrictEqual(r.devices.find((x) => x.d === 'guest00001').games, { '2048': 1 });
+    const g = r.devices.find((x) => x.d === 'guest00001');
+    assert.deepStrictEqual(g.pages, { catalog: 1, '2048': 2 });
+    assert.strictEqual(g.src, 'google'); assert.strictEqual(g.uid, ''); assert.strictEqual(g.browser, 'Samsung Internet 27 · Android');
+    assert.strictEqual(r.devices.find((x) => x.d === 'player0001').uid, 'UID123');
+    // запись в базу и перезапуск сервера: прежнее не теряется, новое добавляется
+    assert.strictEqual(await s.manager.flushVisits(), 1, 'один документ на день');
+    assert.strictEqual(await s.manager.flushVisits(), 0, 'без новых визитов не пишет');
+    await s.close();
+    s = await startServer({ verify, ledger, ratings: false, adminEmails: ['boss@x.com'], allowedOrigins: ['https://site.example'], config: { tickMs: 50 } });
+    await visit(s, { d: 'guest00001', p: 'blocks' });
+    await s.manager.flushVisits();
+    r = await report(s);
+    const g2 = r.devices.find((x) => x.d === 'guest00001');
+    assert.strictEqual(g2.views, 4); assert.deepStrictEqual(g2.pages, { catalog: 1, '2048': 2, blocks: 1 });
+    assert.deepStrictEqual(g2.games, { '2048': 1 }, 'партии пережили перезапуск');
+    assert.strictEqual(r.devices.length, 2);
   } finally { await s.close(); }
 });

@@ -19,16 +19,18 @@ async function startServer(o) {
   const wallet = ledger ? new WalletService({ ledger, now: o.now }) : null;
   if (wallet) { await wallet.init(); if (o.ratings !== false) wallet.startRatings(); }                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются
   const manager = new RoomManager({ engine: loadEngine(), config: o.config || {}, wallet }).start();
+  const visitTimer = setInterval(() => { manager.flushVisits().catch(() => {}); }, o.visitFlushMs || 1800000);       // посетители — в базу раз в 30 минут
+  visitTimer.unref();
   const perIp = new Map();
 
   const admins = (o.adminEmails || []).map((s) => String(s).trim().toLowerCase()).filter(Boolean);
   const originOk = (origin) => !origins.length || !origin || origins.indexOf(origin) >= 0;
 
-  // Ошибки из браузеров игроков (shared/error-report.js): только с разрешённых сайтов, до 4 КБ, не чаще 30 в минуту с одного адреса.
+  // Ошибки из браузеров игроков (shared/error-report.js): только с разрешённых сайтов, до 4 КБ, не чаще 60 в минуту с одного адреса (вместе с отметками посещений /visit).
   // Хранятся в памяти сервера (manager.reportError), видны владельцу во вкладке «Ошибки» кабинета
   const reportsPerIp = new Map();
   setInterval(() => reportsPerIp.clear(), 60000).unref();
-  function takeReport(req, res) {
+  function takeReport(req, res, kind) {
     const origin = req.headers.origin;
     const cors = origin && originOk(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST' } : { 'Vary': 'Origin' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
@@ -37,12 +39,12 @@ async function startServer(o) {
     const ip = String((req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).split(',')[0].trim();
     const n = (reportsPerIp.get(ip) || 0) + 1;
     reportsPerIp.set(ip, n);
-    if (n > 30) { done(429); req.resume(); return; }
+    if (n > 60) { done(429); req.resume(); return; }
     let raw = '', big = false;
     req.on('data', (c) => { if (big) return; raw += c; if (raw.length > 4096) big = true; });
     req.on('end', () => {
       let b = null; try { b = big ? null : JSON.parse(raw); } catch (e) { b = null; }
-      if (b && typeof b === 'object') manager.reportError(b, String(req.headers['user-agent'] || ''));
+      if (b && typeof b === 'object') { if (kind === 'visit') manager.visit(b, String(req.headers['user-agent'] || '')); else manager.reportError(b, String(req.headers['user-agent'] || '')); }
       done(204);
     });
   }
@@ -51,7 +53,8 @@ async function startServer(o) {
     const path = String(req.url || '').split('?')[0];
     if (path === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(Object.assign({ ok: true }, manager.stats()))); return; }
     if (path === '/report') { takeReport(req, res); return; }
-    if (path === '/admin/stats' || path === '/admin/wallets') {
+    if (path === '/visit') { takeReport(req, res, 'visit'); return; }
+    if (path === '/admin/stats' || path === '/admin/wallets' || path === '/admin/visits') {
       // Личный кабинет владельца: только чтение, только с токеном аккаунта из ADMIN_EMAILS (почта подтверждена Google), только с разрешённых сайтов.
       // /admin/stats — столы, события и ошибки; /admin/wallets — баланс и сыгранные партии всех игроков с сервера.
       // Менять данные игроков (баланс и др.) из кабинета нельзя — решение владельца: запись не добавлять.
@@ -65,6 +68,7 @@ async function startServer(o) {
       verify(token).then((u) => {
         if (!admins.length || !u.emailVerified || admins.indexOf(String(u.email || '').toLowerCase()) < 0) { manager.counters.denied++; manager.event('denied', { uid: u.uid, info: 'admin' }); send(403, { error: 'forbidden' }); return; }
         if (path === '/admin/stats') { send(200, manager.adminReport()); return; }
+        if (path === '/admin/visits') { manager.visitsReport(14).then((r) => send(200, r), () => send(500, { error: 'ledger' })); return; }
         if (!wallet) { send(409, { error: 'wallet-off' }); return; }
         wallet.adminWallets().then((w) => send(200, { wallets: w }), () => send(500, { error: 'ledger' }));
       }, () => { manager.counters.denied++; send(401, { error: 'auth' }); });
@@ -122,7 +126,7 @@ async function startServer(o) {
 
   return new Promise((resolve) => server.listen(o.port || 0, () => resolve({
     port: server.address().port, manager, wallet,
-    close: () => { manager.stop(); if (wallet) wallet.stopRatings(); wss.clients.forEach((c) => c.terminate()); return new Promise((r) => server.close(r)); }
+    close: () => { clearInterval(visitTimer); manager.stop(); if (wallet) wallet.stopRatings(); wss.clients.forEach((c) => c.terminate()); return new Promise((r) => server.close(r)); }
   })));
 }
 
@@ -139,7 +143,7 @@ if (require.main === module) {
     console.log('Партейка: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)'));
     // Остановка (деплой на Render): накопленные победы, рекорды и рейтинг успевают уйти в базу, не дольше 5 секунд
     process.once('SIGTERM', () => {
-      const flush = s.wallet ? Promise.all([s.wallet.flushTops(), s.wallet.flushRatings()]).catch(() => {}) : Promise.resolve();
+      const flush = s.wallet ? Promise.all([s.wallet.flushTops(), s.wallet.flushRatings(), s.manager.flushVisits()]).catch(() => {}) : Promise.resolve();
       Promise.race([flush, new Promise((r) => setTimeout(r, 5000))]).then(() => process.exit(0));
     });
   }, (e) => { console.error(e); process.exit(1); });
