@@ -5,10 +5,10 @@
 const crypto = require('node:crypto');
 const { MemStore, decodeFields } = require('./memstore');
 
-const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede', 'move'];
-const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship', 'checkers'];
+const ACTIONS = ['attack', 'defend', 'transfer', 'take', 'pass', 'chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede', 'move'];
+const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship', 'checkers', 'durak'];
 const POKER = ['poker', 'poker-simple'];
-const STAKE_GAMES = ['yahtzee', 'battleship', 'checkers'];     // в каких играх за столом бывает ставка
+const STAKE_GAMES = ['yahtzee', 'battleship', 'checkers', 'durak'];     // в каких играх за столом бывает ставка
 
 // Браузер и система коротко (без лишних подробностей): «Chrome 120 · Android», «Safari · iOS», «Samsung Internet · Android»
 function browserOf(ua) {
@@ -19,7 +19,7 @@ function browserOf(ua) {
   return m ? m[0] + ' ' + m[1] + tg + (os ? ' · ' + os : '') : (os || 'другой');
 }
 
-const STAKE_MIN_MS = { yahtzee: 90000, battleship: 45000, checkers: 40000 };     // партия короче этого — не в счёт (победа в топ; ставка при сдаче возвращается)
+const STAKE_MIN_MS = { yahtzee: 90000, battleship: 45000, checkers: 40000, durak: 60000 };     // партия короче этого — не в счёт (победа в топ; ставка при сдаче возвращается)
 // Ник игрока: без управляющих и невидимых символов (переворот текста, нулевая ширина, пустые хангыль-буквы), без оборванных эмодзи,
 // не длиннее 20 знаков; пустой — «Игрок» (как profile.defaultName в locales/ru.js). То же делает браузер (shared/profile.js)
 const NAME_BAD = /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u2028-\u202E\u2060-\u206F\u3164\uFE00-\uFE0E\uFEFF\uFFA0\uFFF0-\uFFFF]/g;
@@ -51,6 +51,7 @@ class RoomManager {
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));
     this.apis.checkers = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Checkers, gameId: 'checkers' }));
+    this.apis.durak = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Durak, gameId: 'durak' }));
     // Серверный баланс: стек за покерным столом берётся залогом перед каждой раздачей, а после неё возвращается с итогом
     const pk = this.wallet ? { gate: (code, asks) => this.pokerGate(code, asks), onSettle: (code, list, voided) => this.pokerSettle(code, list, voided) } : {};
     this.apis.poker = this.engine.PlatformPokerRooms.create(Object.assign({}, base, pk, { game: this.engine.Poker, gameId: 'poker', gameOptions: { variant: 'classic' } }));
@@ -61,7 +62,7 @@ class RoomManager {
     this.events = [];
     this.clientErrors = new Map();
     this.visitDays = new Map();       // день (UTC) → { devs: Map(номер устройства → визиты), loaded, dirty }     // ошибки из браузеров игроков: «текст|место» → { msg, where, stack, first, last, count, pages, browsers }
-    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
+    this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0, durak: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
   event(type, o) {
@@ -262,7 +263,7 @@ class RoomManager {
     if (this.wallet && POKER.indexOf(game) >= 0) chips = await this.pokerChips(conn.uid, o.ante);
     const res = await this.apis[game].createRoom({
       stake: stake,
-      size: o.size, fillBots: o.fillBots, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
+      size: o.size, fillBots: o.fillBots, botLevel: o.botLevel, mode: o.mode, private: !!o.private, ante: o.ante, minBet: o.minBet, smallBlind: o.smallBlind, bigBlind: o.bigBlind,
       owner: { uid: conn.uid, name: o.name, avatar: o.avatar, chips: chips }
     });
     const room = { owner: conn.uid, createdAt: this.now(), game, host: res.host, subs: new Set(), fields: this.pendingDoc && this.pendingDoc.code === res.code ? this.pendingDoc.doc : null, ticking: false, again: false, emptySince: 0, closedAt: 0, stake: stake, holds: new Map(), settled: false, wasPlaying: false };
@@ -294,7 +295,7 @@ class RoomManager {
     if (d.status === 'closed') throw fail('closed');
     const member = this.isMember(room, conn.uid);
     if (!member) {
-      if ((game === 'yahtzee' || game === 'battleship' || game === 'checkers') && d.status !== 'lobby') throw fail('started');
+      if ((game === 'yahtzee' || game === 'battleship' || game === 'checkers' || game === 'durak') && d.status !== 'lobby') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.status !== 'lobby' && d.phase !== 'settled' && d.phase !== 'waiting') throw fail('started');
       if (POKER.indexOf(game) >= 0 && d.players >= d.size) throw fail('full');
       if (d.status === 'lobby' && d.players >= d.size) throw fail('full');
@@ -382,6 +383,10 @@ class RoomManager {
       if (!st.gameOver || (st.reason !== 'pieces' && st.reason !== 'blocked') || !(st.winner >= 0)) return null;
       return [uidAt(st.winner)];
     }
+    if (room.game === 'durak') {                     // победили все, кто не остался дураком (партия доиграна до конца; ничья — без побед)
+      if (!st.gameOver || st.reason !== 'finished' || !(st.loser >= 0)) return null;
+      return members.filter((m) => m.seat !== st.loser).map((m) => m.uid);
+    }
     if (room.game === 'blackjack') {
       if (st.phase !== 'settled') return null;
       return (Array.isArray(st.seats) ? st.seats : []).map((s, i) => ((s && Array.isArray(s.hands) && s.hands.some((h) => h && (h.outcome === 'win' || h.outcome === 'blackjack')) ? uidAt(i) : null)));
@@ -390,7 +395,7 @@ class RoomManager {
   }
   // Защита от накрутки: побеждать нужно живых соперников, сидящих за столом (зрители и боты не в счёт), а партия «Ятзи» и «Морского боя» не может быть мгновенной
   watchWins(room, d) {
-    if (['yahtzee', 'battleship', 'blackjack', 'checkers'].indexOf(room.game) < 0) return;
+    if (['yahtzee', 'battleship', 'blackjack', 'checkers', 'durak'].indexOf(room.game) < 0) return;
     try {
       let st = null; try { st = d.state ? JSON.parse(d.state) : null; } catch (e) { st = null; }
       if (!st || typeof st !== 'object') return;
@@ -510,7 +515,7 @@ class RoomManager {
   async settleStake(code, room, st, members, since) {
     const entries = Array.from(room.holds.entries());
     for (const [uid, h] of entries) if (!h.seen) await this.payStake(room, code, uid, h.amount, 'refund');
-    const natural = { yahtzee: ['finished'], battleship: ['fleet'], checkers: ['pieces', 'blocked'] }[room.game] || [];
+    const natural = { yahtzee: ['finished'], battleship: ['fleet'], checkers: ['pieces', 'blocked'], durak: ['finished'] }[room.game] || [];
     const minMs = (this.cfg.stakeMinMs || STAKE_MIN_MS)[room.game] || 0;
     if (natural.indexOf(st.reason) < 0 && (!since || this.now() - since < minMs)) {
       for (const [uid, h] of entries) if (h.seen && room.holds.get(uid) === h) await this.payStake(room, code, uid, h.amount, 'refund');
@@ -519,7 +524,8 @@ class RoomManager {
     const seen = entries.filter(([, h]) => h.seen).map(([uid]) => uid), pot = entries.filter(([, h]) => h.seen).reduce((a, [, h]) => a + h.amount, 0);
     const seatOf = (u) => { const m = members.filter((x) => x.uid === u)[0]; return m ? m.seat : 99; };
     let winners = [];
-    if (room.game === 'battleship' || room.game === 'checkers') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);     // в шашках ничья (winner −1): победителей нет, ставки возвращаются
+    if (room.game === 'battleship' || room.game === 'checkers') winners = members.filter((m) => m.seat === st.winner).map((m) => m.uid);
+    else if (room.game === 'durak') winners = st.loser >= 0 ? members.filter((m) => m.seat !== st.loser).map((m) => m.uid) : [];     // дурак отдаёт ставку остальным; ничья — ставки возвращаются     // в шашках ничья (winner −1): победителей нет, ставки возвращаются
     else if (room.game === 'yahtzee') {
       const rows = this.engine.YahtzeeTable.standings(JSON.parse(JSON.stringify(st))).filter((r) => r.active);
       const max = Math.max.apply(null, rows.map((r) => r.total));

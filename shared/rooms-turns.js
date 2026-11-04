@@ -10,11 +10,13 @@
 //   «создатель» (owner) один: он начинает игру (действие start), предлагает новую (rematch), закрывает стол (close); если он уходит, роль переходит дальше.
 //   rooms.createRoom({ size, name, avatar, mode }) → { code, host };  rooms.joinRoom(code, { name, avatar }) → игрок;  rooms.listRooms()
 //   Контроллер: poll(), send(action), leave(), stop(), onChange(fn), getView(); у хоста ещё start(), tick(), close()
+//   Боты (если игра умеет: game.botAction(state, seat, rng)): createRoom({ fillBots: true, botLevel }) — при начале пустые места занимают боты,
+//   они ходят сами через botMs; начать можно и одному. Без fillBots за столом только люди.
 //   Игра (game): CONFIG { minSeats, maxSeats }, PLAYER_ACTIONS, init(seats, options, rng), reduce(state, action, rng), view(state),
 //                waitingSeats(state), progressKey(state, seat). Состояние содержит gameOver.
 (function (root) {
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 100000, askMs: 20000, startDelayMs: 20000, codeLength: 5 };
+  var DEFAULTS = { pollMs: 1000, heartbeatMs: 5000, staleMs: 30000, idleMs: 100000, askMs: 20000, startDelayMs: 20000, codeLength: 5, botMs: 1100 };
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
 
@@ -93,6 +95,9 @@
       var stake = Math.max(0, Math.floor(opts.stake) || 0);   // ставка за столом (аконы с каждого игрока); сервер сам списывает и выплачивает, движок только публикует её
       var code = null, rev = 1, status = 'lobby', full = null, lastBeat = 0, dirty = true, closed = false, lastTick = 0;
       var serverMode = !!opts.owner;       // стол ведёт сервер: создатель — обычный игрок, а не хост
+      var fillBots = !!opts.fillBots && typeof game.botAction === 'function';
+      var botLevel = game.CONFIG.botLevels && game.CONFIG.botLevels.indexOf(opts.botLevel) >= 0 ? opts.botLevel : (game.CONFIG.botLevels ? game.CONFIG.botLevels[1] || game.CONFIG.botLevels[0] : '');
+      var need = fillBots ? 1 : game.CONFIG.minSeats;                // сколько людей нужно, чтобы начать
       var ownerUid = serverMode ? String(opts.owner.uid) : env.uid;
       var members = serverMode
         ? [{ uid: ownerUid, name: String(opts.owner.name || '').slice(0, 20), avatar: Number(opts.owner.avatar) || 0, seat: 0 }]
@@ -109,6 +114,7 @@
       }
       var readyAt = 0;       // момент последнего входа или выхода, когда за столом уже 2 игрока и больше: от него идёт отсчёт до возможности начать
       var processed = {}, idle = {};     // idle[место] = { key, since, stage: 'idle' | 'asking', until }
+      var botWait = { key: null, since: 0 };   // чей ход бота ждём и с какого момента
       var em = emitter();
 
       // Создатель ушёл: роль переходит следующему игроку (в игре — тому, кто ещё за столом)
@@ -130,11 +136,12 @@
         return out;
       }
       // пауза startDelayMs нужна, чтобы успели зайти остальные; стол заполнен — ждать некого, начать можно сразу
-      function touchReady() { readyAt = members.length >= game.CONFIG.minSeats ? (members.length >= size ? now() - cfg.startDelayMs : now()) : 0; }
+      function touchReady() { readyAt = members.length >= need ? (members.length >= size ? now() - cfg.startDelayMs : now()) : 0; }
+      if (fillBots) touchReady();           // с ботами начать можно и одному: отсчёт идёт с создания стола
       function startIn() { return status === 'lobby' && readyAt ? Math.max(0, readyAt + cfg.startDelayMs - now()) : -1; }
       function fields() {
-        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, stake: stake, rev: rev, heartbeat: now(), startIn: startIn(),
-          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, stake: stake, owner: ownerUid, members: members.map(publicMember) }) };
+        var f = { hostUid: env.uid, game: gameId, status: status, size: size, players: members.length, hostName: members[0] ? members[0].name : '', mode: mode, private: isPrivate, stake: stake, fillBots: fillBots, rev: rev, heartbeat: now(), startIn: startIn(),
+          meta: JSON.stringify({ v: 1, game: gameId, size: size, mode: mode, stake: stake, fillBots: fillBots, botLevel: botLevel, owner: ownerUid, members: members.map(publicMember) }) };
         if (full) { f.state = JSON.stringify(game.view(full)); if (game.secrets) f.secret = JSON.stringify(game.secrets(full)); }   // secret — скрытое у каждого игрока (корабли): сервер отдаёт каждому только его часть
         f.timers = JSON.stringify(timersNow());
         if (chat) f.chat = JSON.stringify(chat.list());
@@ -149,10 +156,12 @@
         return putDoc('rooms/' + code, fields());
       }
 
-      function canStart() { return status === 'lobby' && members.length >= game.CONFIG.minSeats && !!readyAt && now() - readyAt >= cfg.startDelayMs; }
+      function canStart() { return status === 'lobby' && members.length >= need && !!readyAt && now() - readyAt >= cfg.startDelayMs; }
       function start() {
         if (!canStart()) return Promise.resolve();
-        full = game.init(members.map(function (m, i) { m.seat = i; return { id: m.uid, name: m.name }; }), { mode: mode, tableSize: size }, rng);
+        var seats = members.map(function (m, i) { m.seat = i; return { id: m.uid, name: m.name }; });
+        if (fillBots) { var names = game.botNames || []; for (var b = seats.length; b < size; b++) seats.push({ id: 'bot:' + b, name: names[(b - members.length) % (names.length || 1)] || ('Bot ' + b), bot: true, level: botLevel }); }
+        full = game.init(seats, { mode: mode, tableSize: size }, rng);
         status = 'playing'; dirty = true; sys('start', '');
         return publish();
       }
@@ -164,7 +173,7 @@
         members = members.filter(function (m) { return (!serverMode && m.uid === env.uid) || alive[m.uid]; });
         members.forEach(function (m, i) { m.seat = i; });
         full = null; status = 'lobby'; idle = {};
-        readyAt = members.length >= game.CONFIG.minSeats ? now() - cfg.startDelayMs : 0;   // те же игроки: ждать 20 секунд не нужно
+        readyAt = members.length >= need ? now() - cfg.startDelayMs : 0;   // те же игроки: ждать 20 секунд не нужно
         sys('again', ''); dirty = true;
         return true;
       }
@@ -228,6 +237,14 @@
       function auto(t) {
         if (status !== 'playing' || !full) return;
         var waiting = full.gameOver ? [] : game.waitingSeats(full), seen = {};
+        var bot = waiting.filter(function (seat) { var p = seatsOf(full)[seat]; return p && p.bot; })[0];
+        if (bot !== undefined) {                            // ход бота: через botMs после того, как до него дошла очередь
+          var bk = game.progressKey(full, bot);
+          Object.keys(idle).forEach(function (k) { delete idle[k]; dirty = true; });      // пока думает бот, таймеры людей не идут
+          if (botWait.key !== bk) { botWait = { key: bk, since: t }; return; }
+          if (t - botWait.since >= cfg.botMs) { var ba = game.botAction(full, bot, rng); if (ba) apply(ba); botWait = { key: null, since: 0 }; }
+          return;
+        }
         waiting.forEach(function (seat) {
           seen[seat] = true;
           var key = game.progressKey(full, seat), e = idle[seat];
@@ -289,7 +306,7 @@
         var me = (m.members || []).filter(function (x) { return x.uid === env.uid; })[0];
         var timers = parseJson(d.timers, []);
         return { code: code, role: 'player', status: d.status, size: d.size, mode: d.mode || m.mode, rev: d.rev, members: m.members || [], state: parseJson(d.state, null), mine: parseJson(d.mine, null), timers: Array.isArray(timers) ? timers : [], startIn: typeof d.startIn === 'number' ? d.startIn : -1,
-          private: d.private === true, stake: Number(d.stake) || 0, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
+          private: d.private === true, stake: Number(d.stake) || 0, fillBots: d.fillBots === true || m.fillBots === true, owner: m.owner || null, receivedAt: now(), chat: (function () { var c = parseJson(d.chat, []); return Array.isArray(c) ? c : []; })(), seat: me ? me.seat : null, joined: !!me, hostGone: false, closed: d.status === 'closed', heartbeat: d.heartbeat };
       }
       function poll() {
         if (stopped) return Promise.resolve(view);

@@ -32,6 +32,10 @@
       titleKey: 'games.mines.title', descriptionKey: 'games.mines.description'
     },
     {
+      id: 'durak', status: 'available', path: 'games/durak/', cover: 'games/durak/cover.webp',
+      titleKey: 'games.durak.title', descriptionKey: 'games.durak.description'
+    },
+    {
       id: 'checkers', status: 'available', path: 'games/checkers/', cover: 'games/checkers/cover.webp',
       titleKey: 'games.checkers.title', descriptionKey: 'games.checkers.description'
     },

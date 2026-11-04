@@ -23,7 +23,7 @@ const EXPERT_GAP_MS = 60000, EXPERT_PER_DAY = 30;                   // нагр�
 const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:00:00Z');
 // Топы: победы онлайн (их фиксирует сервер за столом) и быстрые победы в «Сапёре». Партию «Сапёра» сервер не видит, поэтому время принимается, только если оно не меньше правдоподобного
 // предела уровня (секунды) и не больше, чем игрок мог играть с момента первого хода (сервер ставит отметку на первом ходе партии) плюс запас
-const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'];
+const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers', 'durak'];
 const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 2;
 const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 300000;    // как часто баланс уходит в рейтинг: раз в 5 минут (лимит записей бесплатной базы)
@@ -31,9 +31,9 @@ const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 6
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'], '2048': ['t512', 't1024', 't2048'], blocks: ['s1000', 's2500', 's5000'] };
 // 2048 и «Блоки»: партию сервер не видит, поэтому награда за веху — только раз за партию и не раньше, чем её реально достичь от начала партии
 const TIMED_MIN_MS = { '2048': { t512: 60000, t1024: 150000, t2048: 300000 }, blocks: { s1000: 60000, s2500: 150000, s5000: 300000 } };
-const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 }, 'checkers-easy': { win: 250 }, 'checkers-medium': { win: 350 }, 'checkers-expert': { win: 500 } };
+const REWARD = { blackjack: { win: 250, blackjack: 400 }, 'battleship-easy': { win: 500 }, 'battleship-expert': { win: 500 }, 'checkers-easy': { win: 250 }, 'checkers-medium': { win: 350 }, 'checkers-expert': { win: 500 }, 'durak-easy': { win: 150 }, 'durak-medium': { win: 250 }, 'durak-expert': { win: 400 } };
 const POKER_SRC = 'poker-simple', BOT_STACK = 5000, PK_PHASES = ['preflop', 'flop', 'turn', 'river'];
-const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048', 'checkers', 'checkers-easy', 'checkers-medium', 'checkers-expert', 'blocks'];
+const COUNT_SOURCES = ['yahtzee', 'minesweeper', 'blackjack', 'battleship', 'battleship-easy', 'battleship-expert', 'mines', 'poker-simple', '2048', 'checkers', 'checkers-easy', 'checkers-medium', 'checkers-expert', 'blocks', 'durak', 'durak-easy', 'durak-medium', 'durak-expert'];
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function fail(code) { const e = new Error(code); e.code = code; return e; }
