@@ -237,6 +237,18 @@ test('серия дней идёт по часам игрока, а не по ч
   assert.strictEqual(broke.state.streak, 1, 'с часами сервера серия рвалась (это и была ошибка)');
 });
 
+test('аудит: сменой часового пояса туда-обратно второй бонус дня не получить (день не идёт назад)', async () => {
+  const { svc } = await minesSvc();
+  const t = Date.UTC(2026, 2, 10, 11, 30); svc.now = () => t;     // 11:30 по Гринвичу: в UTC+13 уже 11 марта, в UTC+0 ещё 10-е
+  await svc.act('A', { op: 'markPlayed', tz: -780 });
+  const first = await svc.act('A', { op: 'claimDaily', tz: -780 });
+  svc.tzs.delete('A');                                             // запрет смены пояса в памяти сервера пропал (перезапуск, очистка)
+  const again = await svc.act('A', { op: 'markPlayed', tz: 0 });
+  const claim = await svc.act('A', { op: 'claimDaily', tz: 0 });
+  assert.strictEqual(again.state.playDay, '2026-03-11', 'день остался 11-м');
+  assert.strictEqual(claim.state.balance, first.state.balance, 'второго бонуса нет');
+});
+
 // ---------- Проверки по результатам аудита ----------
 const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
 

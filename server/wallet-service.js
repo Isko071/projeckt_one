@@ -102,7 +102,13 @@ class WalletService {
   // Забывает кошельки, к которым давно не обращались (состояние лежит в хранилище и перечитается)
   gc() {
     const t = this.now();
-    this.touched.forEach((at, uid) => { if (t - at > IDLE_MS && !this.queues.has(uid)) { this.cache.delete(uid); this.rounds.delete(uid); this.pokers.delete(uid); this.fastBest.delete(uid); this.msStart.delete(uid); this.timed.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); } });
+    // Кошелёк забывается через 30 минут без обращений, а защитные отметки (начало партии, пояс, счётчики наград за сутки) живут сутки:
+    // иначе после паузы законная награда за долгую партию пропадала бы, а дневные пределы сбрасывались бы простым ожиданием
+    this.touched.forEach((at, uid) => {
+      if (t - at <= IDLE_MS || this.queues.has(uid)) return;
+      this.cache.delete(uid); this.fastBest.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid);
+      if (t - at > 86400000) { this.rounds.delete(uid); this.pokers.delete(uid); this.msStart.delete(uid); this.timed.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); }
+    });
   }
 
   // Очередь на игрока: операции с одним кошельком не пересекаются
@@ -160,7 +166,7 @@ class WalletService {
   async mutate(uid, fn, extra, rid) {
     const state = await this.load(uid);
     this.touched.set(uid, this.now());
-    this.ctx.cur = clone(state); this.ctx.out = null; this.W.forget(); this.W.setDayShift(this.shifts.get(uid) || 0);
+    this.ctx.cur = clone(state); this.ctx.out = null; this.W.forget(); this.W.setDayShift(this.shifts.get(uid) || 0); this.W.setDayFloor(this.W.latestDay(state));
     let result;
     try { result = fn(this.W); }
     catch (e) { this.ctx.cur = null; throw e; }
@@ -168,7 +174,8 @@ class WalletService {
     this.ctx.cur = null; this.ctx.out = null;
     const changed = JSON.stringify(next) !== JSON.stringify(state);
     const ridList = rid ? (this.rids.get(uid) || []).concat(rid).slice(-RID_KEEP) : null;
-    const writes = (changed || ridList ? [{ op: 'set', coll: 'wallets', id: uid, data: ridList ? Object.assign({}, next, { rids: ridList }) : Object.assign({}, next, { rids: this.rids.get(uid) || [] }) }] : []).concat(extra && extra(result) || []);
+    // Кошелёк записывается, только если изменился: повтор запроса без изменений (rid) помнится в памяти, лишней записи в базу нет
+    const writes = (changed ? [{ op: 'set', coll: 'wallets', id: uid, data: Object.assign({}, next, { rids: ridList || this.rids.get(uid) || [] }) }] : []).concat(extra && extra(result) || []);
     if (writes.length) {
       try { await this.ledger.commit(writes); }
       catch (e) { this.forget(uid); throw fail('ledger'); }       // запись могла пройти, а ответ потеряться: всё, что помним про этого игрока, перечитаем из хранилища
@@ -192,7 +199,7 @@ class WalletService {
     m = m || {};
     const now = this.now();
     // День игрока считается по его часам: сервер у себя живёт по другому поясу
-    let tz = Number.isInteger(m.tz) && m.tz >= -720 && m.tz <= 840 ? m.tz : 0;
+    let tz = Number.isInteger(m.tz) && m.tz >= -840 && m.tz <= 720 ? m.tz : 0;      // getTimezoneOffset: от −840 (UTC+14) до 720 (UTC−12)
     const known = this.tzs.get(uid), serverTz = new Date(now).getTimezoneOffset();
     if (!known) this.tzs.set(uid, { tz, since: now });
     else if (tz !== known.tz && now - known.since >= TZ_LOCK_MS) this.tzs.set(uid, { tz, since: now });
@@ -282,15 +289,22 @@ class WalletService {
     const action = m.op === 'minesCash' ? { type: 'cashout' } : { type: 'open', index: m.index };
     const r = M.reduce(round, action);
     if (!r.ok) throw fail('bad-request');
-    const next = JSON.parse(JSON.stringify(r.state)), over = next.status !== 'playing', first = action.type === 'open' && round.openedCount === 0;
+    const next = JSON.parse(JSON.stringify(r.state)), over = next.status !== 'playing';
     let rw = { granted: 0, lost: 0 };
+    // Пока раунд идёт, открытые клетки живут в памяти сервера: в базу пишется только начало раунда и итог (лимит записей бесплатной базы).
+    // Если сервер перезапустится посреди раунда, раунд продолжится с начала с той же раскладкой — ни выигрыша, ни потери
+    if (!over) {
+      if (rid) this.rids.set(uid, (this.rids.get(uid) || []).concat(rid).slice(-RID_KEEP));
+      this.touched.set(uid, this.now());
+      this.rounds.set(uid, next);
+      return { state: await this.load(uid), result: { mines: view(next), rw } };
+    }
     const res = await this.mutate(uid, (W) => {
-      if (first) { W.markPlayed(now); W.countPlay('mines'); }
-      if (!over) return;
+      W.markPlayed(now); W.countPlay('mines');
       if (next.payout > 0) { W.add(next.payout, 'mines', now); W.countWin('mines'); rw = { granted: next.payout, lost: 0 }; }
       else { const take = Math.min(M.lossFor(next.mines), W.getBalance()); if (take > 0) W.spend(take, 'mines', now); rw = { granted: 0, lost: take }; }
-    }, () => [over ? { op: 'delete', coll: 'rounds', id: uid } : { op: 'set', coll: 'rounds', id: uid, data: next }], rid);
-    if (over) this.rounds.delete(uid); else this.rounds.set(uid, next);
+    }, () => [{ op: 'delete', coll: 'rounds', id: uid }], rid);
+    this.rounds.delete(uid);
     return { state: res.state, result: { mines: view(next), rw } };
   }
 
@@ -321,20 +335,27 @@ class WalletService {
     W.markPlayed(now); W.countPlay(POKER_SRC);
     return this.pokerSpend(r, W, now);
   }
-  // Ставки игрока этой раздачи списываются с баланса по мере роста его вклада в банк
-  pokerSpend(r, W, now) {
+  // Ставки игрока этой раздачи: пока раздача идёт, сервер только проверяет, что они по карману, а списывает всё одной записью в конце
+  // (pokerSettle, pokerCharge). Так раздача стоит базе несколько записей, а не запись на каждый ход игрока и ботов
+  pokerSpend(r, W) {
     const total = r.st.seats[0].total;
-    if (total > r.spent) {
-      if (!r.free && !W.spend(total - r.spent, POKER_SRC, now)) return false;
-      r.spent = total;
-    }
+    if (!r.free && total > W.getBalance()) return false;
+    r.spent = Math.max(r.spent || 0, total);
     return true;
+  }
+  // Раздача брошена посреди игры (уход, новый стол): поставленное остаётся в банке — списывается
+  pokerCharge(r, W, now) {
+    if (!r || r.free || PK_PHASES.indexOf(r.st.phase) < 0) return;
+    const bet = Math.min(r.st.seats[0].total, W.getBalance());
+    if (bet > 0) W.spend(bet, POKER_SRC, now);
+    r.spent = 0;
   }
   // Итог раздачи: выплата (с дневным пределом выигрыша против ботов) и победа в счётчик
   pokerSettle(r, W, now) {
-    const me = r.st.seats[0], payout = me.total + me.net;
+    const me = r.st.seats[0], payout = me.total + me.net, bet = r.free ? 0 : Math.min(me.total, W.getBalance());
     let rw = { capped: false, granted: 0 };
-    if (!r.free && (payout > 0 || r.spent > 0)) { const cr = W.capPayout(POKER_SRC, payout, r.spent, now); rw = { capped: cr.capped, granted: cr.granted }; }     // и проигрыш: он возвращает дневной лимит
+    if (bet > 0) W.spend(bet, POKER_SRC, now);
+    if (!r.free && (payout > 0 || bet > 0)) { const cr = W.capPayout(POKER_SRC, payout, bet, now); rw = { capped: cr.capped, granted: cr.granted }; }     // и проигрыш: он возвращает дневной лимит
     if (me.net > 0 && !r.free) W.countWin(POKER_SRC);
     r.spent = 0;
     return rw;
@@ -346,9 +367,10 @@ class WalletService {
     if (m.op === 'pokerState') return { state: await this.load(uid), result: { poker: r ? this.pokerView(r) : null } };
     if (m.op === 'pokerLeave') {
       // Уход из-за стола посреди раздачи равен сбросу: поставленное остаётся в банке
-      const s = await this.load(uid);
-      if (r) { try { await this.ledger.commit([{ op: 'delete', coll: 'rounds', id: key }]); } catch (e) { this.forget(uid); throw fail('ledger'); } this.pokers.delete(uid); }
-      return { state: s, result: { poker: null } };
+      if (!r) return { state: await this.load(uid), result: { poker: null } };
+      const left = await this.mutate(uid, (W) => this.pokerCharge(JSON.parse(JSON.stringify(r)), W, now), () => [{ op: 'delete', coll: 'rounds', id: key }]);
+      this.pokers.delete(uid);
+      return { state: left.state, result: { poker: null } };
     }
     let next = null, rw = null, dealt = true;
     if (m.op === 'pokerStart') {
@@ -369,7 +391,7 @@ class WalletService {
     const res = await this.mutate(uid, (W) => {
       if (m.op === 'pokerStart' || m.op === 'pokerNext') {
         if (m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
-        if (m.op === 'pokerStart') W.capStart(now);
+        if (m.op === 'pokerStart') { this.pokerCharge(r && JSON.parse(JSON.stringify(r)), W, now); W.capStart(now); }     // прошлый стол брошен посреди раздачи: его ставки списываются
         dealt = this.pokerDeal(next, W, now);
         if (dealt && next.st.phase === 'settled') rw = this.pokerSettle(next, W, now);       // раздача закончилась внутри deal (мало фишек): итог подводится сразу
         if (!dealt && m.op === 'pokerNext' && st0.phase !== 'settled') throw fail('bad-request');
@@ -391,9 +413,13 @@ class WalletService {
       const out = PK.reduce(st0, action, rng);
       if (!out.ok) throw fail('bad-request');
       next.st = JSON.parse(JSON.stringify(out.state));
-      if (!this.pokerSpend(next, W, now)) throw fail('no-funds');
+      if (!this.pokerSpend(next, W)) throw fail('no-funds');
       if (next.st.phase === 'settled') rw = this.pokerSettle(next, W, now);
-    }, () => (dealt ? [{ op: 'set', coll: 'rounds', id: key, data: next }] : (r ? [{ op: 'delete', coll: 'rounds', id: key }] : [])));
+    }, () => {
+      if (!dealt) return r ? [{ op: 'delete', coll: 'rounds', id: key }] : [];
+      // В базу раздача пишется в начале и в конце; ходы между ними живут в памяти сервера
+      return m.op === 'pokerStart' || m.op === 'pokerNext' || next.st.phase === 'settled' ? [{ op: 'set', coll: 'rounds', id: key, data: next }] : [];
+    });
     if (!dealt) { this.pokers.delete(uid); return { state: res.state, result: { poker: null, broke: true } }; }
     this.pokers.set(uid, next);
     return { state: res.state, result: { poker: this.pokerView(next, rw) } };

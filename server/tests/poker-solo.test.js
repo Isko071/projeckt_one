@@ -17,13 +17,14 @@ async function playHand(wallet, uid, first) {
     const st = r.result.poker.st;
     if (st.current === 0) {
       const to = st.currentBet - st.seats[0].bet;
-      r = await op(wallet, uid, { op: 'pokerAct', action: { type: to > 0 ? 'call' : (st.mandatory.indexOf(st.phase) >= 0 ? 'raise' : 'check'), amount: st.minBet } });
+      const must = to <= 0 && st.mandatory.indexOf(st.phase) >= 0;
+      r = await op(wallet, uid, { op: 'pokerAct', action: { type: to > 0 ? 'call' : (must ? (st.seats[0].chips > st.minBet ? 'raise' : 'allin') : 'check'), amount: st.minBet } });
     } else r = await op(wallet, uid, { op: 'pokerBot' });
   }
   return r;
 }
 
-test('покер: раздача, ставки списываются сразу, чужие карты скрыты', async () => {
+test('покер: раздача, ставки списываются одной записью в конце, чужие карты скрыты', async () => {
   const { wallet } = await mk();
   const r = await op(wallet, 'A', { op: 'pokerStart', size: 4, ante: 50, name: 'Аня' });
   const p = r.result.poker, st = p.st;
@@ -32,8 +33,8 @@ test('покер: раздача, ставки списываются сразу
   assert.ok(st.seats[0].cards.every((c) => typeof c === 'string'), 'свои карты видны');
   assert.ok(st.seats[1].cards.every((c) => c === null), 'карты бота скрыты');
   assert.strictEqual(st.deck, undefined, 'колоды в виде нет');
-  assert.strictEqual(r.state.balance, 5000 - p.spent, 'списано то, что поставлено');
-  assert.ok(p.spent >= 50);
+  assert.ok(p.spent >= 50, 'поставленное учтено');
+  assert.strictEqual(r.state.balance, 5000, 'пока раздача идёт, баланс не трогается (запись в базу — в конце)');
 });
 
 test('покер: до конца раздачи баланс сходится с итогом, раунд сохраняется в хранилище', async () => {
@@ -89,8 +90,9 @@ test('покер: следующая раздача за тем же столо�
   r = await op(wallet, 'A', { op: 'pokerNext' });
   if (!r.result.poker) { assert.strictEqual(r.result.broke, true, 'проигрался до нуля: стол закрыт'); return; }
   assert.strictEqual(r.result.poker.st.round, 2);
-  assert.ok(r.state.balance < after || r.result.poker.free, 'ставка новой раздачи списана');
+  const bet = r.result.poker.free ? 0 : r.result.poker.spent;
   const left = await op(wallet, 'A', { op: 'pokerLeave' });
+  assert.strictEqual(left.state.balance, after - bet, 'ушёл посреди раздачи — поставленное списано');
   assert.strictEqual(left.result.poker, null);
   assert.strictEqual(await ledger.get('rounds', 'A_pk'), null);
   await assert.rejects(op(wallet, 'A', { op: 'pokerAct', action: { type: 'fold' } }), /no-round/);
@@ -100,8 +102,7 @@ test('покер: новый стол посреди раздачи — пост
   const { wallet } = await mk();
   const a = await op(wallet, 'A', { op: 'pokerStart', size: 3, ante: 100 });
   const b = await op(wallet, 'A', { op: 'pokerStart', size: 3, ante: 100 });
-  assert.ok(b.state.balance <= a.state.balance - 100 + a.result.poker.spent, 'потерянная раздача не возвращена');
-  assert.ok(b.state.balance < 5000 - 100, 'обе начальные ставки списаны');
+  assert.strictEqual(b.state.balance, 5000 - a.result.poker.spent, 'брошенная раздача списана, новая ещё идёт');
 });
 
 test('покер: выигрыш против ботов упирается в дневной предел, дальше играют без аконов', async () => {
@@ -117,4 +118,26 @@ test('покер: выигрыш против ботов упирается в �
   }
   const s = await ledger.get('wallets', 'A');
   assert.ok(s.balance <= 1000 + 2500, 'чистый выигрыш за день не больше предела: ' + s.balance);
+});
+
+test('лимит записей базы: раздача покера и раунд «Мин» — несколько записей, а не запись на каждый ход', async () => {
+  const { wallet, ledger } = await mk();
+  let writes = 0; const commit = ledger.commit.bind(ledger);
+  ledger.commit = (list) => { writes += list.length; return commit(list); };
+  let r = await op(wallet, 'A', { op: 'pokerStart', size: 4, ante: 50 });
+  let moves = 0;
+  for (let i = 0; i < 80 && r.result.poker.st.phase !== 'settled'; i++, moves++) {
+    const st = r.result.poker.st;
+    r = await op(wallet, 'A', st.current === 0 ? { op: 'pokerAct', action: { type: st.currentBet > st.seats[0].bet ? 'call' : 'check' } } : { op: 'pokerBot' });
+  }
+  assert.ok(moves >= 3, 'раздача шла несколько ходов: ' + moves);
+  assert.ok(writes <= 5, 'новый кошелёк + начало + итог раздачи: ' + writes + ' записей на ' + moves + ' ходов');
+  writes = 0;
+  await op(wallet, 'B', { op: 'minesStart', mines: 3 });
+  const round = wallet.rounds.get('B');
+  const safe = round.layout.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0).slice(0, 4);
+  for (const i of safe) await op(wallet, 'B', { op: 'minesOpen', index: i, rid: 'rid-open-' + i });
+  await op(wallet, 'B', { op: 'minesCash' });
+  assert.ok(writes <= 4, 'новый кошелёк + начало + итог раунда: ' + writes);
+  assert.ok((await wallet.load('B')).balance > 5000, 'выигрыш начислен');
 });
