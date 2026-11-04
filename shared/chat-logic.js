@@ -17,40 +17,7 @@
   function clean(text) {
     var s = String(text === undefined || text === null ? '' : text).replace(/[\r\n\t]+/g, ' ').replace(BAD, '').replace(/\s+/g, ' ').trim();
     var chars = Array.from(s);
-    return censor(chars.length > CONFIG.maxLen ? chars.slice(0, CONFIG.maxLen).join('').trim() : s);
-  }
-
-  // Грубый мат: корень слова закрывается звёздочками (первая буква остаётся: «х**», «п***ец»). Обычные слова не задеваются:
-  // «е*» ловится только в начале слова (иначе «хлеба», «небо»), «бля» — только отдельно или как «блядь» (иначе «употребляю»),
-  // «ху*» — только в начале слова или после «на/по/ни/о/а» (иначе «застрахуй»). Латинские буквы-двойники (a, e, o, p, c, x, y) читаются как русские
-  var LOOK = { a: 'а', e: 'е', o: 'о', p: 'р', c: 'с', x: 'х', y: 'у', k: 'к', m: 'м', t: 'т', b: 'в', h: 'н', 'ё': 'е', '0': 'о', '3': 'з' };
-  var SWEAR = [
-    /(^|[^а-я])((?:на|по|ни|о|а|от|до)?ху[йеяиюё])/g,
-    /(^|[^а-я])?([а-я]*?пизд)/g,
-    /(^|[^а-я])((?:за|вы|на|по|у|от|до|раз|рас|съ|въ|объ|пере|при|про|из|изъ|недо)?еб(?:а|у(?!р)|л|ну|ыв|ись|ет|ош|ан|ен|ук|ок|ик|ал|он))/g,
-    /(^|[^а-я])(бля(?:дь|ди|дск|дин|дств|ть|т)?)(?=$|[^а-я])/g,
-    /(^|[^а-я])(муд(?:ак|ил|оз|ох))/g,
-    /(^|[^а-я])(пид[оа]?р)/g,
-    /(^|[^а-я])(залуп)/g
-  ];
-  function censor(text) {
-    var low = String(text).toLowerCase(), norm = '', i;
-    for (i = 0; i < low.length; i++) norm += LOOK[low[i]] || low[i];
-    if (norm.length !== text.length) return text;                         // на всякий случай: длина должна совпадать посимвольно
-    var hide = [];
-    SWEAR.forEach(function (re) {
-      re.lastIndex = 0;
-      var m;
-      while ((m = re.exec(norm))) {
-        var start = m.index + (m[1] ? m[1].length : 0), word = m[2];
-        for (i = start + 1; i < start + word.length; i++) hide[i] = true;
-        if (re.lastIndex === m.index) re.lastIndex++;
-      }
-    });
-    if (!hide.length) return text;
-    var out = '';
-    for (i = 0; i < text.length; i++) out += hide[i] && /[^\s]/.test(text[i]) ? '*' : text[i];
-    return out;
+    return chars.length > CONFIG.maxLen ? chars.slice(0, CONFIG.maxLen).join('').trim() : s;
   }
 
   // Журнал последних сообщений: id растёт без пропусков, лишнее старое отбрасывается
@@ -82,5 +49,5 @@
     };
   }
 
-  root.PlatformChat = { CONFIG: CONFIG, clean: clean, censor: censor, createLog: createLog, createLimiter: createLimiter };
+  root.PlatformChat = { CONFIG: CONFIG, clean: clean, createLog: createLog, createLimiter: createLimiter };
 })(typeof window !== 'undefined' ? window : globalThis);
