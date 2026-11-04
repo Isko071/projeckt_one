@@ -30,7 +30,7 @@
 ## Настройка Firebase (сделана для проекта `igroteka-29263`)
 
 1. Authentication → Sign-in method → Google включён.
-2. Authentication → Settings → Authorized domains: домен сайта (например `isko071.github.io`).
+2. Authentication → Settings → Authorized domains: домены сайта: `partejka.pages.dev` (и прежний `isko071.github.io`).
 3. Firestore: база `(default)` (именованной базы `igroteka-db` в проекте нет, запросы к ней дают 404), правила:
 ```
 rules_version = '2';

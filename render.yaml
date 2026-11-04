@@ -12,4 +12,4 @@ services:
       - key: FIREBASE_PROJECT_ID
         value: igroteka-29263
       - key: ALLOWED_ORIGINS
-        value: https://isko071.github.io
+        value: https://partejka.pages.dev,https://isko071.github.io
