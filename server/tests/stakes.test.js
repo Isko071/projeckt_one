@@ -9,10 +9,10 @@ const { WalletService } = require('../wallet-service');
 const engine = loadEngine();
 function conn(uid) { const c = { uid, msgs: [], send(o) { this.msgs.push(o); } }; c.last = () => { const d = c.msgs.filter((m) => m.t === 'doc'); return d.length ? d[d.length - 1].doc : null; }; c.wallet = () => { const w = c.msgs.filter((m) => m.t === 'wallet'); return w.length ? w[w.length - 1].state : null; }; return c; }
 const settle = (ms) => new Promise((r) => setTimeout(r, ms || 40));
-async function mk(seeds) {
+async function mk(seeds, cfg) {
   const ledger = new MemLedger({ seeds: seeds || {} }), wallet = new WalletService({ ledger });
   await wallet.init();
-  const m = new RoomManager({ engine, wallet, config: { engineOptions: { startDelayMs: 0 }, strayMs: 50 } });
+  const m = new RoomManager({ engine, wallet, config: Object.assign({ engineOptions: { startDelayMs: 0 }, strayMs: 50, stakeMinMs: {} }, cfg || {}) });
   return { m, wallet, ledger };
 }
 const bal = async (wallet, uid) => (await wallet.act(uid, { op: 'sync' })).state.balance;

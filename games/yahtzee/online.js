@@ -646,7 +646,8 @@
     }
   });
   appEl.addEventListener('keydown', function (e) { if (e.target.id === 'ocode' && e.key === 'Enter') { e.preventDefault(); joinTable(on.code); } });
-  window.addEventListener('pagehide', function () { if (G) { try { if (G.role === 'host') G.ctrl.close(); else G.ctrl.leave(); } catch (e) { /* закрываем страницу */ } } });
+  // Закрытие и перезагрузка вкладки за серверным столом — не выход (shared/rooms-ws.js); стол, который держит сам браузер, закрываем
+  window.addEventListener('pagehide', function () { if (G && G.role === 'host') { try { G.ctrl.close(); } catch (e) { /* закрываем страницу */ } } });
   if (window.PlatformWalletSync) window.PlatformWalletSync.onStatus(function () { if (isOn() && on.screen === 'create') render(); });
   Cloud.onChange(function () {
     if (!isOn()) return;

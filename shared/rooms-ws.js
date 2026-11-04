@@ -222,6 +222,21 @@
     if (pinger && pinger.unref) pinger.unref();
     if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
     if (typeof root.addEventListener === 'function') root.addEventListener('online', check);
+    // Закрытие или перезагрузка вкладки — не выход из-за стола: сервер ждёт игрока 45 секунд.
+    // Код стола остаётся в адресе (#K7M4Q), поэтому после перезагрузки игра сама вернёт за тот же стол.
+    // Выход в каталог через «Выйти» (PlatformLeave) — настоящий выход: тогда сразу сообщаем серверу и код в адрес не пишем.
+    var leaving = false;
+    if (typeof root.addEventListener === 'function') {
+      root.addEventListener('platform-leave', function () {
+        leaving = true;
+        Object.keys(rooms).forEach(function (code) { if (rooms[code] && !rooms[code].stopped) fire({ t: 'leave', code: code }); });
+      });
+      root.addEventListener('pagehide', function () {
+        if (leaving) return;
+        var open = Object.keys(rooms).filter(function (code) { return rooms[code] && !rooms[code].stopped; })[0];
+        if (open && root.history && root.location) { try { root.history.replaceState(null, '', root.location.pathname + root.location.search + '#' + open); } catch (e) { /* адрес не обязателен */ } }
+      });
+    }
 
     return {
       createRoom: createRoom, joinRoom: joinRoom, listRooms: listRooms,

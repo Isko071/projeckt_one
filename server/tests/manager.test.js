@@ -54,7 +54,7 @@ test('пустой стол удаляется, чужие и неизвестн
   const code = await m.create(a, 'yahtzee', { size: 2, mode: 'sync', name: 'Аня' });
   assert.throws(() => m.act(a, code, { type: 'hack' }), /bad-action/);
   assert.throws(() => m.act(a, 'NOPE1', { type: 'chat' }), /not-found/);
-  await assert.rejects(m.join(conn('B'), 'blackjack', code, {}), /wrong-game/);
+  await assert.rejects(m.join(conn('B'), 'blackjack', code, {}), /not-found/);
   m.leave(a, code);
   await settle();
   m.tick();
@@ -94,4 +94,35 @@ test('морской бой: корабли и оружие соперника �
   const over = JSON.parse(a.last().state);
   assert.strictEqual(over.gameOver, true); assert.strictEqual(over.winner, 0); assert.strictEqual(over.reason, 'left');
   assert.ok(over.seats[1].ships.length === 10, 'после конца корабли открыты');
+});
+
+test('аудит: тот же аккаунт с двух вкладок — закрытие одной не выход из-за стола', async () => {
+  const m = mk(), a = conn('A'), b = conn('B'), b2 = conn('B');
+  const code = await m.create(a, 'checkers', { size: 2, name: 'Аня' });
+  await m.join(b, 'checkers', code, { name: 'Боря' });
+  await m.join(b2, 'checkers', code, { name: 'Боря' });
+  await new Promise((r) => setTimeout(r, 40));
+  m.leave(b2, code);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(m.isMember(m.rooms.get(code), 'B'), 'Боря по-прежнему за столом');
+  m.leave(b, code);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(!m.isMember(m.rooms.get(code), 'B'), 'последняя вкладка вышла — вышел и игрок');
+  m.stop();
+});
+
+test('аудит: у одного игрока не больше двух ждущих столов, перебор кодов ограничен, ник очищается', async () => {
+  const m = mk(), a = conn('A');
+  const c1 = await m.create(a, 'checkers', { size: 2, name: '‮​' });
+  const c2 = await m.create(a, 'checkers', { size: 2, name: 'Аня' });
+  const c3 = await m.create(a, 'battleship', { size: 2, name: 'Аня' });
+  assert.ok(!m.rooms.has(c1) && m.rooms.has(c2) && m.rooms.has(c3), 'третий стол закрыл самый старый');
+  assert.strictEqual(m.members(m.rooms.get(c2))[0].name, 'Аня');
+  const c4 = await m.create(conn('C'), 'checkers', { size: 2, name: '   ' });
+  assert.strictEqual(m.members(m.rooms.get(c4))[0].name, 'Игрок');
+  const x = conn('X');
+  for (let i = 0; i < 10; i++) await assert.rejects(m.join(x, 'checkers', 'ZZZZ' + i, {}), /not-found/);
+  await assert.rejects(m.join(x, 'checkers', c2, {}), /slow-down/, 'после 10 промахов за минуту даже верный код не принимается');
+  await assert.rejects(m.join(conn('Y'), 'checkers', c3, {}), /not-found/, 'стол другой игры — «не найден»');
+  m.stop();
 });

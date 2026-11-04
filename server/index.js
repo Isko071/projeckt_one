@@ -14,7 +14,7 @@ async function startServer(o) {
   o = o || {};
   const verify = o.verify || makeVerifier({ projectId: o.projectId, insecure: o.insecure });
   const origins = (o.allowedOrigins || []).filter(Boolean);
-  const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxMsg = 8000, perSec = 20;
+  const maxConns = o.maxConns || 400, maxPerIp = o.maxPerIp || 20, maxPerUid = o.maxPerUid || 8, authMs = o.authMs || 10000, maxMsg = 8000, perSec = 20;
   const ledger = o.ledger === undefined ? makeLedger(o.env) : o.ledger;      // null — серверный баланс выключен, ставки за столами недоступны
   const wallet = ledger ? new WalletService({ ledger, now: o.now }) : null;
   if (wallet) { await wallet.init(); if (o.ratings !== false) wallet.startRatings(); }                                            // залоги, оставшиеся от столов прошлого запуска, возвращаются
@@ -81,6 +81,7 @@ async function startServer(o) {
     const conn = { uid: null, rooms: new Set(), send: (obj) => { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); } };
     let alive = true, count = 0, authing = false;
     const rate = setInterval(() => { count = 0; }, 1000);
+    const authWait = setTimeout(() => { if (!conn.uid) ws.close(1008, 'auth'); }, authMs);      // не вошёл за 10 секунд — сокет закрывается и не занимает место
     ws.on('pong', () => { alive = true; });
     const ping = setInterval(() => { if (!alive) return ws.terminate(); alive = false; ws.ping(); }, 20000);
 
@@ -93,8 +94,11 @@ async function startServer(o) {
       if (!conn.uid) {
         if (m.t !== 'auth' || authing) return;
         authing = true;
-        try { conn.uid = (await verify(m.token)).uid; manager.conns.add(conn); manager.counters.connects++; manager.counters.peakConns = Math.max(manager.counters.peakConns, manager.conns.size); conn.send({ t: 'ready', uid: conn.uid, wallet: !!wallet }); }
-        catch (e) { manager.counters.denied++; manager.event('denied', { info: 'token' }); conn.send({ t: 'denied' }); ws.close(1008, 'auth'); }
+        try {
+          const uid = (await verify(m.token)).uid;
+          if (manager.connsOf(uid) >= maxPerUid) { manager.counters.errors++; manager.event('error', { uid, info: 'conns' }); ws.close(1013, 'busy'); return; }
+          conn.uid = uid; clearTimeout(authWait); manager.conns.add(conn); manager.counters.connects++; manager.counters.peakConns = Math.max(manager.counters.peakConns, manager.conns.size); conn.send({ t: 'ready', uid: conn.uid, wallet: !!wallet });
+        } catch (e) { manager.counters.denied++; manager.event('denied', { info: 'token' }); conn.send({ t: 'denied' }); ws.close(1008, 'auth'); }
         return;
       }
       try {
@@ -108,8 +112,9 @@ async function startServer(o) {
       } catch (e) { if (!e || !e.code || ['error', 'timeout'].indexOf(e.code) >= 0) { manager.counters.errors++; manager.event('error', { uid: conn.uid, info: String((e && e.code) || 'error') }); } err(e); }
     });
     ws.on('close', () => {
-      clearInterval(rate); clearInterval(ping);
-      perIp.set(ip, Math.max(0, (perIp.get(ip) || 1) - 1));
+      clearInterval(rate); clearInterval(ping); clearTimeout(authWait);
+      const left = Math.max(0, (perIp.get(ip) || 1) - 1);
+      if (left) perIp.set(ip, left); else perIp.delete(ip);
       if (conn.uid) manager.disconnect(conn);
     });
     ws.on('error', () => {});

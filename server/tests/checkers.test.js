@@ -9,10 +9,10 @@ const { WalletService } = require('../wallet-service');
 const engine = loadEngine(), C = engine.Checkers;
 function conn(uid) { const c = { uid, msgs: [], send(o) { this.msgs.push(o); } }; c.last = () => { const d = c.msgs.filter((m) => m.t === 'doc'); return d.length ? d[d.length - 1].doc : null; }; return c; }
 const settle = (ms) => new Promise((r) => setTimeout(r, ms || 40));
-async function table(stake) {
+async function table(stake, cfg) {
   const ledger = new MemLedger(), wallet = new WalletService({ ledger });
   await wallet.init();
-  const m = new RoomManager({ engine, wallet, config: { engineOptions: { startDelayMs: 0 }, strayMs: 50 } });
+  const m = new RoomManager({ engine, wallet, config: Object.assign({ engineOptions: { startDelayMs: 0 }, strayMs: 50, stakeMinMs: {} }, cfg || {}) });
   const a = conn('A'), b = conn('B');
   const code = await m.create(a, 'checkers', { size: 2, name: 'Аня', stake });
   await m.join(b, 'checkers', code, { name: 'Боря' });
@@ -72,5 +72,12 @@ test('шашки онлайн: ничья — ставки возвращают�
   // доводим партию до ничьей прямо в документе стола: проверяем расчёт ставок по итогу «draw»
   const st = stateOf(a); st.gameOver = true; st.winner = -1; st.reason = 'draw'; st.current = -1;
   await m.settleStake(code, room, st, m.members(room));
+  assert.strictEqual(await bal(wallet, 'A'), 5000); assert.strictEqual(await bal(wallet, 'B'), 5000);
+});
+
+test('шашки онлайн: сдача в первые секунды — ставки возвращаются обоим (аконы не перелить на свой второй аккаунт)', async () => {
+  const { m, wallet, a, b, code } = await table(300, { stakeMinMs: undefined });
+  m.act(b, code, { type: 'concede', seat: seatOf(b) }); await settle(120);
+  assert.strictEqual(stateOf(a).reason, 'concede');
   assert.strictEqual(await bal(wallet, 'A'), 5000); assert.strictEqual(await bal(wallet, 'B'), 5000);
 });
