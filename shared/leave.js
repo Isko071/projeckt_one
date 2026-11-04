@@ -37,5 +37,40 @@
     e.preventDefault();
     ask(a.href);
   });
-  root.PlatformLeave = { ask: ask };
+  // Кнопка «Назад» браузера и жест «назад» на телефоне внутри игры: ведут себя как кнопка выхода игры.
+  // Идёт партия — игра сама спросит, выходить ли (или вернётся в своё меню); на стартовом экране игры — обычный переход назад.
+  // Для этого в истории браузера лежит одна лишняя запись с тем же адресом: «назад» сначала приходит на неё, и мы решаем, что делать.
+  // Игра может задать свой обработчик: PlatformLeave.onBack = function () { return true, если «назад» обработан }
+  var guarded = false, lastHref = root.location.href;
+  // Адрес меняется через replaceState (код стола #K7M4Q в онлайне): запоминаем его, чтобы после «назад» запись-защита получила тот же адрес
+  if (root.history && root.history.replaceState) {
+    var origReplace = root.history.replaceState;
+    root.history.replaceState = function () { var r = origReplace.apply(root.history, arguments); lastHref = root.location.href; return r; };
+  }
+  function visibleExit() {
+    var list = document.querySelectorAll('[data-act="exit"], [data-act="menu"][data-key="exit"], .top-actions [data-act="menu"]');      // выход игры; в 2048 и «Блоках» — «←» в меню игры (партия сохраняется)
+    for (var i = 0; i < list.length; i++) if (list[i].offsetParent !== null && !list[i].disabled) return list[i];
+    return null;
+  }
+  function arm() {
+    if (guarded || !root.history || !root.history.pushState) return;
+    try { root.history.pushState({ guard: true }, '', lastHref); guarded = true; lastHref = root.location.href; } catch (e) { /* без защиты */ }
+  }
+  if (/\/games\//.test(root.location.pathname)) {
+    root.addEventListener('popstate', function () {
+      if (!guarded) { lastHref = root.location.href; return; }
+      guarded = false;
+      if (open) { close(); arm(); return; }                                   // открыто окно «Выйти в каталог?» — «назад» его закрывает
+      var hook = root.PlatformLeave.onBack, handled = false;
+      try { handled = hook ? !!hook() : false; } catch (e) { handled = false; }
+      if (!handled) { var btn = visibleExit(); if (btn) { btn.click(); handled = true; } }
+      if (handled) arm();                                                      // остались на странице: снова ставим запись-защиту
+      else root.history.back();                                                // стартовый экран игры: настоящий переход назад
+    });
+    // Запись-защита ставится после первого касания страницы: иначе браузер может пропустить её при «назад» (защита от навязчивых сайтов)
+    ['pointerdown', 'keydown'].forEach(function (t) { document.addEventListener(t, arm, true); });
+    root.addEventListener('pageshow', function (e) { if (e.persisted) guarded = !!(root.history.state && root.history.state.guard); });
+  }
+
+  root.PlatformLeave = { ask: ask, onBack: null };
 })(window);
