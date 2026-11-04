@@ -37,3 +37,10 @@ td.wrap { white-space: normal; min-width: 140px; }
 .tab.ext { display: inline-flex; align-items: center; text-decoration: none; margin-left: auto; }
 
 .btn.sm { min-height: 28px; padding: 0 8px; margin-left: 6px; font-size: 13px; }
+/* Вкладка «Ошибки» */
+.badge { display: inline-flex; min-width: 20px; height: 20px; padding: 0 6px; align-items: center; justify-content: center; border-radius: 999px; background: oklch(0.6 0.2 27); color: #fff; font-size: 12px; font-weight: 800; }
+.card.warn { border-color: oklch(0.6 0.2 27); }
+.card.warn b { color: oklch(0.6 0.2 27); }
+details summary { cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+details summary small, td small { display: block; color: var(--muted); }
+details pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; max-height: 240px; overflow: auto; }

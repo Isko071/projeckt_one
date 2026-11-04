@@ -9,6 +9,15 @@ const GAMES = ['blackjack', 'yahtzee', 'poker', 'poker-simple', 'battleship', 'c
 const POKER = ['poker', 'poker-simple'];
 const STAKE_GAMES = ['yahtzee', 'battleship', 'checkers'];     // в каких играх за столом бывает ставка
 
+// Браузер и система коротко (без лишних подробностей): «Chrome 120 · Android», «Safari · iOS», «Samsung Internet · Android»
+function browserOf(ua) {
+  ua = String(ua || '');
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  const m = ua.match(/SamsungBrowser\/(\d+)/) ? ['Samsung Internet', ua.match(/SamsungBrowser\/(\d+)/)[1]] : ua.match(/YaBrowser\/(\d+)/) ? ['Яндекс', ua.match(/YaBrowser\/(\d+)/)[1]] : ua.match(/Edg\/(\d+)/) ? ['Edge', ua.match(/Edg\/(\d+)/)[1]] : ua.match(/OPR\/(\d+)/) ? ['Opera', ua.match(/OPR\/(\d+)/)[1]] : ua.match(/Firefox\/(\d+)/) ? ['Firefox', ua.match(/Firefox\/(\d+)/)[1]] : ua.match(/Chrome\/(\d+)/) ? ['Chrome', ua.match(/Chrome\/(\d+)/)[1]] : ua.match(/Version\/(\d+).*Safari/) ? ['Safari', ua.match(/Version\/(\d+).*Safari/)[1]] : null;
+  const tg = /Telegram/i.test(ua) ? ' (Telegram)' : '';
+  return m ? m[0] + ' ' + m[1] + tg + (os ? ' · ' + os : '') : (os || 'другой');
+}
+
 function fail(code) { const e = new Error(code); e.code = code; return e; }
 
 class RoomManager {
@@ -35,6 +44,7 @@ class RoomManager {
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
+    this.clientErrors = new Map();     // ошибки из браузеров игроков: «текст|место» → { msg, where, stack, first, last, count, pages, browsers }
     this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
@@ -45,6 +55,25 @@ class RoomManager {
   }
   nameOf(room, uid) { const m = this.members(room).filter((x) => x.uid === uid)[0]; return m ? m.name : ''; }
   // Данные для кабинета: сводка, живые столы и последние события (новые сверху)
+  // ---------- Ошибки из браузеров игроков (для кабинета) ----------
+  // Одинаковые ошибки (текст + место) складываются в одну строку со счётчиком; хранится не больше 200 разных, самые старые уходят
+  reportError(r, ua) {
+    const str = (v, n) => String(v === undefined || v === null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').slice(0, n);
+    const msg = str(r.msg, 300), where = str(r.where, 200), page = str(r.page, 120).replace(/[?#].*$/, '');
+    if (!msg) return;
+    const key = msg + '|' + where, t = this.now();
+    let e = this.clientErrors.get(key);
+    if (!e) {
+      if (this.clientErrors.size >= 200) { let old = null; this.clientErrors.forEach((x, k) => { if (!old || x.last < this.clientErrors.get(old).last) old = k; }); this.clientErrors.delete(old); }
+      e = { msg, where, stack: str(r.stack, 800), first: t, last: t, count: 0, pages: [], browsers: [] };
+      this.clientErrors.set(key, e);
+    }
+    e.count++; e.last = t;
+    if (page && e.pages.indexOf(page) < 0 && e.pages.length < 6) e.pages.push(page);
+    const br = browserOf(ua);
+    if (br && e.browsers.indexOf(br) < 0 && e.browsers.length < 6) e.browsers.push(br);
+  }
+
   adminReport() {
     const tables = [];
     this.rooms.forEach((room, code) => {
@@ -54,7 +83,8 @@ class RoomManager {
     const t = this.now();
     return {
       now: t, startedAt: this.startedAt, uptimeMs: t - this.startedAt, rooms: this.rooms.size, conns: this.conns.size,
-      counters: JSON.parse(JSON.stringify(this.counters)), tables, events: this.events.slice().reverse()
+      counters: JSON.parse(JSON.stringify(this.counters)), tables, events: this.events.slice().reverse(),
+      clientErrors: Array.from(this.clientErrors.values()).sort((a, b) => b.last - a.last).slice(0, 100)
     };
   }
 
