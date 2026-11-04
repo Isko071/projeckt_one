@@ -102,7 +102,7 @@ test('тема: без хранилища выбор действует до п�
 test('словарь и i18n: тексты берутся по ключам, нет ключа — сам ключ', () => {
   const ctx = load(['locales/ru.js', 'shared/i18n.js'], {});
   const { t } = ctx.I18n;
-  assert.equal(t('platform.name'), 'Оюнкана');
+  assert.equal(t('platform.name'), 'Партейка');
   assert.equal(t('нет.такого.ключа'), 'нет.такого.ключа');
 });
 

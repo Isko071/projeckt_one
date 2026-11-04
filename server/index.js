@@ -118,7 +118,7 @@ if (require.main === module) {
     allowedOrigins: String(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()),
     adminEmails: String(process.env.ADMIN_EMAILS || '').split(',')
   }).then((s) => {
-    console.log('Оюнкана: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)'));
+    console.log('Партейка: сервер столов слушает порт ' + s.port + '; серверный баланс и ставки ' + (s.wallet ? 'включены' : 'выключены (нет FIREBASE_SERVICE_ACCOUNT)'));
     // Остановка (деплой на Render): накопленные победы, рекорды и рейтинг успевают уйти в базу, не дольше 5 секунд
     process.once('SIGTERM', () => {
       const flush = s.wallet ? Promise.all([s.wallet.flushTops(), s.wallet.flushRatings()]).catch(() => {}) : Promise.resolve();

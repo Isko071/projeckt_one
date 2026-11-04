@@ -2,8 +2,8 @@
 (function (root) {
 root.LOCALES = root.LOCALES || {};
 root.LOCALES.ru = {
-  'platform.name': 'Оюнкана',
-  'platform.logoLabel': 'Оюнкана: к списку игр',
+  'platform.name': 'Партейка',
+  'platform.logoLabel': 'Партейка: к списку игр',
   'platform.noscript': 'Для работы сайта нужен включённый JavaScript.',
   'admin.title': 'Кабинет',
   'admin.toSite': 'На сайт',
@@ -103,7 +103,7 @@ root.LOCALES.ru = {
   'footer.games': 'Все игры',
   'footer.telegramLabel': 'Написать в Telegram: ошибки, идеи, новые игры',
   'footer.stats': 'Считаем обезличенную статистику посещений.',
-  'footer.copy': '© 2026 Оюнкана. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
+  'footer.copy': '© 2026 Партейка. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
 
   'catalog.title': 'Выберите игру',
   'catalog.subtitle': 'Быстрая партия на телефоне или компьютере.',
