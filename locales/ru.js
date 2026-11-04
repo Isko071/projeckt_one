@@ -2,8 +2,8 @@
 (function (root) {
 root.LOCALES = root.LOCALES || {};
 root.LOCALES.ru = {
-  'platform.name': 'Игротека',
-  'platform.logoLabel': 'Игротека: к списку игр',
+  'platform.name': 'Оюнкана',
+  'platform.logoLabel': 'Оюнкана: к списку игр',
   'platform.noscript': 'Для работы сайта нужен включённый JavaScript.',
   'admin.title': 'Кабинет',
   'admin.toSite': 'На сайт',
@@ -37,7 +37,7 @@ root.LOCALES.ru = {
   'admin.edit.notFound': 'На сервере нет кошелька этого игрока: он ещё не входил после включения серверного баланса.',
   'admin.edit.denied': 'Нет права записи: добавьте правило записи для владельца в Firestore (docs/admin.md).',
   'admin.edit.error': 'Не удалось сохранить баланс: запись изменилась или нет сети. Обновите список и повторите.',
-  'admin.col.yahtzee': 'Ятзи',
+  'admin.col.yahtzee': 'Кости',
   'admin.col.minesweeper': 'Сапёр',
   'admin.col.blackjack': 'Блэкджек',
   'admin.col.poker-simple': 'Покер: Чожук',
@@ -103,7 +103,7 @@ root.LOCALES.ru = {
   'footer.games': 'Все игры',
   'footer.telegramLabel': 'Написать в Telegram: ошибки, идеи, новые игры',
   'footer.stats': 'Считаем обезличенную статистику посещений.',
-  'footer.copy': '© 2026 Игротека. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
+  'footer.copy': '© 2026 Оюнкана. Прогресс хранится в вашем браузере и, после входа через Google, в облаке.',
 
   'catalog.title': 'Выберите игру',
   'catalog.subtitle': 'Быстрая партия на телефоне или компьютере.',
@@ -114,7 +114,7 @@ root.LOCALES.ru = {
   'catalog.soon': 'Скоро',
   'catalog.close': 'Закрыть',
 
-  'games.yahtzee.title': 'Ятзи',
+  'games.yahtzee.title': 'Кости',
   'games.yahtzee.description': 'Бросайте пять кубиков, собирайте комбинации и набирайте очки за 13 ходов.',
   'games.minesweeper.title': 'Сапёр',
   'games.minesweeper.description': 'Открывайте клетки, считайте соседей по цифрам и обходите мины. Флажок — ваш друг.',
@@ -249,7 +249,7 @@ root.LOCALES.ru = {
   'wallet.src.stake': 'Ставка за столом',
   'wallet.src.milestone': 'Бонус за длинную серию',
   'wallet.src.minesweeper': 'Сапёр',
-  'wallet.src.yahtzee': 'Ятзи',
+  'wallet.src.yahtzee': 'Кости',
   'wallet.src.blackjack': 'Блэкджек',
   'wallet.src.poker-simple': 'Покер: Чожук',
   'wallet.src.battleship': 'Морской бой',
