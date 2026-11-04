@@ -68,7 +68,8 @@ function doMove(dir) {
   if (anim.finish) anim.finish();                         // прошлый ход ещё доигрывает анимацию: завершаем сразу
   var before = app.game, r = G.move(before, dir);
   if (!r.ok) { nudge(dir); return; }
-  if (before.moves === 0) { W.markPlayed(); W.countPlay('2048'); }       // партия началась с первого хода
+  W.markPlayed();                                   // день серии отмечается любым ходом (и в партии, продолженной на следующий день); повторно за день — ничего не делает
+  if (before.moves === 0) W.countPlay('2048');      // партия началась с первого хода
   app.game = r.state;
   noteBest();
   rewardMilestones();

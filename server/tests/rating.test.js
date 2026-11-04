@@ -37,14 +37,16 @@ test('рейтинг: неизменившееся число повторно �
   assert.strictEqual(ledger.ratings.get('A'), 5250);
 });
 
-test('рейтинг: при запуске балансы всех игроков с кошельком записываются в рейтинг', async () => {
+test('рейтинг: при запуске сервер не переписывает рейтинг всех игроков (лимит записей базы)', async () => {
   const { ledger, svc } = await mk({ A: 7000, B: 3000 });
   await svc.act('A', { op: 'sync' }); await svc.act('B', { op: 'sync' });
+  await svc.flushRatings();
+  ledger.ratings.clear();
   const fresh = new WalletService({ ledger }); await fresh.init();
   fresh.startRatings();
   await new Promise((r) => setTimeout(r, 30));
-  await fresh.flushRatings();
+  assert.strictEqual(await fresh.flushRatings(), 0, 'ничего не записано');
+  await fresh.act('A', { op: 'markPlayed' });
+  assert.strictEqual(await fresh.flushRatings(), 1, 'сыграл — баланс ушёл в рейтинг');
   fresh.stopRatings();
-  assert.strictEqual(ledger.ratings.get('A'), 7000);
-  assert.strictEqual(ledger.ratings.get('B'), 3000);
 });

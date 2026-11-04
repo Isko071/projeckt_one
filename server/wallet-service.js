@@ -26,7 +26,7 @@ const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:
 const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'];
 const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 2;
 const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
-const RATING_MS = Number(process.env.WALLET_RATING_MS) || 10000;     // как часто баланс уходит в рейтинг
+const RATING_MS = Number(process.env.WALLET_RATING_MS) || 300000;    // как часто баланс уходит в рейтинг: раз в 5 минут (лимит записей бесплатной базы)
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
 const EARN = { minesweeper: ['novice', 'amateur', 'expert'], yahtzee: ['easy', 'hard'], '2048': ['t512', 't1024', 't2048'], blocks: ['s1000', 's2500', 's5000'] };
 // 2048 и «Блоки»: партию сервер не видит, поэтому награда за веху — только раз за партию и не раньше, чем её реально достичь от начала партии
@@ -502,12 +502,13 @@ class WalletService {
     }
     return sent;
   }
-  // Раз в RATING_MS отправляет накопившееся; при запуске записывает в рейтинг балансы всех игроков с кошельком (строки, присланные браузером, перекрываются)
+  // Раз в RATING_MS отправляет накопившееся
   startRatings() {
     if (this.rateTimer || !this.ledger.setRating) return;
     this.rateTimer = setInterval(() => { this.flushRatings().catch(() => {}); if (this.ledger.addWins) this.flushTops().catch(() => {}); }, RATING_MS);
     if (this.rateTimer.unref) this.rateTimer.unref();
-    this.ledger.list('wallets').then((list) => { list.forEach((w) => { if (w.data && typeof w.data.balance === 'number' && !this.rated.has(w.id)) this.rated.set(w.id, w.data.balance); }); }, () => {});
+    // При запуске рейтинг не переписывается целиком: бесплатный сервер просыпается много раз в день, и каждый раз это были бы записи по числу игроков.
+    // Баланс игрока уходит в рейтинг, когда он играет
   }
   stopRatings() { if (this.rateTimer) clearInterval(this.rateTimer); this.rateTimer = null; }
 

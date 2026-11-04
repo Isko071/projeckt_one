@@ -9,7 +9,7 @@
 // если изменились обе стороны — игрока спрашивают, что оставить.
 (function (root) {
   var SYNC_KEY = 'platform:sync';
-  var CHECK_MS = 15000;
+  var CHECK_MS = 60000;          // проверка изменений раз в минуту (и сразу, когда вкладку сворачивают или закрывают)
   var cfg = root.FIREBASE_CONFIG, dbName = root.FIREBASE_DATABASE;
   var PP = root.PlatformProgress, Logic = root.PlatformSyncLogic;
 
@@ -69,11 +69,13 @@
     });
   }
 
-  // Отметка визита без изменения прогресса: обновляются только createdAt и lastSeen (раз за загрузку страницы)
-  var seenSent = false;
+  // Отметка визита без изменения прогресса: обновляются только createdAt и lastSeen — раз в сутки на устройстве, а не на каждой странице
+  var SEEN_KEY = 'platform:seen', seenSent = false;
   function touchSeen(uid, tk) {
-    if (seenSent) return Promise.resolve();
+    var day = new Date().toDateString(), last = root.PlatformStorage.get(SEEN_KEY, null);
+    if (seenSent || (last && last.uid === uid && last.day === day)) return Promise.resolve();
     seenSent = true;
+    root.PlatformStorage.set(SEEN_KEY, { uid: uid, day: day });
     var body = { fields: { createdAt: { integerValue: String(createdAtOf()) }, lastSeen: { integerValue: String(Date.now()) } } };
     return root.fetch(docUrl(uid) + '?updateMask.fieldPaths=createdAt&updateMask.fieldPaths=lastSeen', { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function () { /* отметка не критична */ }, function () { seenSent = false; });
@@ -136,9 +138,9 @@
           return 'idle';
         }
         // Окно «Какой прогресс оставить?» не показываем. Прогресс объединяется: то, что есть на устройстве, главнее (это игрок и видит),
-        // а то, чего на устройстве нет (рекорды других игр, профиль), берётся из облака, чтобы не стереть его. Баланс и серию при серверном балансе ведёт сервер
+        // а то, чего на устройстве нет (рекорды других игр, профиль), берётся из облака; из двух рекордов остаётся лучший (PlatformProgress.merge). Баланс и серию при серверном балансе ведёт сервер
         if (!allowDownload) return 'paused';                // на странице игры не трогаем: объединит каталог
-        var merged = { v: 1, data: Object.assign({}, cloud.snap.data || {}, local.data) };
+        var merged = PP.merge(cloud.snap, local);
         var changed = PP.fingerprint(merged) !== localFp;
         if (changed) PP.applySnapshot(merged);
         adoptName();

@@ -3,7 +3,7 @@
 //   visible() → true, пока на экране меню игры
 // Показывается только вошедшим игрокам и только если рейтинг доступен (правила базы: docs/google-login.md); обновляется раз в минуту.
 (function (root) {
-  var TOP = 5, REFRESH_MS = 60000;
+  var TOP = 5, REFRESH_MS = 300000;      // топ обновляется раз в 5 минут (лимит чтений бесплатной базы)
 
   function mount(opts) {
     var I = root.I18n, t = I.t, P = root.PlatformProfile, C = root.PlatformCloud, doc = root.document;

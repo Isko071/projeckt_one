@@ -2,6 +2,7 @@
 // (shared/rooms.js для блэкджека, shared/rooms-turns.js для «Ятзи»). Создатель стола теперь обычный игрок: если он уходит,
 // роль «создателя» переходит следующему, а стол живёт, пока за ним есть люди.
 // Сокеты сюда не заходят: подключение — любой объект { uid, send(obj) }, поэтому менеджер проверяется тестами без сети.
+const crypto = require('node:crypto');
 const { MemStore, decodeFields } = require('./memstore');
 
 const ACTIONS = ['chat', 'leave', 'here', 'again', 'start', 'rematch', 'close', 'bet', 'hit', 'stand', 'double', 'split', 'sitout', 'roll', 'hold', 'score', 'fold', 'check', 'call', 'raise', 'allin', 'ready', 'place', 'unplace', 'shoot', 'radar', 'sub', 'bomber', 'concede', 'move'];
@@ -43,7 +44,9 @@ class RoomManager {
     this.misses = new Map();          // uid → { at, n }: неудачные входы по коду за последнюю минуту
     this.store = new MemStore({ onDoc: (code, f) => this.onDoc(code, f) });
     this.apis = {};
-    const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, options: this.cfg.engineOptions };
+    // Тасовка колоды онлайн-покера и коды столов — криптостойкий генератор (Math.random предсказуем по наблюдаемым картам)
+    const rng = opts.rng || (() => crypto.randomInt(0, 4294967296) / 4294967296);
+    const base = { fetch: this.store.fetch, getToken: async () => 'server', uid: 'server', projectId: 'p', db: 'd', now: this.now, rng, options: this.cfg.engineOptions };
     this.apis.blackjack = this.engine.PlatformRooms.create(Object.assign({}, base, { game: this.engine.Blackjack, gameOptions: { simple: true } }));
     this.apis.yahtzee = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.YahtzeeTable, gameId: 'yahtzee' }));
     this.apis.battleship = this.engine.PlatformTurnRooms.create(Object.assign({}, base, { game: this.engine.Battleship, gameId: 'battleship' }));

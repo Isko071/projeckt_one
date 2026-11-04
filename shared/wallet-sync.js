@@ -20,7 +20,7 @@
   var synced = false;                        // сервер уже ответил на этой странице: до этого число баланса — копия из браузера, и экран показывает его притушенным
   var SERVER_GAMES = ['mines', 'poker-simple', 'poker'];              // игры, которые уже умеют работать на серверном балансе
 
-  var connectingSince = 0, UNREACHABLE_MS = 45000;
+  var connectingSince = 0, UNREACHABLE_MS = 90000;      // бесплатный сервер просыпается до минуты: раньше «сервер недоступен» не показываем
   function setStatus(s) {
     if (status === s) return;
     status = s;
@@ -139,8 +139,9 @@
       }, function (e) {
         var code = e && e.code;
         if (code === 'bad-request') { if (queue[0] === item) { queue.shift(); saveQueue(); } return next(); }      // сервер такой запрос не принимает: выбрасываем, не зацикливаемся
-        // Ошибка самого сервера (не обрыв связи): после нескольких попыток запрос выбрасывается, иначе он блокировал бы всю очередь
-        if (code !== 'offline' && code !== 'timeout' && item.rid) { item.tries = (item.tries || 0) + 1; if (item.tries >= 5 && queue[0] === item) { queue.shift(); saveQueue(); return next(); } saveQueue(); }
+        // Ошибка самого сервера (не обрыв связи): после нескольких попыток запрос выбрасывается, иначе он блокировал бы всю очередь.
+        // Сбой базы (ledger) и занятость (busy) временные: такие попытки не считаются, заработанная награда не пропадает
+        if (code !== 'offline' && code !== 'timeout' && code !== 'ledger' && code !== 'busy' && item.rid) { item.tries = (item.tries || 0) + 1; if (item.tries >= 5 && queue[0] === item) { queue.shift(); saveQueue(); return next(); } saveQueue(); }
         throw e;
       });
     }

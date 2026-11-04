@@ -51,7 +51,8 @@ function placeAt(slot, x, y) {
   if (!r.ok) return false;
   var colors = before.grid.slice();                       // цвета клеток до очистки (вместе с только что поставленной фигурой)
   r.placed.forEach(function (i) { colors[i] = piece.color; });
-  if (before.moves === 0) { W.markPlayed(); W.countPlay('blocks'); }      // партия началась с первого хода
+  W.markPlayed();                                   // день серии отмечается любым ходом (и в партии, продолженной на следующий день); повторно за день — ничего не делает
+  if (before.moves === 0) W.countPlay('blocks');      // партия началась с первого хода
   app.game = r.state;
   noteBest(); rewardMilestones(); save();
   paintBoard({ placed: r.placed, cleared: r.cleared.cells, colors: colors });

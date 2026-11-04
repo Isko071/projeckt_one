@@ -74,6 +74,7 @@ function newGame() {
   app.screen = 'game';
   app.modal = null; app.face = 'idle'; app.hintIdx = -1; app.focus = 0;
   app.startedAt = 0; app.elapsed = 0; app.anim = {}; app.mineDelay = {}; app.result = null;
+  app.freshAt = Date.now();                       // второй тап по «Играть снова» не должен сразу открыть клетку нового поля
   press.suppress = false;
 }
 function toStart() {
@@ -351,6 +352,7 @@ appEl.addEventListener('click', function (e) {
   var i = cellIndex(e.target);
   if (i >= 0) {
     if (press.suppress) { press.suppress = false; return; }
+    if (app.freshAt && Date.now() - app.freshAt < 400) return;
     if (app.mode === 'flag' && !game.open[i]) flagAt(i); else openAt(i);
     return;
   }
