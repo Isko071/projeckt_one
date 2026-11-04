@@ -3,7 +3,7 @@
 (function () {
   var Cloud = window.PlatformCloud, L = window.AdminLogic, tr = function (k, p) { return window.I18n.t(k, p); };
   var app = document.getElementById('app');
-  var st = { tab: 'players', srv: null, srvError: null, srvLoading: false, rows: null, error: null, loading: false, query: '', sort: 'lastSeen', dir: 'desc', loadedAt: 0 };
+  var st = { tab: 'players', vis: null, visError: null, visLoading: false, srv: null, srvError: null, srvLoading: false, rows: null, error: null, loading: false, query: '', sort: 'lastSeen', dir: 'desc', loadedAt: 0 };
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmtDate(ms) {
@@ -59,6 +59,46 @@
       .then(function (d) { st.srv = d; st.srvError = null; st.srvLoading = false; if (st.tab !== 'players' || errorsFresh()) render(); },
         function (e) { st.srvLoading = false; st.srvError = e && e.message === 'denied' ? 'denied' : 'network'; if (st.tab !== 'players') render(); });
   }
+  // ---------- Вкладка «Посетители»: все устройства, и гости, и вошедшие (данные с сервера столов) ----------
+  function loadVisits(silent) {
+    if (st.visLoading) return;
+    var base = serverUrl();
+    if (!base) { st.visError = 'nourl'; render(); return; }
+    st.visLoading = true; if (!silent) { st.visError = null; render(); }
+    Cloud.getToken().then(function (tk) { return window.fetch(base + '/admin/visits', { headers: { 'Authorization': 'Bearer ' + tk }, cache: 'no-store' }); })
+      .then(function (res) { if (res.status === 401 || res.status === 403) throw new Error('denied'); if (!res.ok) throw new Error('http'); return res.json(); })
+      .then(function (d) { st.vis = d; st.visError = null; st.visLoading = false; if (st.tab === 'visitors') render(); },
+        function (e) { st.visLoading = false; st.visError = e && e.message === 'denied' ? 'denied' : 'network'; if (st.tab === 'visitors') render(); });
+  }
+  function pageName(k) { if (k === 'catalog') return tr('admin.vis.catalog'); var t = tr('games.' + k + '.title'); return t === 'games.' + k + '.title' ? k : t; }
+  function visitorsHtml() {
+    if (st.visError === 'nourl') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.nourl')) + '</p>';
+    if (st.visError === 'denied') return '<p class="msg bad" role="alert">' + esc(tr('admin.srv.denied')) + '</p>';
+    if (!st.vis) return st.visError ? '<p class="msg bad" role="alert">' + esc(tr('admin.srv.error')) + '</p><button type="button" class="btn" data-act="reloadVis">' + esc(tr('admin.reload')) + '</button>' : '<p class="msg" role="status">' + esc(tr('admin.srv.loading')) + '</p>';
+    var v = st.vis, T = v.totals, names = {};
+    (st.rows || []).forEach(function (r) { names[r.uid] = r.name; });
+    var cards = [[T.day.devices, 'day'], [T.day.guests, 'guests'], [T.day.signed, 'signed'], [T.day.players, 'played'], [T.day.fresh, 'new'], [T.week.devices, 'week'], [T.week.players, 'weekPlayed'], [T.day.back, 'back']].map(function (c) {
+      return '<div class="card"><b>' + fmt(c[0]) + '</b><span>' + esc(tr('admin.vis.' + c[1])) + '</span></div>';
+    }).join('');
+    var chips = function (o, name) { return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; }).map(function (k) { return '<span class="chip">' + esc(name(k)) + ' <b>' + fmt(o[k]) + '</b></span>'; }).join('') || '<span class="note">—</span>'; };
+    var days = v.days.slice().reverse().map(function (r) {
+      return '<tr><td>' + esc(r.day.split('-').reverse().join('.')) + '</td><td class="n">' + r.devices + '</td><td class="n">' + r.guests + '</td><td class="n">' + r.signed + '</td><td class="n">' + r.players + '</td><td class="n">' + r.games + '</td><td class="n">' + r.views + '</td></tr>';
+    }).join('');
+    var list = v.devices.slice(0, 300).map(function (x) {
+      var who = x.uid ? esc(names[x.uid] || tr('admin.vis.player')) + '<small>' + esc(x.uid.slice(0, 8)) + '</small>' : esc(tr('admin.vis.guest')) + '<small>#' + esc(x.d.slice(0, 6)) + '</small>';
+      var top = Object.keys(x.games || {}).sort(function (a, b) { return x.games[b] - x.games[a]; }).map(function (k) { return pageName(k) + ' ' + x.games[k]; }).join(', ');
+      return '<tr' + (x.uid ? '' : ' class="guest"') + '><td class="nm">' + who + '</td><td>' + esc(fmtDate(x.first)) + '</td><td>' + esc(fmtDate(x.last)) + '<small>' + esc(ago(x.last)) + '</small></td><td class="n">' + x.days + '</td><td class="n">' + x.plays + '</td><td>' + esc(top || '—') + '</td><td>' + esc(x.browser || '—') + '</td><td>' + esc(tr('admin.vis.src.' + (x.src || 'direct'))) + '</td></tr>';
+    }).join('');
+    return '<div class="cards">' + cards + '</div>' +
+      '<p class="note">' + esc(tr('admin.vis.note')) + '</p>' +
+      '<h2 class="h2">' + esc(tr('admin.vis.sources')) + '</h2><div class="chips">' + chips(T.sources, function (k) { return tr('admin.vis.src.' + k); }) + '</div>' +
+      '<h2 class="h2">' + esc(tr('admin.vis.played7')) + '</h2><div class="chips">' + chips(T.games, pageName) + '</div>' +
+      '<h2 class="h2">' + esc(tr('admin.vis.pages')) + '</h2><div class="chips">' + chips(T.pages, pageName) + '</div>' +
+      '<h2 class="h2">' + esc(tr('admin.vis.byDay')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.vis.date')) + '</th><th class="n">' + esc(tr('admin.vis.devices')) + '</th><th class="n">' + esc(tr('admin.vis.guestsCol')) + '</th><th class="n">' + esc(tr('admin.vis.signedCol')) + '</th><th class="n">' + esc(tr('admin.vis.playedCol')) + '</th><th class="n">' + esc(tr('admin.vis.plays')) + '</th><th class="n">' + esc(tr('admin.vis.views')) + '</th></tr></thead><tbody>' + days + '</tbody></table></div>' +
+      '<h2 class="h2">' + esc(tr('admin.vis.list')) + '</h2><div class="tbl"><table><thead><tr><th>' + esc(tr('admin.vis.who')) + '</th><th>' + esc(tr('admin.vis.first')) + '</th><th>' + esc(tr('admin.vis.last')) + '</th><th class="n">' + esc(tr('admin.vis.daysCol')) + '</th><th class="n">' + esc(tr('admin.vis.plays')) + '</th><th>' + esc(tr('admin.vis.games')) + '</th><th>' + esc(tr('admin.vis.browser')) + '</th><th>' + esc(tr('admin.vis.from')) + '</th></tr></thead><tbody>' +
+      (list || '<tr><td colspan="8" class="empty">' + esc(tr('admin.vis.none')) + '</td></tr>') + '</tbody></table></div>';
+  }
+
   function dur(ms) {
     var m = Math.floor(ms / 60000);
     if (m < 60) return tr('admin.dur.min', { n: m });
@@ -119,7 +159,7 @@
   function tabsHtml() {
     var stats = '<a class="tab ext" href="https://dash.cloudflare.com/?to=/:account/web-analytics" target="_blank" rel="noopener">' + esc(tr('admin.tab.visits')) + ' ↗</a>';
     var fresh = errorsFresh();
-    return '<div class="tabs" role="tablist">' + ['players', 'server', 'errors'].map(function (k) {
+    return '<div class="tabs" role="tablist">' + ['players', 'visitors', 'server', 'errors'].map(function (k) {
       return '<button type="button" role="tab" class="tab" aria-selected="' + (st.tab === k) + '" data-tab="' + k + '">' + esc(tr('admin.tab.' + k)) + (k === 'errors' && fresh ? ' <span class="badge">' + fresh + '</span>' : '') + '</button>';
     }).join('') + stats + '</div>';
   }
@@ -152,6 +192,7 @@
     else if (c.status !== 'signedIn') inner = '<p class="msg">' + esc(tr('admin.signin.text')) + '</p><button type="button" class="btn primary" data-act="signin">' + esc(tr('admin.signin')) + '</button>';
     else if (st.tab === 'server') inner = tabsHtml() + serverHtml();
     else if (st.tab === 'errors') inner = tabsHtml() + errorsHtml();
+    else if (st.tab === 'visitors') inner = tabsHtml() + visitorsHtml();
     else if (st.error === 'denied') inner = '<p class="msg bad" role="alert">' + esc(tr('admin.denied')) + '</p><button type="button" class="btn" data-act="signout">' + esc(tr('admin.signout')) + '</button>';
     else if (st.error) inner = tabsHtml() + '<p class="msg bad" role="alert">' + esc(tr('admin.error')) + '</p><button type="button" class="btn" data-act="reload">' + esc(tr('admin.reload')) + '</button>';     // вкладки «Сервер» и «Ошибки» нужны и тогда, когда список игроков не загрузился
     else if (!st.rows) inner = tabsHtml() + '<p class="msg" role="status">' + esc(tr('admin.loading')) + '</p>';
@@ -164,16 +205,18 @@
   app.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act], [data-sort], [data-tab]');
     if (!b) return;
-    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server' || st.tab === 'errors') loadServer(false); render(); return; }
+    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'server' || st.tab === 'errors') loadServer(false); if (st.tab === 'visitors') loadVisits(false); render(); return; }
     if (b.dataset.act === 'reloadSrv') { loadServer(false); return; }
     if (b.dataset.sort) { var k = b.dataset.sort; st.dir = st.sort === k ? (st.dir === 'asc' ? 'desc' : 'asc') : (k === 'name' ? 'asc' : 'desc'); st.sort = k; render(); return; }
     if (b.dataset.act === 'signin') Cloud.signIn().then(null, function () { render(); });
     else if (b.dataset.act === 'signout') { Cloud.signOut(true).then(function () { st.error = null; st.rows = null; render(); }); }
+    else if (b.dataset.act === 'reloadVis') loadVisits(false);
     else if (b.dataset.act === 'reload') { if (st.tab === 'server' || st.tab === 'errors') loadServer(false); else load(); }
   });
   app.addEventListener('input', function (e) { if (e.target.id === 'q') { st.query = e.target.value; render(); } });
 
   setInterval(function () { if ((st.tab === 'server' || st.tab === 'errors') && !document.hidden && Cloud.getState().status === 'signedIn') loadServer(true); }, 10000);
+  setInterval(function () { if (st.tab === 'visitors' && !document.hidden && Cloud.getState().status === 'signedIn') loadVisits(true); }, 60000);
 
   var loadedFor = null;
   Cloud.onChange(function (c) {

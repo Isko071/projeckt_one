@@ -44,3 +44,8 @@ td.wrap { white-space: normal; min-width: 140px; }
 details summary { cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 details summary small, td small { display: block; color: var(--muted); }
 details pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; max-height: 240px; overflow: auto; }
+/* Вкладка «Посетители»: источники и страницы — плашками, гости в таблице чуть приглушены */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+.chip b { margin-left: 4px; }
+tr.guest .nm { color: var(--muted); }

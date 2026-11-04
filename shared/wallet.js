@@ -267,6 +267,7 @@
     s.plays[key] = (s.plays[key] || 0) + 1;
     save(s);
     viaServer({ op: 'countPlay', source: key });
+    if (typeof root.PlatformErrorReport === 'object' && root.PlatformErrorReport && root.PlatformErrorReport.played) root.PlatformErrorReport.played(key);     // отметка «сыграл» для вкладки «Посетители» кабинета
   }
 
   // Награда за одиночную игру: не больше earnDailyCap в день. uncapped = true — награда без дневного предела (не расходует и не ждёт предела других игр)

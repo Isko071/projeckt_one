@@ -59,7 +59,8 @@ class RoomManager {
     // Журнал событий и счётчики для личного кабинета владельца (в памяти, после перезапуска сервера начинаются заново)
     this.startedAt = this.now();
     this.events = [];
-    this.clientErrors = new Map();     // ошибки из браузеров игроков: «текст|место» → { msg, where, stack, first, last, count, pages, browsers }
+    this.clientErrors = new Map();
+    this.visitDays = new Map();       // день (UTC) → { devs: Map(номер устройства → визиты), loaded, dirty }     // ошибки из браузеров игроков: «текст|место» → { msg, where, stack, first, last, count, pages, browsers }
     this.counters = { created: { blackjack: 0, yahtzee: 0, poker: 0, 'poker-simple': 0, battleship: 0, checkers: 0 }, joins: 0, leaves: 0, starts: 0, errors: 0, denied: 0, connects: 0, peakConns: 0, peakRooms: 0 };
   }
 
@@ -87,6 +88,102 @@ class RoomManager {
     if (page && e.pages.indexOf(page) < 0 && e.pages.length < 6) e.pages.push(page);
     const br = browserOf(ua);
     if (br && e.browsers.indexOf(br) < 0 && e.browsers.length < 6) e.browsers.push(br);
+  }
+
+  // ---------- Посетители (гости и вошедшие) для кабинета ----------
+  // Браузер раз за загрузку страницы присылает случайный номер устройства (без имени и адреса), страницу, uid, если игрок вошёл, и откуда пришёл.
+  // Визиты копятся по дням (UTC) в памяти; раз в 30 минут день целиком пишется в базу одним документом visits/<день> — одна запись на день, а не на визит.
+  // После перезапуска сервера накопленное в памяти сливается с тем, что уже лежит в базе
+  visit(b, ua) {
+    const d = typeof b.d === 'string' && /^[a-z0-9]{8,20}$/.test(b.d) ? b.d : null;
+    if (!d) return;
+    const page = typeof b.p === 'string' && /^[a-z0-9-]{0,24}$/.test(b.p) ? (b.p || 'catalog') : 'catalog';
+    const game = typeof b.g === 'string' && /^[a-z0-9-]{1,24}$/.test(b.g) ? b.g : '';        // отметка «начал партию» (не просмотр страницы)
+    const uid = typeof b.u === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(b.u) ? b.u : '';
+    const src = ['google', 'yandex', 'telegram', 'vk', 'whatsapp', 'bing', 'other'].indexOf(b.s) >= 0 ? b.s : '';
+    const t = this.now(), day = new Date(t).toISOString().slice(0, 10);
+    let map = this.visitDays.get(day);
+    if (!map) { map = { devs: new Map(), loaded: !this.visitLedger() }; this.visitDays.set(day, map); }
+    let r = map.devs.get(d);
+    if (!r) { if (map.devs.size >= 5000) return; r = { f: t, l: t, v: 0, p: {}, g: {}, b: '', u: '', s: '' }; map.devs.set(d, r); }
+    r.l = Math.max(r.l, t);
+    if (game) { r.g = r.g || {}; r.g[game] = (r.g[game] || 0) + 1; }
+    else { r.v++; r.p[page] = (r.p[page] || 0) + 1; }
+    if (uid) r.u = uid;
+    if (src && !r.s) r.s = src;
+    r.b = browserOf(ua) || r.b;
+    map.dirty = true;
+    // старые дни из памяти убираем (в базе они остаются)
+    if (this.visitDays.size > 3) Array.from(this.visitDays.keys()).sort().slice(0, -3).forEach((k) => { const m = this.visitDays.get(k); if (!m.dirty) this.visitDays.delete(k); });
+  }
+  visitLedger() { return this.wallet && this.wallet.ledger ? this.wallet.ledger : null; }
+  static mergeVisit(a, b) {
+    if (!a) return b; if (!b) return a;
+    const sum = (x, y) => { const o = Object.assign({}, x || {}); Object.keys(y || {}).forEach((k) => { o[k] = (o[k] || 0) + y[k]; }); return o; };
+    return { f: Math.min(a.f, b.f), l: Math.max(a.l, b.l), v: a.v + b.v, p: sum(a.p, b.p), g: sum(a.g, b.g), b: b.b || a.b, u: b.u || a.u, s: a.s || b.s };
+  }
+  async loadVisitDay(day) {
+    const ledger = this.visitLedger();
+    let map = this.visitDays.get(day);
+    if (map && map.loaded) return map;
+    let stored = {};
+    if (ledger) { const doc = await ledger.get('visits', day); stored = doc && typeof doc === 'object' ? doc : {}; }      // хранилище само держит документ одной JSON-строкой
+    map = this.visitDays.get(day) || { devs: new Map(), loaded: false };
+    Object.keys(stored).forEach((d) => { map.devs.set(d, RoomManager.mergeVisit(stored[d], map.devs.get(d))); });
+    map.loaded = true;
+    this.visitDays.set(day, map);
+    return map;
+  }
+  async flushVisits() {
+    const ledger = this.visitLedger();
+    if (!ledger || this.flushingVisits) return 0;
+    this.flushingVisits = true;
+    let n = 0;
+    try {
+      for (const [day, m] of Array.from(this.visitDays.entries())) {
+        if (!m.dirty) continue;
+        const map = await this.loadVisitDay(day);
+        map.dirty = false;
+        const obj = {}; map.devs.forEach((r, d) => { obj[d] = r; });
+        try { await ledger.commit([{ op: 'set', coll: 'visits', id: day, data: obj }]); n++; } catch (e) { map.dirty = true; }
+      }
+    } finally { this.flushingVisits = false; }
+    return n;
+  }
+  // Для кабинета: последние days дней — по дням и по устройствам
+  async visitsReport(days) {
+    days = Math.min(Math.max(1, Math.floor(days) || 14), 31);
+    const t = this.now(), list = [];
+    for (let i = days - 1; i >= 0; i--) list.push(new Date(t - i * 86400000).toISOString().slice(0, 10));
+    const devs = new Map(), byDay = [];
+    for (const day of list) {
+      let map;
+      try { map = await this.loadVisitDay(day); } catch (e) { map = this.visitDays.get(day) || { devs: new Map() }; }
+      const row = { day, devices: 0, guests: 0, signed: 0, views: 0, players: 0, games: 0 };
+      map.devs.forEach((r, d) => {
+        const plays = Object.keys(r.g || {}).reduce((a, k) => a + r.g[k], 0);
+        row.devices++; row.views += r.v; if (r.u) row.signed++; else row.guests++;
+        if (plays) { row.players++; row.games += plays; }
+        const x = devs.get(d);
+        devs.set(d, x ? Object.assign(RoomManager.mergeVisit(x, r), { days: x.days + 1 }) : Object.assign({}, r, { p: Object.assign({}, r.p), g: Object.assign({}, r.g), days: 1 }));
+      });
+      byDay.push(row);
+    }
+    // Список устройств: все вошедшие и только те гости, кто сыграл хотя бы одну партию (остальные гости — только в цифрах totals и по дням)
+    const all = Array.from(devs.entries()).map(([d, r]) => ({ d, first: r.f, last: r.l, days: r.days, views: r.v, pages: r.p, games: r.g || {}, plays: Object.keys(r.g || {}).reduce((a, k) => a + r.g[k], 0), browser: r.b, uid: r.u, src: r.s }));
+    const totals = { day: { devices: 0, guests: 0, signed: 0, players: 0, fresh: 0, back: 0 }, week: { devices: 0, players: 0 }, sources: {}, pages: {}, games: {} };
+    all.forEach((x) => {
+      if (t - x.last < 86400000) { const k = totals.day; k.devices++; if (x.uid) k.signed++; else k.guests++; if (x.plays) k.players++; }
+      if (t - x.first < 86400000) totals.day.fresh++;
+      if (t - x.last < 7 * 86400000) {
+        totals.week.devices++; if (x.plays) totals.week.players++; if (x.days > 1) totals.day.back++;
+        const s = x.src || 'direct'; totals.sources[s] = (totals.sources[s] || 0) + 1;
+        Object.keys(x.pages).forEach((k) => { totals.pages[k] = (totals.pages[k] || 0) + x.pages[k]; });
+        Object.keys(x.games).forEach((k) => { totals.games[k] = (totals.games[k] || 0) + x.games[k]; });
+      }
+    });
+    const devices = all.filter((x) => x.uid || x.plays > 0).sort((a, b) => b.last - a.last).slice(0, 500);
+    return { now: t, days: byDay, totals, devices };
   }
 
   adminReport() {
