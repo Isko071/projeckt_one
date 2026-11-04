@@ -440,6 +440,5 @@ document.addEventListener('keydown', function (e) {
 });
 
 window.PlatformTheme.onChange(render); // тему можно сменить и в системе, и кнопкой
-document.title = tr('title');
 
 render();
