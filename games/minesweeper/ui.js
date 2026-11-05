@@ -3,7 +3,7 @@
 // Тема приходит из общего модуля платформы (shared/theme.js), рекорды хранятся через PlatformStorage.
 var CATALOG_URL = '../../index.html';
 var BEST_KEY = 'game:minesweeper:best';
-var LONG_PRESS_MS = 450;
+var LONG_PRESS_MS = 400;                          // долгое нажатие на клетку — флажок
 var MS = window.Minesweeper;
 var tr = function (key, params) { return window.I18n.t('games.minesweeper.' + key, params); };
 
@@ -16,7 +16,7 @@ var app = {
 var appEl = document.getElementById('app');
 var gameToken = 0; // растёт при выходе из партии: отменяет отложенные окна
 var timerId = null;
-var press = { timer: null, index: -1, long: false, suppress: false };
+var press = { timer: null, index: -1, long: false, suppress: false, down: false, x: 0, y: 0 };
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, function (c) {
@@ -324,28 +324,41 @@ function clearPress() {
   app.hintIdx = -1;
 }
 
+// Долгое нажатие на закрытую клетку ставит или снимает флажок — пальцем и мышью. Палец может чуть дрогнуть: отменяем, только если ушёл дальше 12 px.
+// Браузер на телефоне сам может «перехватить» долгое касание (pointercancel, контекстное меню) — флажок от этого не должен ставиться дважды
 appEl.addEventListener('pointerdown', function (e) {
   var i = cellIndex(e.target);
   if (i < 0 || !game || MS.isOver(game) || app.modal || (e.pointerType === 'mouse' && e.button !== 0)) return;
-  press.index = i; press.long = false;
+  clearPress();
+  press.index = i; press.long = false; press.down = true; press.x = e.clientX; press.y = e.clientY;
   if (!game.open[i] && !game.flag[i]) app.face = 'press';
   else if (game.open[i] && game.counts && game.counts[i]) app.hintIdx = i;
-  if (e.pointerType !== 'mouse' && !game.open[i]) {
+  if (!game.open[i]) {
     press.timer = setTimeout(function () {
       press.timer = null; press.long = true; press.suppress = true;
       app.face = 'idle';
+      try { if (navigator.vibrate) navigator.vibrate(25); } catch (er) { /* без вибрации */ }
       flagAt(i);
     }, LONG_PRESS_MS);
   }
   render();
 });
-function endPress() { if (press.timer || app.face === 'press' || app.hintIdx >= 0) { clearPress(); render(); } }
+function moved(x, y) { return Math.abs(x - press.x) > 12 || Math.abs(y - press.y) > 12; }
+function endPress() { press.down = false; if (press.timer || app.face === 'press' || app.hintIdx >= 0) { clearPress(); render(); } }
 appEl.addEventListener('pointerup', endPress);
-appEl.addEventListener('pointercancel', endPress);
 appEl.addEventListener('pointerleave', endPress);
+appEl.addEventListener('pointermove', function (e) { if (press.timer && moved(e.clientX, e.clientY)) endPress(); });
+// pointercancel: браузер забрал касание себе — таймер не сбрасываем, палец отслеживаем по touch-событиям
+appEl.addEventListener('pointercancel', function (e) { if (e.pointerType === 'mouse') endPress(); });
+appEl.addEventListener('touchmove', function (e) { var t = e.touches[0]; if (press.timer && t && moved(t.clientX, t.clientY)) endPress(); }, { passive: true });
+appEl.addEventListener('touchend', function () { if (press.timer) endPress(); else press.down = false; });
+appEl.addEventListener('touchcancel', endPress);
 appEl.addEventListener('contextmenu', function (e) {
   var i = cellIndex(e.target);
-  if (i >= 0) { e.preventDefault(); clearPress(); flagAt(i); }
+  if (i < 0) return;
+  e.preventDefault();
+  if (press.down) return;                              // меню от долгого касания (палец ещё на экране): флажок ставит таймер
+  clearPress(); flagAt(i);                              // правая кнопка мыши
 });
 
 appEl.addEventListener('click', function (e) {
