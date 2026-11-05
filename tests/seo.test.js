@@ -48,3 +48,14 @@ test('главная: внизу обычные ссылки на все игр�
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   games.forEach((g) => assert.ok(html.includes('href="' + g.path + '"'), 'ссылка на ' + g.path));
 });
+
+test('значок сайта: SVG, PNG 48/192, favicon.ico, иконка для iPhone и manifest — все файлы на месте и подключены на главной', () => {
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const links = Array.from(html.matchAll(/<link rel="(?:icon|apple-touch-icon|manifest)"[^>]*href="([^"]+)"/g)).map((m) => m[1]);
+  ['assets/logo.svg', 'assets/icon-48.png', 'assets/icon-192.png', 'favicon.ico', 'assets/apple-touch-icon.png', 'site.webmanifest'].forEach((f) => {
+    assert.ok(links.includes(f), 'подключён ' + f);
+    assert.ok(fs.existsSync(path.join(root, f)), 'файл есть: ' + f);
+  });
+  const man = JSON.parse(fs.readFileSync(path.join(root, 'site.webmanifest'), 'utf8'));
+  man.icons.forEach((i) => assert.ok(fs.existsSync(path.join(root, i.src)), 'иконка из manifest: ' + i.src));
+});
