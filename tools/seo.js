@@ -18,8 +18,8 @@ const VERIFY = { google: '2MiJKadnDOe0Y7kURBNsd4-zQC72_QKI7djZBmL57ks', yandex: 
 
 // path — страница; og — картинка превью 1200×630 (jpg); game — для разметки VideoGame
 const PAGES = [
-  { path: '', og: 'assets/og.jpg', title: 'Партейка — бесплатные игры онлайн: шашки, кости, сапёр, 2048, покер',
-    desc: 'Бесплатные игры в браузере без установки: шашки, кости, сапёр, 2048, блоки, блэкджек, покер, морской бой и мины. Играйте с ботами или онлайн с друзьями, собирайте аконы и попадайте в рейтинг.' },
+  { path: '', og: 'assets/og.jpg', title: 'Партейка — бесплатные игры онлайн: дурак, шашки, кости, сапёр, 2048',
+    desc: 'Бесплатные игры в браузере без установки: дурак, шашки, кости, сапёр, 2048, блоки, блэкджек, покер, морской бой и мины. Играйте с ботами или онлайн с друзьями, собирайте аконы и попадайте в рейтинг.' },
   { path: 'games/checkers/', og: 'games/checkers/og.jpg', game: 'Шашки', genre: ['Настольная игра', 'Шашки'], modes: ['SinglePlayer', 'MultiPlayer'],
     title: 'Шашки онлайн бесплатно — с ботом и с другом | Партейка',
     desc: 'Русские шашки онлайн: бот трёх уровней (лёгкий, средний, сложный) или игра с другом по ссылке. Обязательное взятие, дамки, серии взятий — всё по правилам. Бесплатно, без регистрации.' },
@@ -69,7 +69,7 @@ function block(p) {
     ? { '@context': 'https://schema.org', '@type': 'VideoGame', name: p.game, description: p.desc, url, image: img, inLanguage: 'ru', genre: p.genre, playMode: p.modes,
         applicationCategory: 'Game', gamePlatform: 'Web browser', operatingSystem: 'Any', isAccessibleForFree: true, offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         isPartOf: { '@type': 'WebSite', name: SITE, url: BASE } }
-    : { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE, url: BASE, description: p.desc, inLanguage: 'ru',
+    : { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE, alternateName: ['Partejka', SITE + ' — игры онлайн'], url: BASE, description: p.desc, inLanguage: 'ru',
         hasPart: PAGES.filter((x) => x.game).map((x) => ({ '@type': 'VideoGame', name: x.game, url: BASE + x.path })) };
   return [
     '<!-- seo: создано tools/seo.js, правьте там -->',
