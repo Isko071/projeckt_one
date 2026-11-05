@@ -1,4 +1,4 @@
-// Окно «Статистика» в меню профиля: рекорды и последние операции с аконами.
+// Окно «Статистика» в меню профиля: рекорды, партии и победы по каждой игре, последние операции с аконами.
 (function () {
   var W = window.PlatformWallet, I = window.I18n, t = I.t;
   var $ = function (id) { return document.getElementById(id); };
@@ -20,15 +20,34 @@
     }
     row(t('wallet.records.peak'), fmt(rec.peak) + ' ' + unit(rec.peak));
     row(t('wallet.records.streak'), rec.bestStreak + ' ' + days(rec.bestStreak));
-    var wins = Object.keys(rec.wins);
-    if (wins.length) row(t('wallet.records.wins'), wins.map(function (k) { return t('wallet.src.' + k) + ' ' + rec.wins[k]; }).join(', '));
-    var bests = window.PlatformStorage.get('game:minesweeper:best', null) || {};
-    ['novice', 'amateur', 'expert'].forEach(function (lv) {
-      var sec = bests[lv];
-      if (typeof sec === 'number' && isFinite(sec) && sec >= 0) {
-        row(t('wallet.records.mines', { level: t('wallet.records.level.' + lv) }), pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60));
-      }
+
+    // По играм: партии, победы (и процент), лучший результат
+    var stats = window.CatalogLogic.gameStats(window.GAMES || [], rec, {
+      '2048': window.PlatformStorage.get('game:2048:best', 0), blocks: window.PlatformStorage.get('game:blocks:best', 0),
+      minesweeper: window.PlatformStorage.get('game:minesweeper:best', null)
     });
+    var gbox = $('wd-games');
+    gbox.textContent = '';
+    if (!stats.length) {
+      var none = document.createElement('p');
+      none.className = 'log-empty'; none.textContent = t('stats.games.empty');
+      gbox.appendChild(none);
+    } else {
+      var table = document.createElement('table'), head = document.createElement('tr');
+      ['game', 'plays', 'wins', 'best'].forEach(function (k) { var th = document.createElement('th'); th.textContent = t('stats.games.' + k); if (k !== 'game') th.className = 'n'; head.appendChild(th); });
+      var thead = document.createElement('thead'); thead.appendChild(head); table.appendChild(thead);
+      var tbody = document.createElement('tbody');
+      stats.forEach(function (r) {
+        var tr = document.createElement('tr');
+        var best = r.best ? fmt(r.best) : (r.bestTime ? ['novice', 'amateur', 'expert'].filter(function (lv) { return r.bestTime[lv] !== undefined; })
+          .map(function (lv) { var sec = r.bestTime[lv]; return t('wallet.records.level.' + lv) + ' ' + Math.floor(sec / 60) + ':' + pad2(sec % 60); }).join(', ') : '—');
+        var cells = [t('games.' + r.id + '.title'), fmt(r.plays), r.wins === null ? '—' : fmt(r.wins) + (r.rate !== null ? ' · ' + r.rate + '%' : ''), best];
+        cells.forEach(function (c, i) { var td = document.createElement('td'); td.textContent = c; if (i) td.className = 'n'; tr.appendChild(td); });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      gbox.appendChild(table);
+    }
 
     // Журнал
     var list = $('wd-log'), log = W.getLog();

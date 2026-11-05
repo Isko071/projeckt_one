@@ -167,7 +167,7 @@
     }
     if (v.state && v.state.gameOver && !G.counted && v.seat !== null && v.seat !== undefined) {         // победа онлайн в рейтинг: только по правилам (сдача и выход не в счёт); победы считает сервер
       G.counted = true;
-      if (v.state.winner === v.seat && (v.state.reason === 'pieces' || v.state.reason === 'blocked') && window.PlatformRating) window.PlatformRating.reportWin('checkers');
+      if (v.state.winner === v.seat && (v.state.reason === 'pieces' || v.state.reason === 'blocked') && window.PlatformRating) (window.PlatformWallet && window.PlatformWallet.countWin('checkers'), window.PlatformRating.reportWin('checkers'));      // победа онлайн: в свою статистику и в рейтинг
     }
     if (v.status === 'lobby') G.counted = false;
     render();
