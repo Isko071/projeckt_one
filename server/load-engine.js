@@ -13,6 +13,8 @@ const FILES = [
   'games/poker/logic.js',
   'games/battleship/logic.js',
   'games/checkers/logic.js',
+  'games/durak/logic.js',
+  'games/durak/bot.js',
   'shared/rooms.js',
   'shared/rooms-turns.js',
   'shared/rooms-poker.js'
@@ -28,6 +30,8 @@ function loadEngine() {
     Poker: ctx.Poker,
     Battleship: ctx.Battleship,
     Checkers: ctx.Checkers,
+    Durak: ctx.Durak,
+    DurakBot: ctx.DurakBot,
     PlatformTurnRooms: ctx.PlatformTurnRooms,
     PlatformPokerRooms: ctx.PlatformPokerRooms,
     PlatformChat: ctx.PlatformChat
