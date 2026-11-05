@@ -158,23 +158,19 @@ test('боты: ходят только по правилам на всех ур
   assert.ok(st.gameOver);
 });
 
-test('колода 54: от двойки до туза и два джокера; джокер бьёт любую карту, его бьёт только красный джокер', () => {
+test('колода 52: от двойки до туза, без джокеров', () => {
   for (let seed = 1; seed < 20; seed++) {
-    const st = D.init([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { mode: 'perevodnoy-54' }, rngOf(seed));
-    assert.equal(st.mode, 'perevodnoy'); assert.equal(st.deckSize, 54);
-    assert.equal(cardsTotal(st), 54);
+    const st = D.init([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { mode: 'perevodnoy-52' }, rngOf(seed));
+    assert.equal(st.mode, 'perevodnoy'); assert.equal(st.deckSize, 52);
+    assert.equal(cardsTotal(st), 52);
     const all = st.seats.flatMap((x) => x.hand).concat(st.deck);
-    assert.ok(all.includes('XB') && all.includes('XR') && all.includes('2S') && all.includes('AH'));
-    assert.ok(!D.isJoker(st.trumpCard), 'джокер козырем не бывает');
+    assert.equal(new Set(all).size, 52);
+    assert.ok(all.includes('2S') && all.includes('5H') && all.includes('AH'));
+    assert.ok(all.every((c) => c[0] !== 'X'), 'джокеров нет');
   }
-  assert.ok(D.beats('XB', 'AH', 'H'), 'джокер бьёт козырного туза');
-  assert.ok(D.beats('XB', '2S', 'H'));
-  assert.ok(D.beats('XR', 'XB', 'H')); assert.ok(!D.beats('XB', 'XR', 'H')); assert.ok(!D.beats('AH', 'XB', 'H'), 'джокера туз не бьёт');
-  // ход джокером: побить нечем — забирает
-  let st = pos({ hands: [['XB', '7S'], ['AH', 'KH', 'QS']], deck: ['2D'] });
-  st.deckSize = 54; st.discard = 54 - 6;
-  st = act(st, { type: 'attack', card: 'XB' });
-  assert.equal(D.legal(st).defend.length, 0); assert.equal(D.legal(st).take, true);
+  const st36 = D.init([{ id: 'a' }, { id: 'b' }], { mode: 'podkidnoy' }, rngOf(2));
+  assert.equal(st36.deckSize, 36);
+  assert.ok(st36.seats.flatMap((x) => x.hand).concat(st36.deck).every((c) => D.rank(c) >= D.RANKS.indexOf('6')), 'в колоде на 36 — от шестёрки');
 });
 
 test('за столом до 6 игроков; 36 карт на шестерых — колоды нет, козырь — последняя розданная карта', () => {
@@ -187,7 +183,7 @@ test('за столом до 6 игроков; 36 карт на шестерых
 test('боты на 2–6 игроков с обеими колодами: партии доходят до конца, карты не теряются', () => {
   const rng = rngOf(77), levels = ['easy', 'medium', 'expert'];
   for (let g = 0; g < 100; g++) {
-    const n = 2 + (g % 5), deck = g % 2 ? 54 : 36, mode = (g % 4 < 2 ? 'podkidnoy' : 'perevodnoy') + (deck === 54 ? '-54' : '');
+    const n = 2 + (g % 5), deck = g % 2 ? 52 : 36, mode = (g % 4 < 2 ? 'podkidnoy' : 'perevodnoy') + (deck === 52 ? '-52' : '');
     let st = D.init(Array.from({ length: n }, (_, i) => ({ id: 'p' + i })), { mode }, rng), k = 0;
     while (!st.gameOver && k++ < 5000) { st = act(st, B.choose(st, st.actor, levels[(st.actor + g) % 3], rng)); assert.equal(cardsTotal(st), deck); }
     assert.ok(st.gameOver);

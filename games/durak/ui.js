@@ -31,11 +31,10 @@ function catalogLinkHtml() { return '<a class="theme-btn" href="' + CATALOG_URL 
 var SUIT_CHAR = { S: '♠', C: '♣', D: '♦', H: '♥' };
 // Достоинство на карте (10, В, Д, К, Т) и название для экранного диктора — из словаря
 function rankLabel(c) { return /[TJQKA]/.test(c[0]) ? tr('rank.' + c[0]) : c[0]; }
-function cardName(c) { return D.isJoker(c) ? tr('joker.' + c[1]) : tr('card.name', { r: tr('rankName.' + c[0]), s: tr('suit.' + c[1]) }); }
-// Режим стола одной строкой: «Переводной · 54 карты»
+function cardName(c) { return tr('card.name', { r: tr('rankName.' + c[0]), s: tr('suit.' + c[1]) }); }
+// Режим стола одной строкой: «Переводной · 52 карты»
 function modeLabel(mode, deck) { var pm = D.parseMode(mode); return tr('mode.label', { v: tr('start.variant.' + pm.variant), d: tr('start.deck.' + (deck || pm.deck)) }); }
 function cardHtml(c, cls, attrs) {
-  if (D.isJoker(c)) return '<span class="pcard joker ' + (c === 'XR' ? 'red' : 'blk') + (cls ? ' ' + cls : '') + '"' + (attrs || '') + '><b>' + esc(tr('rank.X')) + '<i>★</i></b><em>★</em></span>';
   var red = c[1] === 'D' || c[1] === 'H';
   return '<span class="pcard ' + (red ? 'red' : 'blk') + (cls ? ' ' + cls : '') + '"' + (attrs || '') + '><b>' + esc(rankLabel(c)) + '<i>' + SUIT_CHAR[c[1]] + '</i></b><em>' + SUIT_CHAR[c[1]] + '</em></span>';
 }
@@ -192,7 +191,7 @@ function botController(level, variant, deck, players) {
     reward = null; paid = false;
     var seats = [{ id: 'me', name: P.getProfile().name }];
     for (var i = 1; i < players; i++) seats.push({ id: 'bot' + i, name: D.botNames[(i - 1) % D.botNames.length], bot: true, level: level });
-    st = D.init(seats, { mode: variant + (deck === 54 ? '-54' : '') });
+    st = D.init(seats, { mode: variant + (deck === 52 ? '-52' : '') });
   }
   function view() {
     var v = D.view(st);
@@ -277,7 +276,7 @@ appEl.addEventListener('click', function (e) {
     case 'level': app.level = D.CONFIG.botLevels.indexOf(val) >= 0 ? val : 'medium'; render(); break;
     case 'variant': app.variant = val === 'perevodnoy' ? 'perevodnoy' : 'podkidnoy'; render(); break;
     case 'players': app.players = Math.max(2, Math.min(6, Number(val) || 2)); render(); break;
-    case 'deck': app.deck = Number(val) === 54 ? 54 : 36; render(); break;
+    case 'deck': app.deck = Number(val) === 52 ? 52 : 36; render(); break;
     case 'mode': app.mode = val === 'online' ? 'online' : 'bot'; render(); break;
     case 'exit': { var v2 = ctrl.view(), untouched = ctrl.bot && !ctrl.started(); if (!v2.gameOver && !untouched && !v2.seats[mySeat()].out) { app.confirm = true; render(); } else toMenu(); break; }      // с ботами до первого хода выходим без «Сдаться?»
     case 'stay': app.confirm = false; render(); break;

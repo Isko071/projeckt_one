@@ -9,7 +9,7 @@
   var D = root.Durak;
 
   // «Цена» карты: чем выше, тем жальче отдавать. Козыри дороже любых некозырей
-  function cost(c, trump) { return D.rank(c) + (D.isJoker(c) ? 30 : (D.suit(c) === trump ? 14 : 0)); }
+  function cost(c, trump) { return D.rank(c) + (D.suit(c) === trump ? 14 : 0); }
   function cheapest(cards, trump) { return cards.slice().sort(function (a, b) { return cost(a, trump) - cost(b, trump); })[0]; }
 
   // Самый дешёвый способ покрыть все непобитые карты (жадно, от самой дорогой к дешёвой); null — покрыть нельзя

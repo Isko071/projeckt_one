@@ -1,6 +1,5 @@
 // Чистая логика «Дурака» (подкидной и переводной) на 2–6 игроков. Форма та же, что у других игр с сервером столов: init / reduce / view, без DOM и window.
-// Колода 36 карт (6–туз) или 54 (2–туз и два джокера), каждому по 6, козырь — последняя карта колоды (лежит открытой). Первым ходит тот, у кого младший козырь.
-// Джокер старше любой карты (и козырного туза): им можно бить что угодно; побить джокера можно только красным джокером (чёрного).
+// Колода 36 карт (6–туз) или 52 (2–туз), каждому по 6, козырь — последняя карта колоды (лежит открытой). Первым ходит тот, у кого младший козырь.
 // Ход идёт по очереди одним действием за раз (так проще телефону, ботам и серверу):
 //   attack  — ходящий кладёт карту (первую — любую, дальше — того же достоинства, что уже есть на столе);
 //   defend  — отбивающийся кроет непобитую карту: старшей той же масти или козырем (козырь — только старшим козырем);
@@ -13,47 +12,43 @@
 // Последний с картами — дурак (gameOver, reason 'finished', loser). Вышли все одновременно — ничья (loser −1).
 // Выход из-за стола (leave) или сдача (concede): этот игрок — дурак, партия окончена.
 //
-// Карта — строка «достоинство + масть»: достоинства 2 3 4 5 6 7 8 9 T J Q K A, масти S C D H (пики, трефы, бубны, черви). Например 'TH' — десятка червей; XB, XR — джокеры.
+// Карта — строка «достоинство + масть»: достоинства 2 3 4 5 6 7 8 9 T J Q K A, масти S C D H (пики, трефы, бубны, черви). Например 'TH' — десятка червей.
 //   Durak.init(seats, options, rng) → состояние; seats: [{ id, name, bot? }]; options.mode: 'podkidnoy' | 'perevodnoy'
 //   Durak.reduce(state, action) → { ok, state, events } | { ok: false, error }; действие: { type, seat, card?, target? }
 //   Durak.view(state) → стол без чужих карт и колоды (у каждого только число карт); Durak.secrets(state) → { id игрока: его карты }
 //   Durak.legal(state) → что может сделать тот, чья очередь: { seat, attack: [карты], defend: [{ card, target }], transfer: [карты], take, pass }
 (function (root) {
-  // Режим стола (mode) — вариант и колода: 'podkidnoy' | 'perevodnoy', с '-54' — колода 54 карты (от двойки до туза и два джокера), иначе 36
-  var CONFIG = { minSeats: 2, maxSeats: 6, hand: 6, modes: ['podkidnoy', 'perevodnoy', 'podkidnoy-54', 'perevodnoy-54'], variants: ['podkidnoy', 'perevodnoy'], decks: [36, 54], botLevels: ['easy', 'medium', 'expert'] };
+  // Режим стола (mode) — вариант и колода: 'podkidnoy' | 'perevodnoy', с '-52' — колода 52 карты (от двойки до туза), иначе 36
+  var CONFIG = { minSeats: 2, maxSeats: 6, hand: 6, modes: ['podkidnoy', 'perevodnoy', 'podkidnoy-52', 'perevodnoy-52'], variants: ['podkidnoy', 'perevodnoy'], decks: [36, 52], botLevels: ['easy', 'medium', 'expert'] };
   // Имена ботов за онлайн-столом (их видят все игроки; сервер без словаря, поэтому имена здесь)
   var BOT_NAMES = ['Бот Саша', 'Бот Миша', 'Бот Женя', 'Бот Оля', 'Бот Дима'];
   var PLAYER_ACTIONS = ['attack', 'defend', 'transfer', 'take', 'pass', 'concede'];
-  // Достоинства по старшинству; X — джокер (XB — чёрный, XR — красный): старше любой карты, красный старше чёрного
-  var RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', 'X'], SUITS = ['S', 'C', 'D', 'H'], JOKERS = ['XB', 'XR'];
+  // Достоинства по старшинству (в колоде на 36 — от шестёрки)
+  var RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'], SUITS = ['S', 'C', 'D', 'H'];
 
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function bad(error) { return { ok: false, error: error }; }
   function rank(c) { return RANKS.indexOf(c[0]); }
   function suit(c) { return c[1]; }
-  function isJoker(c) { return c[0] === 'X'; }
-  function isTrump(c, trump) { return isJoker(c) || suit(c) === trump; }
-  function valid(c) { return typeof c === 'string' && c.length === 2 && (JOKERS.indexOf(c) >= 0 || (rank(c) >= 0 && rank(c) < RANKS.length - 1 && SUITS.indexOf(c[1]) >= 0)); }
-  // Бьёт ли карта b карту a при козыре trump. Джокер бьёт любую карту, его самого — только красный джокер (чёрного)
+  function isTrump(c, trump) { return suit(c) === trump; }
+  function valid(c) { return typeof c === 'string' && c.length === 2 && rank(c) >= 0 && SUITS.indexOf(c[1]) >= 0; }
+  // Бьёт ли карта b карту a при козыре trump
   function beats(b, a, trump) {
-    if (isJoker(a)) return b === 'XR' && a === 'XB';
-    if (isJoker(b)) return true;
     if (suit(b) === suit(a)) return rank(b) > rank(a);
     return suit(b) === trump && suit(a) !== trump;
   }
   function fullDeck(n) {
-    var d = [], from = n === 54 ? 0 : RANKS.indexOf('6');
-    SUITS.forEach(function (s) { RANKS.slice(from, RANKS.length - 1).forEach(function (r) { d.push(r + s); }); });
-    return n === 54 ? d.concat(JOKERS) : d;
+    var d = [], from = n === 52 ? 0 : RANKS.indexOf('6');
+    SUITS.forEach(function (s) { RANKS.slice(from).forEach(function (r) { d.push(r + s); }); });
+    return d;
   }
-  function parseMode(m) { m = CONFIG.modes.indexOf(m) >= 0 ? m : 'podkidnoy'; return { variant: m.split('-')[0], deck: /-54$/.test(m) ? 54 : 36 }; }
+  function parseMode(m) { m = CONFIG.modes.indexOf(m) >= 0 ? m : 'podkidnoy'; return { variant: m.split('-')[0], deck: /-52$/.test(m) ? 52 : 36 }; }
   function shuffle(a, rng) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   // Сортировка руки для показа: некозыри по масти и достоинству, козыри в конце
   function sortHand(hand, trump) {
     return hand.slice().sort(function (a, b) {
-      var ta = isJoker(a) ? 2 : (suit(a) === trump ? 1 : 0), tb = isJoker(b) ? 2 : (suit(b) === trump ? 1 : 0);
+      var ta = suit(a) === trump ? 1 : 0, tb = suit(b) === trump ? 1 : 0;
       if (ta !== tb) return ta - tb;
-      if (ta === 2) return rank(a) - rank(b) || (a === 'XR' ? 1 : -1);
       if (suit(a) !== suit(b)) return SUITS.indexOf(suit(a)) - SUITS.indexOf(suit(b));
       return rank(a) - rank(b);
     });
@@ -69,12 +64,10 @@
     var pm = parseMode(options.mode), mode = pm.variant;
     var list = (seats || []).slice(0, CONFIG.maxSeats).map(function (s) { return { id: s.id, name: s.name || '', bot: !!s.bot, level: s.level || '', active: true, out: false, hand: [] }; });
     var deck = shuffle(fullDeck(pm.deck), rng);
-    // козырь — нижняя карта колоды (её возьмут последней); джокер козырем не бывает — он уходит повыше
-    for (var k = deck.length - 1; k > 0 && isJoker(deck[deck.length - 1]); k--) { var t = deck[deck.length - 1]; deck[deck.length - 1] = deck[k - 1]; deck[k - 1] = t; }
+    // козырь — нижняя карта колоды, её возьмут последней
     list.forEach(function (s) { s.hand = deck.splice(0, CONFIG.hand); });
     // 36 карт на шестерых — колоды после раздачи не остаётся: козырь — последняя розданная карта (её все видят)
     var trumpCard = deck.length ? deck[deck.length - 1] : list[list.length - 1].hand[CONFIG.hand - 1];
-    if (isJoker(trumpCard)) { var h = list[list.length - 1].hand; trumpCard = h.filter(function (c) { return !isJoker(c); })[0]; }
     var trump = suit(trumpCard);
     // Первым ходит младший козырь; козырей ни у кого нет — случайный игрок
     var first = -1, low = 99;
@@ -258,7 +251,7 @@
 
   root.Durak = {
     CONFIG: CONFIG, PLAYER_ACTIONS: PLAYER_ACTIONS, RANKS: RANKS, SUITS: SUITS,
-    init: init, reduce: reduce, view: view, secrets: secrets, legal: legal, size: size, isJoker: isJoker, isTrump: isTrump, parseMode: parseMode, deckTotal: deckTotal, beats: beats, rank: rank, suit: suit, sortHand: sortHand, nextAlive: nextAlive, alive: alive,
+    init: init, reduce: reduce, view: view, secrets: secrets, legal: legal, size: size, isTrump: isTrump, parseMode: parseMode, deckTotal: deckTotal, beats: beats, rank: rank, suit: suit, sortHand: sortHand, nextAlive: nextAlive, alive: alive,
     waitingSeats: waitingSeats, progressKey: progressKey, cleanAction: cleanAction, botNames: BOT_NAMES,
     // Ход бота за онлайн-столом (shared/rooms-turns.js): нужен games/durak/bot.js
     botAction: function (st, seat, rng) { return root.DurakBot ? root.DurakBot.choose(st, seat, st.seats[seat].level || 'medium', rng) : null; }

@@ -193,7 +193,7 @@
     if (!api || on.busy || stakeProblem()) { if (!api) { on.tableError = 'missing'; render(); } return; }
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: on.size, mode: on.variant + (on.deck === 54 ? '-54' : ''), fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
+    api.createRoom({ size: on.size, mode: on.variant + (on.deck === 52 ? '-52' : ''), fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
       function (e) { on.busy = false; on.tableError = errorKey(e); on.screen = 'tables'; render(); });
   }
   function joinTable(code) {
@@ -361,7 +361,7 @@
       case 'private': on.private = !on.private; render(); return true;
       case 'ovariant': on.variant = v === 'perevodnoy' ? 'perevodnoy' : 'podkidnoy'; render(); return true;
       case 'osize': on.size = Math.max(2, Math.min(6, Number(v) || 2)); render(); return true;
-      case 'odeck': on.deck = Number(v) === 54 ? 54 : 36; render(); return true;
+      case 'odeck': on.deck = Number(v) === 52 ? 52 : 36; render(); return true;
       case 'obots': on.bots = !on.bots; render(); return true;
       case 'olevel': on.botLevel = D.CONFIG.botLevels.indexOf(v) >= 0 ? v : 'medium'; render(); return true;
       case 'stake': on.stake = Number(v) ? String(Number(v)) : ''; render(); return true;
