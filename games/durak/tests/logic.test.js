@@ -157,3 +157,39 @@ test('боты: ходят только по правилам на всех ур
   while (!st.gameOver && k++ < 3000) st = act(st, B.choose(st, st.actor, 'medium', rng));
   assert.ok(st.gameOver);
 });
+
+test('колода 54: от двойки до туза и два джокера; джокер бьёт любую карту, его бьёт только красный джокер', () => {
+  for (let seed = 1; seed < 20; seed++) {
+    const st = D.init([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { mode: 'perevodnoy-54' }, rngOf(seed));
+    assert.equal(st.mode, 'perevodnoy'); assert.equal(st.deckSize, 54);
+    assert.equal(cardsTotal(st), 54);
+    const all = st.seats.flatMap((x) => x.hand).concat(st.deck);
+    assert.ok(all.includes('XB') && all.includes('XR') && all.includes('2S') && all.includes('AH'));
+    assert.ok(!D.isJoker(st.trumpCard), 'джокер козырем не бывает');
+  }
+  assert.ok(D.beats('XB', 'AH', 'H'), 'джокер бьёт козырного туза');
+  assert.ok(D.beats('XB', '2S', 'H'));
+  assert.ok(D.beats('XR', 'XB', 'H')); assert.ok(!D.beats('XB', 'XR', 'H')); assert.ok(!D.beats('AH', 'XB', 'H'), 'джокера туз не бьёт');
+  // ход джокером: побить нечем — забирает
+  let st = pos({ hands: [['XB', '7S'], ['AH', 'KH', 'QS']], deck: ['2D'] });
+  st.deckSize = 54; st.discard = 54 - 6;
+  st = act(st, { type: 'attack', card: 'XB' });
+  assert.equal(D.legal(st).defend.length, 0); assert.equal(D.legal(st).take, true);
+});
+
+test('за столом до 6 игроков; 36 карт на шестерых — колоды нет, козырь — последняя розданная карта', () => {
+  const st = D.init(Array.from({ length: 6 }, (_, i) => ({ id: 'p' + i })), { mode: 'podkidnoy' }, rngOf(3));
+  assert.equal(st.seats.length, 6); assert.equal(st.deck.length, 0); assert.equal(cardsTotal(st), 36);
+  assert.ok(st.seats[5].hand.includes(st.trumpCard));
+  assert.equal(D.reduce(st, { seat: 6, type: 'pass' }).ok, false);
+});
+
+test('боты на 2–6 игроков с обеими колодами: партии доходят до конца, карты не теряются', () => {
+  const rng = rngOf(77), levels = ['easy', 'medium', 'expert'];
+  for (let g = 0; g < 100; g++) {
+    const n = 2 + (g % 5), deck = g % 2 ? 54 : 36, mode = (g % 4 < 2 ? 'podkidnoy' : 'perevodnoy') + (deck === 54 ? '-54' : '');
+    let st = D.init(Array.from({ length: n }, (_, i) => ({ id: 'p' + i })), { mode }, rng), k = 0;
+    while (!st.gameOver && k++ < 5000) { st = act(st, B.choose(st, st.actor, levels[(st.actor + g) % 3], rng)); assert.equal(cardsTotal(st), deck); }
+    assert.ok(st.gameOver);
+  }
+});

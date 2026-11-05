@@ -4,7 +4,7 @@
 // Карты скрыты: сервер шлёт всем общий вид стола (state) и каждому отдельно его карты (mine). Свободные места займут боты, только если создатель так решил.
 (function () {
   var Cloud = window.PlatformCloud, P = window.PlatformProfile;
-  var on = { screen: 'login', rooms: null, stake: '', private: false, size: 2, variant: 'podkidnoy', bots: false, botLevel: 'medium', code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
+  var on = { screen: 'login', rooms: null, stake: '', private: false, size: 2, variant: 'podkidnoy', deck: 36, bots: false, botLevel: 'medium', code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
   var G = null, wsApi = null, pollTimer = null, roomsTimer = null, failing = 0;
 
   function now() { return Date.now(); }
@@ -193,7 +193,7 @@
     if (!api || on.busy || stakeProblem()) { if (!api) { on.tableError = 'missing'; render(); } return; }
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: on.size, mode: on.variant, fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
+    api.createRoom({ size: on.size, mode: on.variant + (on.deck === 54 ? '-54' : ''), fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
       function (e) { on.busy = false; on.tableError = errorKey(e); on.screen = 'tables'; render(); });
   }
   function joinTable(code) {
@@ -258,7 +258,7 @@
     if (rooms === null) list = '<div class="card o-box" role="status" aria-label="' + esc(tr('o.tables.loading')) + '">' + [1, 2, 3].map(function () { return '<div class="o-row skel"><i class="av"></i><i class="ln"></i></div>'; }).join('') + '</div>';
     else if (!rooms.length) list = '<div class="o-dashed">' + esc(tr('o.tables.empty')) + '</div>';
     else list = '<div class="card o-box"><h3>' + esc(tr('o.tables.open')) + '</h3>' + rooms.map(function (r) {
-      var tags = [tr('o.tag.variant', { v: tr('start.variant.' + (r.mode || 'podkidnoy')), n: r.players + '/' + r.size })].concat(r.stake ? [tr('o.stake.tag', { n: r.stake })] : []);
+      var tags = [tr('o.tag.variant', { v: modeLabel(r.mode || 'podkidnoy'), n: r.players + '/' + r.size })].concat(r.stake ? [tr('o.stake.tag', { n: r.stake })] : []);
       return '<div class="o-row"><span class="av">' + esc(P.initial(r.hostName)) + '</span><span class="who"><b>' + esc(r.hostName || r.code) + '</b><small>' + esc(tags.join(' · ')) + '</small></span>' +
         '<button class="btn-secondary small" data-act="joinRoom" data-v="' + esc(r.code) + '">' + esc(tr('o.tables.join')) + '</button></div>';
     }).join('') + '</div>';
@@ -275,8 +275,9 @@
   function createHtml() {
     var seg = function (act, items, sel, key) { return '<div class="o-seg" role="group">' + items.map(function (it) { return '<button data-act="' + act + '" data-v="' + it + '" aria-pressed="' + (String(sel) === String(it)) + '">' + esc(tr(key + '.' + it)) + '</button>'; }).join('') + '</div>'; };
     return '<div class="o-page">' + pageHead('toTables', tr('o.create.title')) +
-      '<div class="o-field"><div class="field-title">' + esc(tr('start.variant')) + '</div>' + seg('ovariant', D.CONFIG.modes, on.variant, 'start.variant') + '</div>' +
-      '<div class="o-field"><div class="field-title">' + esc(tr('o.create.players')) + '</div>' + seg('osize', [2, 3, 4], on.size, 'start.players') + '</div>' +
+      '<div class="o-field"><div class="field-title">' + esc(tr('start.variant')) + '</div>' + seg('ovariant', D.CONFIG.variants, on.variant, 'start.variant') + '</div>' +
+      '<div class="o-field"><div class="field-title">' + esc(tr('start.deck')) + '</div>' + seg('odeck', D.CONFIG.decks, on.deck, 'start.deck') + '</div>' +
+      '<div class="o-field"><div class="field-title">' + esc(tr('o.create.players')) + '</div>' + seg('osize', [2, 3, 4, 5, 6], on.size, 'start.players') + '</div>' +
       '<button class="mode-btn o-mode" data-act="obots" aria-pressed="' + on.bots + '"><b>' + esc(tr('o.create.bots')) + '</b><small>' + esc(tr(on.bots ? 'o.create.botsOn' : 'o.create.botsOff')) + '</small></button>' +
       (on.bots ? '<div class="o-field"><div class="field-title">' + esc(tr('o.create.level')) + '</div>' + seg('olevel', D.CONFIG.botLevels, on.botLevel, 'start.level') + '</div>' : '') +
       '<button class="mode-btn o-mode" data-act="private" aria-pressed="' + on.private + '"><b>' + esc(tr('o.create.private')) + '</b><small>' + esc(tr(on.private ? 'o.create.privateSub' : 'o.create.privateOff')) + '</small></button>' +
@@ -297,7 +298,7 @@
     return '<div class="o-page"><div class="o-head"><button class="theme-btn" data-act="leaveLobby" aria-label="' + esc(tr('o.lobby.leave')) + '">←</button><h2>' + esc(tr('o.lobby.title')) + '</h2>' + themeButtonHtml('theme-btn') + '</div>' +
       '<div class="card o-box o-center"><small>' + esc(tr('o.lobby.code')) + '</small><div class="o-bigcode">' + esc(G ? G.code : '') + '</div>' +
         (v && v.private ? '<div class="o-mode-tag"><b>' + esc(tr('o.lobby.private')) + '</b></div>' : '') +
-        '<div class="o-mode-tag"><b>' + esc(tr('start.variant.' + (v && v.mode || 'podkidnoy'))) + '</b>' + (v && v.stake ? ' · ' + esc(tr('o.stake.tag', { n: v.stake })) : '') + '</div>' +
+        '<div class="o-mode-tag"><b>' + esc(modeLabel(v && v.mode || 'podkidnoy')) + '</b>' + (v && v.stake ? ' · ' + esc(tr('o.stake.tag', { n: v.stake })) : '') + '</div>' +
         '<div class="o-btns"><button class="btn-secondary small" data-act="copyCode">' + esc(tr(on.copied ? 'o.lobby.copied' : 'o.lobby.copy')) + '</button>' +
         '<button class="btn-secondary small" data-act="shareLink">' + esc(tr('o.lobby.share')) + '</button></div></div>' +
       '<div class="o-seats">' + seats.join('') + '</div>' + autoHtml + chat.panelHtml({ mode: 'lobby' }) + bannerHtml() +
@@ -359,7 +360,8 @@
       case 'toCreate': on.screen = 'create'; on.tableError = null; render(); return true;
       case 'private': on.private = !on.private; render(); return true;
       case 'ovariant': on.variant = v === 'perevodnoy' ? 'perevodnoy' : 'podkidnoy'; render(); return true;
-      case 'osize': on.size = Math.max(2, Math.min(4, Number(v) || 2)); render(); return true;
+      case 'osize': on.size = Math.max(2, Math.min(6, Number(v) || 2)); render(); return true;
+      case 'odeck': on.deck = Number(v) === 54 ? 54 : 36; render(); return true;
       case 'obots': on.bots = !on.bots; render(); return true;
       case 'olevel': on.botLevel = D.CONFIG.botLevels.indexOf(v) >= 0 ? v : 'medium'; render(); return true;
       case 'stake': on.stake = Number(v) ? String(Number(v)) : ''; render(); return true;

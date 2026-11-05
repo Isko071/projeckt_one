@@ -48,7 +48,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .mode-btn.o-mode { width: 100%; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; min-width: 0; }
 .name-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.o-page { display: flex; flex-direction: column; gap: 14px; max-width: 560px; width: 100%; margin: 0 auto; }
+.o-page { display: flex; flex-direction: column; gap: 14px; max-width: 560px; width: 100%; margin: 0 auto; padding: 12px 16px 24px; }
 .o-box { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .o-box h3 { margin: 0; font-size: 16px; }
 .o-center { text-align: center; align-items: center; }
@@ -117,6 +117,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .pcard b { position: absolute; left: calc(var(--w) * .08); top: calc(var(--w) * .05); display: flex; flex-direction: column; align-items: center; font-size: calc(var(--w) * .32); line-height: 1; font-weight: 800; }
 .pcard b i { font-style: normal; font-size: calc(var(--w) * .28); }
 .pcard em { position: absolute; right: calc(var(--w) * .08); bottom: calc(var(--w) * .04); font-style: normal; font-size: calc(var(--w) * .6); line-height: 1; opacity: .9; }
+/* Джокер: звезда вместо масти */
+.pcard.joker b { font-size: calc(var(--w) * .24); }
+.pcard.joker em { font-size: calc(var(--w) * .66); }
 .pcard.back { background: repeating-linear-gradient(45deg, var(--backA) 0 6px, var(--backB) 6px 12px); border: 3px solid var(--cardBg); }
 .pcard.fresh { animation: drop .3s ease-out; }
 @keyframes drop { from { transform: translateY(-14px) scale(1.06); opacity: .3; } }
@@ -125,7 +128,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .game { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 16px; width: 100%; max-width: 620px; margin: 0 auto; flex: 1; }
 .o-head .theme-btn { flex: none; }
 .o-head h2 small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); }
-.opps { display: flex; gap: 8px; justify-content: center; }
+.opps { display: flex; flex-wrap: wrap; gap: 6px 8px; justify-content: center; }
 .opp { flex: 1 1 0; min-width: 0; max-width: 200px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 6px 8px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); }
 .opp.turn { border-color: var(--accent); background: var(--accent-soft); }
 .opp.out { opacity: .6; }
@@ -182,3 +185,10 @@ button.pair .pcard.a { box-shadow: 0 0 0 3px var(--ok); animation: pulse 1.1s ea
 .btn.warn { background: var(--warn); border-color: var(--warn); color: white; }
 @media (max-width: 380px) { .felt { grid-template-columns: 52px 1fr 44px; padding: 8px; } .pair { width: 50px; height: 80px; } .pair .pcard { --w: 42px; } .deck .trumpcard, .deck .top { --w: 36px; } .opp .fan .pcard { --w: 22px; margin-left: -14px; } }
 @media (min-width: 700px) { .hand { --cw: 76px; padding-top: 18px; } .pair { width: 78px; height: 118px; } .pair .pcard { --w: 66px; } .felt { grid-template-columns: 90px 1fr 70px; min-height: 240px; } .deck .trumpcard, .deck .top { --w: 56px; } }
+
+/* Пять соперников (шестеро за столом): по три в ряд, карточки компактнее */
+.opps.n4 .opp, .opps.n5 .opp { flex: 1 1 30%; max-width: 32%; padding: 4px 4px 6px; }
+.opps.n4 .opp .fan, .opps.n5 .opp .fan { height: 30px; }
+.opps.n4 .opp .fan .pcard, .opps.n5 .opp .fan .pcard { --w: 20px; margin-left: -13px; }
+.opps.n4 .opp .fan .pcard:first-child, .opps.n5 .opp .fan .pcard:first-child { margin-left: 0; }
+.opps.n4 .opp .nm, .opps.n5 .opp .nm { font-size: 13px; }

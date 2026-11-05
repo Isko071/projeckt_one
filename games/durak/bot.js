@@ -9,7 +9,7 @@
   var D = root.Durak;
 
   // «Цена» карты: чем выше, тем жальче отдавать. Козыри дороже любых некозырей
-  function cost(c, trump) { return D.rank(c) + (D.suit(c) === trump ? 10 : 0); }
+  function cost(c, trump) { return D.rank(c) + (D.isJoker(c) ? 30 : (D.suit(c) === trump ? 14 : 0)); }
   function cheapest(cards, trump) { return cards.slice().sort(function (a, b) { return cost(a, trump) - cost(b, trump); })[0]; }
 
   // Самый дешёвый способ покрыть все непобитые карты (жадно, от самой дорогой к дешёвой); null — покрыть нельзя
@@ -42,12 +42,12 @@
       // перевод дешёвой картой выгоднее отбоя
       if (L.transfer.length) {
         var tr = cheapest(L.transfer, trump);
-        if (D.suit(tr) !== trump || (level === 'expert' && endgame)) return act({ type: 'transfer', card: tr });
+        if (!D.isTrump(tr, trump) || (level === 'expert' && endgame)) return act({ type: 'transfer', card: tr });
       }
       var plan = coverPlan(st, seat);
       if (!plan) return act({ type: 'take' });
       // сколько стоит отбой: козыри и тузы жалко отдавать, пока колода большая (потом их не вернуть)
-      var spend = plan.reduce(function (a, p) { return a + Math.max(0, cost(p.card, trump) - 6); }, 0);
+      var spend = plan.reduce(function (a, p) { return a + Math.max(0, cost(p.card, trump) - 10); }, 0);
       var onTable = st.table.length;
       var limit = level === 'expert' ? (endgame ? 99 : deck > 12 ? 9 : 14) : (deck > 12 ? 12 : 20);
       if (spend > limit && onTable <= 2 && st.seats[seat].hand.length <= 8) return act({ type: 'take' });
@@ -64,7 +64,7 @@
     var hand = st.seats[seat].hand;
     if (st.phase === 'attack') {
       // первая карта захода: младшая некозырная, лучше та, которой есть пара (её потом можно подкинуть)
-      var plain = cards.filter(function (c) { return D.suit(c) !== trump; });
+      var plain = cards.filter(function (c) { return !D.isTrump(c, trump); });
       var pool = plain.length ? plain : cards;
       if (level === 'expert') {
         var pairs = pool.filter(function (c) { return hand.filter(function (x) { return x[0] === c[0]; }).length > 1; });
@@ -74,9 +74,9 @@
     }
     // подкидываем: когда соперник забирает — сбрасываем мелочь; когда отбивается — подкидываем дешёвое, в конце игры давим всем
     var c = cheapest(cards, trump), price = cost(c, trump);
-    if (st.taking) return price < (endgame ? 99 : 10) ? act({ type: 'attack', card: c }) : act({ type: 'pass' });
+    if (st.taking) return price < (endgame ? 99 : 14) ? act({ type: 'attack', card: c }) : act({ type: 'pass' });
     if (level === 'expert' && (endgame || defHand <= 2)) return act({ type: 'attack', card: c });
-    if (price <= (deck > 6 ? 5 : 8)) return act({ type: 'attack', card: c });
+    if (price <= (deck > 6 ? 9 : 12)) return act({ type: 'attack', card: c });
     return act({ type: 'pass' });
   }
 

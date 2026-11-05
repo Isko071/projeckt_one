@@ -9,7 +9,7 @@ var appEl = document.getElementById('app');
 var WIN_REWARD = { easy: 150, medium: 250, expert: 400 };       // награда, если не остался дураком против ботов; за день не больше PlatformWallet.CONFIG.rewardCaps['durak-<уровень>']
 var BOT_MS = { easy: 900, medium: 800, expert: 700 };           // пауза перед ходом бота: чтобы было видно, что он положил
 
-var app = { screen: 'start', mode: 'bot', level: 'medium', variant: 'podkidnoy', players: 2, rules: false, confirm: false, ctrl: null, pick: null, shownMove: -1 };
+var app = { screen: 'start', mode: 'bot', level: 'medium', variant: 'podkidnoy', deck: 36, players: 2, rules: false, confirm: false, ctrl: null, pick: null, shownMove: -1 };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
@@ -31,8 +31,11 @@ function catalogLinkHtml() { return '<a class="theme-btn" href="' + CATALOG_URL 
 var SUIT_CHAR = { S: '♠', C: '♣', D: '♦', H: '♥' };
 // Достоинство на карте (10, В, Д, К, Т) и название для экранного диктора — из словаря
 function rankLabel(c) { return /[TJQKA]/.test(c[0]) ? tr('rank.' + c[0]) : c[0]; }
-function cardName(c) { return tr('card.name', { r: tr('rankName.' + c[0]), s: tr('suit.' + c[1]) }); }
+function cardName(c) { return D.isJoker(c) ? tr('joker.' + c[1]) : tr('card.name', { r: tr('rankName.' + c[0]), s: tr('suit.' + c[1]) }); }
+// Режим стола одной строкой: «Переводной · 54 карты»
+function modeLabel(mode, deck) { var pm = D.parseMode(mode); return tr('mode.label', { v: tr('start.variant.' + pm.variant), d: tr('start.deck.' + (deck || pm.deck)) }); }
 function cardHtml(c, cls, attrs) {
+  if (D.isJoker(c)) return '<span class="pcard joker ' + (c === 'XR' ? 'red' : 'blk') + (cls ? ' ' + cls : '') + '"' + (attrs || '') + '><b>' + esc(tr('rank.X')) + '<i>★</i></b><em>★</em></span>';
   var red = c[1] === 'D' || c[1] === 'H';
   return '<span class="pcard ' + (red ? 'red' : 'blk') + (cls ? ' ' + cls : '') + '"' + (attrs || '') + '><b>' + esc(rankLabel(c)) + '<i>' + SUIT_CHAR[c[1]] + '</i></b><em>' + SUIT_CHAR[c[1]] + '</em></span>';
 }
@@ -88,7 +91,7 @@ function handHtml(v, lg) {
   lg.transfer.forEach(function (c) { can[c] = true; });
   lg.defend.forEach(function (d) { can[d.card] = true; beat[d.card] = true; });
   var cards = hand.map(function (c) {
-    var cls = (can[c] ? 'ok' : (myTurn(v) ? 'no' : '')) + (app.pick === c ? ' sel' : '') + (c[1] === v.trump ? ' tr' : '');
+    var cls = (can[c] ? 'ok' : (myTurn(v) ? 'no' : '')) + (app.pick === c ? ' sel' : '') + (D.isTrump(c, v.trump) ? ' tr' : '');
     return '<button class="hc" data-card="' + c + '" aria-label="' + esc(cardName(c)) + '"' + (can[c] ? '' : ' aria-disabled="true"') + '>' + cardHtml(c, cls) + '</button>';
   }).join('');
   return '<div class="hand" role="group" aria-label="' + esc(tr('hand.label')) + '">' + cards + '</div>';
@@ -118,7 +121,7 @@ function gameHtml(v) {
     if (lg.pass) btns += '<button class="btn primary" data-act="pass">' + esc(tr(v.taking ? 'act.pass' : 'act.bito')) + '</button>';
   }
   var meTag = seatTag(v, mySeat());
-  return '<div class="game"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit')) + '">←</button><h2>' + esc(tr('title')) + '<small>' + esc(tr('start.variant.' + v.mode)) + '</small></h2>' +
+  return '<div class="game"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit')) + '">←</button><h2>' + esc(tr('title')) + '<small>' + esc(modeLabel(v.mode, v.deckSize)) + '</small></h2>' +
       (app.ctrl.online ? window.DurakOnline.chatButtonHtml() : '') + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml('theme-btn') + '</div>' +
     opponentsHtml(v) + tableHtml(v, lg) +
     '<div class="me' + (myTurn(v) ? ' turn' : '') + '"><span class="nm">' + esc(tr('you')) + '</span>' + (meTag ? '<span class="tag ' + meTag + '">' + esc(tr('tag.' + meTag)) + '</span>' : '') + '</div>' +
@@ -167,15 +170,16 @@ function startHtml() {
     '<div class="field"><div class="field-title">' + esc(tr('start.mode')) + '</div><div class="modes duo">' +
       ['bot', 'online'].map(function (m) { return '<button class="mode-btn" data-act="mode" data-v="' + m + '" aria-pressed="' + (app.mode === m) + '">' + esc(tr('start.' + m)) + '<small>' + esc(tr('start.' + m + 'Sub')) + '</small></button>'; }).join('') + '</div></div>' +
     (app.mode === 'bot'
-      ? '<div class="field"><div class="field-title">' + esc(tr('start.variant')) + '</div>' + segHtml('variant', D.CONFIG.modes, app.variant) + '</div>' +
-        '<div class="field"><div class="field-title">' + esc(tr('start.players')) + '</div>' + segHtml('players', [2, 3, 4], app.players) + '</div>' +
+      ? '<div class="field"><div class="field-title">' + esc(tr('start.variant')) + '</div>' + segHtml('variant', D.CONFIG.variants, app.variant) + '</div>' +
+        '<div class="field"><div class="field-title">' + esc(tr('start.deck')) + '</div>' + segHtml('deck', D.CONFIG.decks, app.deck) + '</div>' +
+        '<div class="field"><div class="field-title">' + esc(tr('start.players')) + '</div>' + segHtml('players', [2, 3, 4, 5, 6], app.players) + '</div>' +
         '<div class="field"><div class="field-title">' + esc(tr('start.level')) + '</div>' + segHtml('level', D.CONFIG.botLevels, app.level) + '</div>'
       : '') +
     '<div class="start-actions"><button class="btn-play" data-act="play">' + esc(tr('start.play')) + '</button><button class="btn-secondary wide" data-act="rules">' + esc(tr('rules.button')) + '</button></div></div>';
 }
 
 // ===== Партия против ботов: идёт в браузере, награда — если не остался дураком =====
-function botController(level, variant, players) {
+function botController(level, variant, deck, players) {
   var st, listeners = [], seat = 0, timer = null, reward = null, paid = false, ctrl;
   function emit() { listeners.forEach(function (fn) { fn(); }); }
   function settle() {
@@ -188,7 +192,7 @@ function botController(level, variant, players) {
     reward = null; paid = false;
     var seats = [{ id: 'me', name: P.getProfile().name }];
     for (var i = 1; i < players; i++) seats.push({ id: 'bot' + i, name: D.botNames[(i - 1) % D.botNames.length], bot: true, level: level });
-    st = D.init(seats, { mode: variant });
+    st = D.init(seats, { mode: variant + (deck === 54 ? '-54' : '') });
   }
   function view() {
     var v = D.view(st);
@@ -269,10 +273,11 @@ appEl.addEventListener('click', function (e) {
     case 'theme': window.PlatformTheme.toggle(); break;
     case 'rules': app.rules = true; render(); break;
     case 'closeRules': app.rules = false; render(); break;
-    case 'play': startGame(botController(app.level, app.variant, app.players)); break;
+    case 'play': startGame(botController(app.level, app.variant, app.deck, app.players)); break;
     case 'level': app.level = D.CONFIG.botLevels.indexOf(val) >= 0 ? val : 'medium'; render(); break;
     case 'variant': app.variant = val === 'perevodnoy' ? 'perevodnoy' : 'podkidnoy'; render(); break;
-    case 'players': app.players = Math.max(2, Math.min(4, Number(val) || 2)); render(); break;
+    case 'players': app.players = Math.max(2, Math.min(6, Number(val) || 2)); render(); break;
+    case 'deck': app.deck = Number(val) === 54 ? 54 : 36; render(); break;
     case 'mode': app.mode = val === 'online' ? 'online' : 'bot'; render(); break;
     case 'exit': { var v2 = ctrl.view(), untouched = ctrl.bot && !ctrl.started(); if (!v2.gameOver && !untouched && !v2.seats[mySeat()].out) { app.confirm = true; render(); } else toMenu(); break; }      // с ботами до первого хода выходим без «Сдаться?»
     case 'stay': app.confirm = false; render(); break;
