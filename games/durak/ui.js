@@ -66,19 +66,17 @@ function seatsHtml(v) {
     var i = (me + k) % n, s = v.seats[i], cnt = D.size(v, i), tag = seatTag(v, i), p = pos[k - 1];
     out += '<div class="seat' + (v.actor === i && !v.gameOver ? ' turn' : '') + (s.out ? ' out' : '') + (s.active === false ? ' gone' : '') + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
       '<span class="tag' + (tag ? ' ' + tag : ' none') + '">' + esc(tag ? tr('tag.' + tag) : '·') + '</span>' +
-      '<div class="ring"><div class="av" style="background:' + seatColor(i) + '">' + esc(P.initial(s.name || '?')) + '</div>' +
+      '<div class="ring" data-seat="' + i + '"><div class="av" style="background:' + seatColor(i) + '">' + esc(P.initial(s.name || '?')) + '</div>' +
       '<span class="cnt" aria-label="' + esc(tr('cards', { n: cnt })) + '">' + backHtml('mini') + '<b>' + cnt + '</b></span></div>' +
       '<div class="nick">' + esc(nameOf(v, i)) + '</div></div>';
   }
   return out;
 }
 function tableHtml(v, lg) {
-  var fresh = v.last && v.moves !== app.shownMove ? v.last : null;
   var pick = app.pick, targets = {};
   if (pick) lg.defend.forEach(function (d) { if (d.card === pick) targets[d.target] = true; });
   var pairs = v.table.map(function (p, i) {
-    var newA = fresh && (fresh.type === 'attack' || fresh.type === 'transfer') && fresh.card === p.a, newD = fresh && fresh.type === 'defend' && fresh.card === p.d;
-    var a = cardHtml(p.a, 'a' + (newA ? ' fresh' : '')), d = p.d ? cardHtml(p.d, 'd' + (newD ? ' fresh' : '')) : '';
+    var a = cardHtml(p.a, 'a', ' data-c="' + p.a + '"'), d = p.d ? cardHtml(p.d, 'd', ' data-c="' + p.d + '"') : '';
     var label = cardName(p.a) + (p.d ? ' — ' + cardName(p.d) : '');
     return targets[i] ? '<button class="pair target" data-target="' + i + '" aria-label="' + esc(label) + '">' + a + d + '</button>' : '<div class="pair" aria-label="' + esc(label) + '">' + a + d + '</div>';
   }).join('');
@@ -86,7 +84,7 @@ function tableHtml(v, lg) {
     (deck ? cardHtml(v.trumpCard, 'trumpcard') + (deck > 1 ? backHtml('top') : '') + '<span class="dn">' + deck + '</span>' : '') +
     '<span class="ts' + (v.trump === 'D' || v.trump === 'H' ? ' red' : '') + '" title="' + esc(tr('trump')) + '">' + SUIT_CHAR[v.trump] + '</span></div>';
   var bito = '<div class="bito">' + (v.discard ? backHtml('pile') + '<span>' + esc(tr('discard', { n: v.discard })) + '</span>' : '') + '</div>';
-  var info = !v.table.length && v.last && (v.last.type === 'bito' || v.last.type === 'took') && v.moves !== app.shownMove ? '<div class="flash">' + esc(v.last.type === 'bito' ? tr('last.bito') : tr('last.took', { name: nameOf(v, v.last.seat) })) + '</div>' : '';
+  var info = !v.table.length && v.last && (v.last.type === 'bito' || v.last.type === 'took') ? '<div class="flash">' + esc(v.last.type === 'bito' ? tr('last.bito') : tr('last.took', { name: nameOf(v, v.last.seat) })) + '</div>' : '';
   // Овальный стол: соперники по кругу, в центре — карты захода, слева колода с козырем, справа отбой
   return '<div class="area n' + (v.seats.length - 1) + '"><div class="oval"></div>' + trump + '<div class="table' + (v.taking ? ' taking' : '') + '" role="group" aria-label="' + esc(tr('table.label')) + '">' + (pairs || info || '<span class="empty">' + esc(tr('table.empty')) + '</span>') + '</div>' + bito + seatsHtml(v) + '</div>';
 }
@@ -130,7 +128,7 @@ function gameHtml(v) {
   return '<div class="game"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit')) + '">←</button><h2>' + esc(tr('title')) + '<small>' + esc(modeLabel(v.mode, v.deckSize)) + '</small></h2>' +
       (app.ctrl.online ? window.DurakOnline.chatButtonHtml() : '') + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml('theme-btn') + '</div>' +
     tableHtml(v, lg) +
-    '<div class="me' + (myTurn(v) ? ' turn' : '') + '"><div class="ring"><div class="av" style="background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</div></div><span class="nm">' + esc(tr('you')) + '</span>' + (meTag ? '<span class="tag ' + meTag + '">' + esc(tr('tag.' + meTag)) + '</span>' : '') + '</div>' +
+    '<div class="me' + (myTurn(v) ? ' turn' : '') + '"><div class="ring" data-seat="' + mySeat() + '"><div class="av" style="background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</div></div><span class="nm">' + esc(tr('you')) + '</span>' + (meTag ? '<span class="tag ' + meTag + '">' + esc(tr('tag.' + meTag)) + '</span>' : '') + '</div>' +
     '<div class="note" role="status">' + esc(noteText(v, lg)) + '</div>' +
     handHtml(v, lg) +
     '<div class="actions">' + btns + '</div></div>';
@@ -231,6 +229,101 @@ function botController(level, variant, deck, players) {
   return ctrl;
 }
 
+// ===== Анимация карт =====
+// Экран перерисовывается целиком, поэтому движение считается по двум видам стола — до и после — и по положению элементов до перерисовки:
+//   новая карта на столе прилетает из руки (мой ход) или с места игрока; добор летит из колоды; «бито» уходит в отбой; «взять» — к забирающему.
+// Без анимаций (prefers-reduced-motion или старый браузер) всё просто появляется на месте.
+var Anim = (function () {
+  var MS = 320;
+  function off() { return !Element.prototype.animate || reduced(); }
+  function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function rect(el) { var r = el && el.getBoundingClientRect(); return r && r.width ? { x: r.left, y: r.top, w: r.width, h: r.height } : null; }
+  function center(r) { return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+  // Положения до перерисовки: карты на столе (по коду), карты в руке, места игроков, колода, отбой
+  function capture() {
+    if (off()) return null;
+    var out = { table: {}, hand: {}, seat: {}, deck: rect(appEl.querySelector('.deck')), bito: rect(appEl.querySelector('.bito')) };
+    appEl.querySelectorAll('.table [data-c]').forEach(function (el) { out.table[el.getAttribute('data-c')] = { r: rect(el), d: el.classList.contains('d') }; });
+    appEl.querySelectorAll('.hc[data-card]').forEach(function (el) { out.hand[el.getAttribute('data-card')] = rect(el.querySelector('.pcard')); });
+    appEl.querySelectorAll('[data-seat]').forEach(function (el) { out.seat[el.getAttribute('data-seat')] = rect(el); });
+    return out;
+  }
+  // Элемент на новом месте плавно приезжает из точки from (центр), по пути чуть уменьшен
+  function flyIn(el, from, delay, scale) {
+    var to = rect(el);
+    if (!to || !from) return;
+    var c = center(to), end = getComputedStyle(el).transform;
+    end = end && end !== 'none' ? end : '';
+    el.animate([{ transform: 'translate(' + (from.x - c.x) + 'px,' + (from.y - c.y) + 'px) scale(' + (scale || 0.6) + ') ' + end, opacity: 0.6 }, { transform: end || 'none', opacity: 1 }],
+      { duration: MS, delay: delay || 0, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'backwards' });
+  }
+  // Летящая копия карты поверх экрана: из прямоугольника from в точку to, потом исчезает
+  function ghost(html, from, to, delay) {
+    if (!from || !to) return;
+    var host = document.createElement('div');
+    host.className = 'fly';
+    host.innerHTML = html;
+    var el = host.firstChild;
+    el.style.setProperty('--w', from.w + 'px');
+    host.style.left = from.x + 'px'; host.style.top = from.y + 'px';
+    document.body.appendChild(host);
+    var c = center(from);
+    var a = host.animate([{ transform: 'none', opacity: 1 }, { transform: 'translate(' + (to.x - c.x) + 'px,' + (to.y - c.y) + 'px) scale(.5)', opacity: 0.2 }],
+      { duration: MS, delay: delay || 0, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'both' });
+    a.onfinish = a.oncancel = function () { host.remove(); };
+  }
+  function play(prev, v, snap) {
+    if (!snap || off()) return;
+    var me = mySeat(), deckPt = snap.deck ? center(snap.deck) : null;
+    var nowDeck = rect(appEl.querySelector('.deck .top') || appEl.querySelector('.deck .trumpcard') || appEl.querySelector('.deck')), deckFrom = deckPt || (nowDeck ? center(nowDeck) : null);
+    var seatPt = function (i) { var r = snap.seat[i] || rect(appEl.querySelector('[data-seat="' + i + '"]')); return r ? center(r) : null; };
+    // начало партии: раздача из колоды по кругу
+    if (!prev) {
+      var k = 0;
+      appEl.querySelectorAll('.hc .pcard').forEach(function (el) { flyIn(el, deckFrom, 60 + k * 45, 0.5); k++; });
+      v.seats.forEach(function (s, i) { if (i !== me) for (var j = 0; j < Math.min(3, D.size(v, i)); j++) ghost(backHtml(), nowDeck, seatPt(i), 60 + (k++) * 25); });
+      return;
+    }
+    if (prev.moves === v.moves && prev.table.length === v.table.length) return;
+    var was = {}; prev.table.forEach(function (p) { was[p.a] = true; if (p.d) was[p.d] = true; });
+    var actor = v.last ? v.last.seat : -1;
+    // новые карты на столе: из моей руки или с места того, кто положил
+    appEl.querySelectorAll('.table [data-c]').forEach(function (el) {
+      var c = el.getAttribute('data-c');
+      if (was[c]) return;
+      var src = snap.hand[c] ? center(snap.hand[c]) : seatPt(actor);
+      flyIn(el, src, 0, snap.hand[c] ? 1 : 0.55);
+    });
+    // стол опустел: «бито» — в отбой, «взять» — к забирающему (если забираю я — карты встают в руку на свои места)
+    var cleared = prev.table.length && !v.table.length;
+    var took = cleared && v.last && v.last.type === 'took', taker = took ? v.last.seat : -1;
+    if (cleared) {
+      var dst = took ? seatPt(taker) : (rect(appEl.querySelector('.bito')) ? center(rect(appEl.querySelector('.bito'))) : null);
+      Object.keys(snap.table).forEach(function (c, n) {
+        if (took && taker === me) return;                                 // мои взятые карты прилетят прямо в руку (ниже)
+        ghost(cardHtml(c, snap.table[c].d ? 'd' : 'a'), snap.table[c].r, dst, n * 30);
+      });
+    }
+    // новые карты в моей руке: взятые — со стола, добор — из колоды
+    var k2 = 0;
+    appEl.querySelectorAll('.hc[data-card]').forEach(function (el) {
+      var c = el.getAttribute('data-card');
+      if (snap.hand[c]) return;
+      var fromTable = snap.table[c] && snap.table[c].r;
+      flyIn(el.querySelector('.pcard'), fromTable ? center(fromTable) : deckFrom, (fromTable ? 0 : 140) + (k2++) * 60, fromTable ? 0.9 : 0.5);
+    });
+    // добор соперников: рубашки из колоды к их местам
+    if (prev.deckCount > v.deckCount) {
+      v.seats.forEach(function (s, i) {
+        if (i === me || !prev.seats[i]) return;
+        var gain = D.size(v, i) - D.size(prev, i) - (took && taker === i ? prev.table.reduce(function (a, p) { return a + (p.d ? 2 : 1); }, 0) : 0);
+        for (var j = 0; j < Math.min(gain, 6); j++) ghost(backHtml(), nowDeck, seatPt(i), 140 + (k2++) * 60);
+      });
+    }
+  }
+  return { capture: capture, play: play };
+})();
+
 // ===== Отрисовка и нажатия =====
 function render() {
   var html, v = null;
@@ -241,13 +334,16 @@ function render() {
   } else if (app.screen === 'online') html = window.DurakOnline.html();
   else html = startHtml();
   var ai = document.activeElement, keep = ai && ai.tagName === 'INPUT' && ai.id && appEl.contains(ai) ? { id: ai.id, a: ai.selectionStart, b: ai.selectionEnd } : null;
+  var snap = v ? Anim.capture() : null;
   appEl.innerHTML = '<div class="screen">' + html + '</div>' + modalHtml() + (window.DurakOnline ? window.DurakOnline.overlayHtml() : '');
+  if (v) Anim.play(app.prevView, v, snap);
+  app.prevView = v;
   if (keep) { var ni = document.getElementById(keep.id); if (ni) { try { ni.focus({ preventScroll: true }); if (keep.a !== null) ni.setSelectionRange(keep.a, keep.b); } catch (e) { /* без фокуса */ } } }
   if (v) app.shownMove = v.moves;
   if (window.DurakOnline) window.DurakOnline.afterRender();
 }
 function startGame(ctrl) {
-  app.ctrl = ctrl; app.screen = 'game'; app.pick = null; app.confirm = false; app.shownMove = -1;
+  app.ctrl = ctrl; app.screen = 'game'; app.pick = null; app.confirm = false; app.shownMove = -1; app.prevView = null;
   ctrl.subscribe(function () { if (app.ctrl === ctrl) render(); });
   render();
 }
@@ -293,7 +389,7 @@ appEl.addEventListener('click', function (e) {
     case 'transfer': if (app.pick) { ctrl.send({ type: 'transfer', seat: mySeat(), card: app.pick }); app.pick = null; render(); } break;
     case 'unpick': app.pick = null; render(); break;
     case 'menu': toMenu(); break;
-    case 'again': app.pick = null; app.shownMove = -1; ctrl.again(); render(); break;
+    case 'again': app.pick = null; app.shownMove = -1; app.prevView = null; ctrl.again(); render(); break;
   }
 });
 document.addEventListener('keydown', function (e) {
