@@ -54,17 +54,23 @@ function seatTag(v, i) {
   if (i === v.defender) return 'defend';
   return '';
 }
-function opponentsHtml(v) {
-  var me = mySeat(), n = v.seats.length, out = '';
+// Места соперников вокруг овального стола (в процентах стола), по часовой стрелке от меня (я — внизу)
+function ring(n) {
+  return ({ 1: [[50, 9]], 2: [[24, 13], [76, 13]], 3: [[11, 42], [50, 8], [89, 42]], 4: [[10, 46], [31, 10], [69, 10], [90, 46]], 5: [[9, 54], [20, 17], [50, 7], [80, 17], [91, 54]] }[n] || [])
+    .map(function (p) { return { x: p[0], y: p[1] }; });
+}
+function seatColor(i) { return 'oklch(' + (window.PlatformTheme.isDark() ? 0.42 : 0.86) + ' 0.07 ' + (i * 62 + 20) + ')'; }
+function seatsHtml(v) {
+  var me = mySeat(), n = v.seats.length, pos = ring(n - 1), out = '';
   for (var k = 1; k < n; k++) {
-    var i = (me + k) % n, s = v.seats[i], cnt = D.size(v, i), tag = seatTag(v, i), fan = '';
-    for (var j = 0; j < Math.min(cnt, 8); j++) fan += backHtml();
-    out += '<div class="opp' + (v.actor === i && !v.gameOver ? ' turn' : '') + (s.out ? ' out' : '') + (s.active === false ? ' gone' : '') + '">' +
-      '<div class="fan" aria-hidden="true">' + fan + '</div>' +
-      '<div class="who"><span class="nm">' + esc(nameOf(v, i)) + '</span><span class="cnt">' + esc(tr('cards', { n: cnt })) + '</span></div>' +
-      (tag ? '<span class="tag ' + tag + '">' + esc(tr('tag.' + tag)) + '</span>' : '') + '</div>';
+    var i = (me + k) % n, s = v.seats[i], cnt = D.size(v, i), tag = seatTag(v, i), p = pos[k - 1];
+    out += '<div class="seat' + (v.actor === i && !v.gameOver ? ' turn' : '') + (s.out ? ' out' : '') + (s.active === false ? ' gone' : '') + '" style="left:' + p.x + '%;top:' + p.y + '%">' +
+      '<span class="tag' + (tag ? ' ' + tag : ' none') + '">' + esc(tag ? tr('tag.' + tag) : '·') + '</span>' +
+      '<div class="ring"><div class="av" style="background:' + seatColor(i) + '">' + esc(P.initial(s.name || '?')) + '</div>' +
+      '<span class="cnt" aria-label="' + esc(tr('cards', { n: cnt })) + '">' + backHtml('mini') + '<b>' + cnt + '</b></span></div>' +
+      '<div class="nick">' + esc(nameOf(v, i)) + '</div></div>';
   }
-  return '<div class="opps n' + (n - 1) + '">' + out + '</div>';
+  return out;
 }
 function tableHtml(v, lg) {
   var fresh = v.last && v.moves !== app.shownMove ? v.last : null;
@@ -81,7 +87,8 @@ function tableHtml(v, lg) {
     '<span class="ts' + (v.trump === 'D' || v.trump === 'H' ? ' red' : '') + '" title="' + esc(tr('trump')) + '">' + SUIT_CHAR[v.trump] + '</span></div>';
   var bito = '<div class="bito">' + (v.discard ? backHtml('pile') + '<span>' + esc(tr('discard', { n: v.discard })) + '</span>' : '') + '</div>';
   var info = !v.table.length && v.last && (v.last.type === 'bito' || v.last.type === 'took') && v.moves !== app.shownMove ? '<div class="flash">' + esc(v.last.type === 'bito' ? tr('last.bito') : tr('last.took', { name: nameOf(v, v.last.seat) })) + '</div>' : '';
-  return '<div class="felt">' + trump + '<div class="table' + (v.taking ? ' taking' : '') + '" role="group" aria-label="' + esc(tr('table.label')) + '">' + (pairs || info || '<span class="empty">' + esc(tr('table.empty')) + '</span>') + '</div>' + bito + '</div>';
+  // Овальный стол: соперники по кругу, в центре — карты захода, слева колода с козырем, справа отбой
+  return '<div class="area n' + (v.seats.length - 1) + '"><div class="oval"></div>' + trump + '<div class="table' + (v.taking ? ' taking' : '') + '" role="group" aria-label="' + esc(tr('table.label')) + '">' + (pairs || info || '<span class="empty">' + esc(tr('table.empty')) + '</span>') + '</div>' + bito + seatsHtml(v) + '</div>';
 }
 function handHtml(v, lg) {
   var me = v.seats[mySeat()], hand = D.sortHand(me.hand || [], v.trump);
@@ -122,8 +129,8 @@ function gameHtml(v) {
   var meTag = seatTag(v, mySeat());
   return '<div class="game"><div class="o-head"><button class="theme-btn" data-act="exit" aria-label="' + esc(tr('exit')) + '">←</button><h2>' + esc(tr('title')) + '<small>' + esc(modeLabel(v.mode, v.deckSize)) + '</small></h2>' +
       (app.ctrl.online ? window.DurakOnline.chatButtonHtml() : '') + '<button class="theme-btn" data-act="rules" aria-label="' + esc(tr('rules.button')) + '">?</button>' + themeButtonHtml('theme-btn') + '</div>' +
-    opponentsHtml(v) + tableHtml(v, lg) +
-    '<div class="me' + (myTurn(v) ? ' turn' : '') + '"><span class="nm">' + esc(tr('you')) + '</span>' + (meTag ? '<span class="tag ' + meTag + '">' + esc(tr('tag.' + meTag)) + '</span>' : '') + '</div>' +
+    tableHtml(v, lg) +
+    '<div class="me' + (myTurn(v) ? ' turn' : '') + '"><div class="ring"><div class="av" style="background:' + P.avatarColor(P.getProfile().avatar) + '">' + esc(P.initial(P.getProfile().name)) + '</div></div><span class="nm">' + esc(tr('you')) + '</span>' + (meTag ? '<span class="tag ' + meTag + '">' + esc(tr('tag.' + meTag)) + '</span>' : '') + '</div>' +
     '<div class="note" role="status">' + esc(noteText(v, lg)) + '</div>' +
     handHtml(v, lg) +
     '<div class="actions">' + btns + '</div></div>';
