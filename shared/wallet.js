@@ -381,7 +381,7 @@
   // Рекорды для таблицы: больше всего аконов, лучшая серия, победы по играм
   function records() {
     var s = load();
-    return { peak: s.peak, bestStreak: s.best, wins: JSON.parse(JSON.stringify(s.wins)) };
+    return { peak: s.peak, bestStreak: s.best, wins: JSON.parse(JSON.stringify(s.wins)), plays: JSON.parse(JSON.stringify(s.plays)) };
   }
   function onChange(fn) { listeners.push(fn); }
   // Забыть копию в памяти (после смены или очистки прогресса из другого модуля)

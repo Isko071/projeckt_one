@@ -112,6 +112,16 @@
   function makeCtrl() {
     var c = {
       online: true, busy: false,
+      // Сколько осталось на ход у места seat: доля (1 → 0) и секунды; null — таймера нет (ходит бот или партия кончилась).
+      // Сервер считает: idleMs на ход, потом askMs на вопрос «Вы ещё играете?» (shared/rooms-turns.js); кольцо показывает обе части вместе
+      timer: function (seat) {
+        var v = G && G.view, list = (v && v.timers) || [], t = null;
+        for (var k = 0; k < list.length; k++) if (list[k].seat === seat) t = list[k];
+        if (!t) return null;
+        var cfg = window.PlatformTurnRooms.DEFAULTS, total = cfg.idleMs + cfg.askMs;
+        var ms = Math.max(0, t.ms - (now() - (v.receivedAt || now()))) + (t.stage === 'idle' ? cfg.askMs : 0);
+        return { left: Math.max(0, Math.min(1, ms / total)), secs: Math.ceil(ms / 1000), asking: t.stage === 'asking' };
+      },
       view: function () {                          // общий вид стола и мои карты (их сервер присылает только мне)
         var v = JSON.parse(JSON.stringify(G.view.state)), me = G.view.seat;
         if (v.seats[me]) v.seats[me].hand = Array.isArray(G.view.mine) ? G.view.mine.slice() : [];
@@ -171,7 +181,7 @@
     }
     if (v.state && v.state.gameOver && !G.counted && v.seat !== null && v.seat !== undefined) {         // победа онлайн в рейтинг: доиграли, и я не дурак (победы считает сервер)
       G.counted = true;
-      if (v.state.reason === 'finished' && v.state.loser >= 0 && v.state.loser !== v.seat && window.PlatformRating) window.PlatformRating.reportWin('durak');
+      if (v.state.reason === 'finished' && v.state.loser >= 0 && v.state.loser !== v.seat && window.PlatformRating) (window.PlatformWallet && window.PlatformWallet.countWin('durak'), window.PlatformRating.reportWin('durak'));      // победа онлайн: в свою статистику и в рейтинг
     }
     if (v.status === 'lobby') G.counted = false;
     render();
@@ -405,6 +415,7 @@
   // Обратный отсчёт в зале ожидания и в вопросе «Вы ещё играете?»
   setInterval(function () {
     if (!G) return;
+    if (app.screen === 'game' && window.DurakRings) window.DurakRings();          // кольцо таймера хода обновляется на месте, без перерисовки экрана
     if ((app.screen === 'online' && on.screen === 'lobby') || (app.screen === 'game' && myTimer() && myTimer().stage === 'asking')) render();
   }, 1000);
 

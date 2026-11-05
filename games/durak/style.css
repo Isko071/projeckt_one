@@ -149,6 +149,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .seat.gone .av { filter: grayscale(1); }
 .seat .ring, .me .ring { position: relative; padding: 3px; border-radius: 50%; }
 .seat.turn .ring, .me.turn .ring { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ring.low { box-shadow: 0 0 0 3px oklch(0.85 0.1 60 / .5); animation: lowpulse 1s ease-in-out infinite; }
+@keyframes lowpulse { 50% { box-shadow: 0 0 0 5px oklch(0.85 0.1 60 / .3); } }
 .av { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; color: var(--ink); border: 1px solid var(--line); }
 .seat .cnt { position: absolute; right: -16px; bottom: -4px; display: flex; align-items: center; }
 .seat .cnt .mini { --w: 20px; border-width: 2px; }

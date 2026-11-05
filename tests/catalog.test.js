@@ -106,3 +106,17 @@ test('каждая доступная игра есть в личном каби
     assert.ok(DICT['wallet.src.' + g.id], 'нет wallet.src.' + g.id + ' в locales/ru.js');
   });
 });
+
+test('статистика по играм: партии и победы складываются по игре, процент побед, рекорды; игры без партий не показываются', () => {
+  const rec = { plays: { checkers: 10, durak: 4, '2048': 3, minesweeper: 5, mines: 6 }, wins: { 'checkers-easy': 3, 'checkers-expert': 1, checkers: 2, 'durak-medium': 1, minesweeper: 2, t512: 9, mines: 4 } };
+  const rows = JSON.parse(JSON.stringify(L.gameStats(ctx.GAMES, rec, { '2048': 4096, blocks: 0, minesweeper: { novice: 25, expert: null } })));
+  const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.deepEqual(by.checkers, { id: 'checkers', plays: 10, wins: 6, rate: 60 });
+  assert.deepEqual(by.durak, { id: 'durak', plays: 4, wins: 1, rate: 25 });
+  assert.deepEqual(by['2048'], { id: '2048', plays: 3, wins: null, rate: null, best: 4096 }, 'в 2048 процент побед не считается, есть рекорд');
+  assert.deepEqual(by.minesweeper.bestTime, { novice: 25 });
+  assert.equal(by.mines.rate, 67);
+  assert.equal(by.blocks, undefined, 'не играл — строки нет');
+  assert.equal(by.yahtzee, undefined);
+  assert.deepEqual(rows.map((r) => r.id), JSON.parse(JSON.stringify(ctx.GAMES.filter((g) => g.status === 'available').map((g) => g.id).filter((id) => by[id]))), 'порядок как в каталоге');
+});

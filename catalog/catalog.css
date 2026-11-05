@@ -336,3 +336,9 @@
 .rating-row .av { width: 36px; height: 36px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: oklch(0.2 0.03 260); }
 .rating-row .nm { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rating-row .bal { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Окно «Статистика»: таблица по играм */
+.game-stats table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.game-stats th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 6px 6px 0; border-bottom: 1px solid var(--line); }
+.game-stats td { padding: 8px 6px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.game-stats .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.game-stats td.n:last-child { white-space: normal; max-width: 130px; }

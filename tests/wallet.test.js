@@ -173,14 +173,14 @@ test('награда эксперта сапёра без дневного пр�
 
 test('рекорды: максимум аконов за всё время не падает при тратах; победы и лучшая серия', () => {
   const W = load({ localStorage: fakeBackend() });
-  assert.deepEqual(plain(W.records()), { peak: 5000, bestStreak: 0, wins: {} });
+  assert.deepEqual(plain(W.records()), { peak: 5000, bestStreak: 0, wins: {}, plays: {} });
   W.add(3000, 'win');
   W.spend(7000, 'bet');
   W.earn('minesweeper', 100, D(2026, 9, 1));
   W.earn('minesweeper', 100, D(2026, 9, 1));
   W.earn('yahtzee', 250, D(2026, 9, 1));
   W.markPlayed(D(2026, 9, 1)); W.markPlayed(D(2026, 9, 2));
-  assert.deepEqual(plain(W.records()), { peak: 8000, bestStreak: 2, wins: { minesweeper: 2, yahtzee: 1 } });
+  assert.deepEqual(plain(W.records()), { peak: 8000, bestStreak: 2, wins: { minesweeper: 2, yahtzee: 1 }, plays: {} });
 });
 
 test('рекорды: победа при исчерпанном лимите всё равно засчитывается; мусор в данных отбрасывается', () => {

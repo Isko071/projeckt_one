@@ -340,8 +340,22 @@ function render() {
   app.prevView = v;
   if (keep) { var ni = document.getElementById(keep.id); if (ni) { try { ni.focus({ preventScroll: true }); if (keep.a !== null) ni.setSelectionRange(keep.a, keep.b); } catch (e) { /* без фокуса */ } } }
   if (v) app.shownMove = v.moves;
+  if (v) updateRings();
   if (window.DurakOnline) window.DurakOnline.afterRender();
 }
+// Таймер хода (онлайн): вокруг кружка того, чей ход, кольцо убывает по кругу; меньше 20 секунд — оранжевое. Меняется только стиль кольца
+function updateRings() {
+  if (!app.ctrl || !app.ctrl.timer || app.screen !== 'game') return;
+  appEl.querySelectorAll('[data-seat]').forEach(function (el) {
+    var t = app.ctrl.timer(Number(el.getAttribute('data-seat')));
+    if (!t) { el.style.background = ''; el.removeAttribute('title'); el.classList.remove('low'); return; }
+    var low = t.secs <= 20, col = low ? 'var(--warn)' : 'var(--accent)';
+    el.style.background = 'conic-gradient(' + col + ' ' + Math.round(t.left * 360) + 'deg, var(--line) 0)';
+    el.classList.toggle('low', low);
+    el.title = tr('timer.left', { n: t.secs });
+  });
+}
+window.DurakRings = updateRings;
 function startGame(ctrl) {
   app.ctrl = ctrl; app.screen = 'game'; app.pick = null; app.confirm = false; app.shownMove = -1; app.prevView = null;
   ctrl.subscribe(function () { if (app.ctrl === ctrl) render(); });

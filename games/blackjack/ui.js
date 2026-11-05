@@ -413,7 +413,7 @@ function onView(v) {
       holdBalance();
       if (h) grantReward(h.outcome, st.round);
       // победа онлайн в рейтинг: раздача выиграна у дилера, за столом не меньше двух игроков
-      if (h && (h.outcome === 'win' || h.outcome === 'blackjack') && window.PlatformRating && G.view && (G.view.members || []).length >= 2) window.PlatformRating.reportWin('blackjack');
+      if (h && (h.outcome === 'win' || h.outcome === 'blackjack') && window.PlatformRating && G.view && (G.view.members || []).length >= 2) (window.PlatformWallet && window.PlatformWallet.countWin('blackjack'), window.PlatformRating.reportWin('blackjack'));      // победа онлайн: в свою статистику и в рейтинг
     }
     // Ставок нет: в начале раздачи отправляем условную ставку сами
     if (st.phase === 'betting' && G.betRound !== st.round) { G.betRound = st.round; app.seen = {}; app.fx = {}; if (!seat.sitOut && !(seat.bet > 0)) onlineSend({ type: 'bet', amount: FLAT_BET }); }

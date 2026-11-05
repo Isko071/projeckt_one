@@ -153,7 +153,7 @@
         if (v.state.gameOver && !G.counted) {
           G.counted = true; app.modal = null;
           // победа онлайн в рейтинг: партия доиграна (не «остальные вышли») и среди победителей вы
-          if (v.state.reason !== 'alone' && window.PlatformRating && T.standings(v.state).some(function (r) { return r.seat === me && r.winner; })) window.PlatformRating.reportWin('yahtzee');
+          if (v.state.reason !== 'alone' && window.PlatformRating && T.standings(v.state).some(function (r) { return r.seat === me && r.winner; })) (window.PlatformWallet && window.PlatformWallet.countWin('yahtzee'), window.PlatformRating.reportWin('yahtzee'));      // победа онлайн: в свою статистику и в рейтинг
         }
         // одновременный режим: все сделали ходы, показываем, кто куда записал
         var rc = v.state.recap;

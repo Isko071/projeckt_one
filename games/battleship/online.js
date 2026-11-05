@@ -166,7 +166,7 @@
     }
     if (v.state && v.state.gameOver && !G.counted && v.seat !== null && v.seat !== undefined) {         // победа онлайн в рейтинг: только когда потоплен весь флот (сдача и выход не в счёт)
       G.counted = true;
-      if (v.state.winner === v.seat && v.state.reason === 'fleet' && window.PlatformRating) window.PlatformRating.reportWin('battleship');
+      if (v.state.winner === v.seat && v.state.reason === 'fleet' && window.PlatformRating) (window.PlatformWallet && window.PlatformWallet.countWin('battleship'), window.PlatformRating.reportWin('battleship'));      // победа онлайн: в свою статистику и в рейтинг
     }
     if (v.status === 'lobby') G.counted = false;
     render();
