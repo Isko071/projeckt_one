@@ -254,3 +254,6 @@ body {
 .toast.dim { color: var(--muted); }
 .logo { background: var(--board); }
 .screen > .topbar { justify-content: space-between; }
+
+/* Во время партии потягивание вниз не обновляет страницу */
+html.playing, html.playing body { overscroll-behavior: none; }

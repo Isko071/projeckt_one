@@ -205,6 +205,7 @@ function renderModal() {
   if (auto) auto.focus();
 }
 function render() {
+  document.documentElement.classList.toggle('playing', app.screen === 'game');      // во время партии потягивание вниз не обновляет страницу
   var scr = appEl.querySelector('.screen');
   if (!(app.screen === 'game' && scr && scr.getAttribute('data-screen') === 'game')) {
     appEl.innerHTML = '<div class="screen" data-screen="' + app.screen + '">' + (app.screen === 'game' ? gameHtml() : startHtml()) + '</div><div class="modals"></div>';
