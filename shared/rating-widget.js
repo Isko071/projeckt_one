@@ -1,5 +1,6 @@
 // Рейтинг в меню игры: постоянная плашка (внизу на телефоне, в правом верхнем углу на широком экране) с топ-5.
-//   PlatformRatingWidget.mount({ game, kind, visible })   kind: 'balance' (топ по балансу, общий для всех игр) или 'wins' (победы онлайн в игре game);
+//   PlatformRatingWidget.mount({ game, kind, visible })   kind: 'balance' (топ по балансу, общий для всех игр), 'wins' (победы онлайн в игре game)
+//   или 'score' (лучший счёт в игре game: 2048, «Блоки»);
 //   visible() → true, пока на экране меню игры
 // Показывается только вошедшим игрокам и только если рейтинг доступен (правила базы: docs/google-login.md); обновляется раз в минуту.
 (function (root) {
@@ -21,7 +22,7 @@
     root.addEventListener('resize', syncRole);
     el.addEventListener('click', toggle);
     el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { if (!narrow()) return; e.preventDefault(); toggle(); } });
-    var kind = opts.kind === 'wins' ? 'wins' : 'balance', titleKey = kind === 'wins' ? 'rating.wins' : 'rating.top.balance';
+    var kind = opts.kind === 'wins' || opts.kind === 'score' ? opts.kind : 'balance', titleKey = { wins: 'rating.wins', score: 'rating.score', balance: 'rating.top.balance' }[kind];
     el.setAttribute('aria-label', t(titleKey));
     doc.body.appendChild(el);
 
@@ -29,7 +30,7 @@
       el.textContent = '';
       var title = doc.createElement('div'); title.className = 'rw-title'; title.textContent = t(titleKey); el.appendChild(title);
       var me = C.getState().user ? C.getState().user.uid : '';
-      if (!rows.length) { var n = doc.createElement('div'); n.className = 'rw-empty'; n.textContent = t(kind === 'wins' ? 'rating.wins.empty' : 'rating.empty'); el.appendChild(n); return; }
+      if (!rows.length) { var n = doc.createElement('div'); n.className = 'rw-empty'; n.textContent = t({ wins: 'rating.wins.empty', score: 'rating.score.empty', balance: 'rating.empty' }[kind]); el.appendChild(n); return; }
       var ol = doc.createElement('ol'); ol.className = 'rw-list';
       rows.forEach(function (r, i) {
         var li = doc.createElement('li'), rk = doc.createElement('span'), av = doc.createElement('span'), nm = doc.createElement('span'), w = doc.createElement('b');
@@ -37,7 +38,7 @@
         rk.className = 'rk'; rk.textContent = String(i + 1);
         av.className = 'av'; av.style.background = P.avatarColor(r.avatar); av.textContent = r.icon || P.initial(r.name);
         nm.className = 'nm'; nm.textContent = r.name || t('profile.defaultName');
-        w.textContent = kind === 'wins' ? String(r.wins) : r.balance.toLocaleString('ru-RU');
+        w.textContent = kind === 'wins' ? String(r.wins) : (kind === 'score' ? r.score : r.balance).toLocaleString('ru-RU');
         [rk, av, nm, w].forEach(function (x) { li.appendChild(x); });
         ol.appendChild(li);
       });
@@ -51,7 +52,7 @@
       loading = true;
       C.getToken().then(function (tk) {
         var api = root.PlatformRating.create({ fetch: function (u, i) { return root.fetch(u, i); }, projectId: root.FIREBASE_CONFIG.projectId, db: root.FIREBASE_DATABASE });
-        return kind === 'wins' ? api.topWins(tk, opts.game, TOP) : api.top(tk, TOP);
+        return kind === 'wins' ? api.topWins(tk, opts.game, TOP) : (kind === 'score' ? api.topScore(tk, opts.game, TOP) : api.top(tk, TOP));
       }).then(function (list) { rows = list; loadedAt = Date.now(); loading = false; render(); if (opts.visible()) show(); }, function () { rows = null; loading = false; loadedAt = Date.now(); hide(); });
     }
 

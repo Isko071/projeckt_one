@@ -98,7 +98,21 @@
         return out;
       });
     }
-    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top, recordWin: recordWin, topWins: topWins, topFast: topFast };
+    // ----- Лучший счёт в 2048 и «Блоках»: ratings_fast/<игра>/rows/<uid>, поле score (пишет сервер), больше — выше -----
+    function topScore(token, game, limit) {
+      var body = { structuredQuery: { from: [{ collectionId: 'rows' }], orderBy: [{ field: { fieldPath: 'score' }, direction: 'DESCENDING' }], limit: Math.max(1, Math.min(100, limit || 5)) } };
+      return req('POST', base + '/ratings_fast/' + encodeURIComponent(game) + ':runQuery', token, body).then(check).then(function (res) { return res.json(); }).then(function (rows) {
+        var out = [];
+        (Array.isArray(rows) ? rows : []).forEach(function (r) {
+          if (!r || !r.document) return;
+          var f = r.document.fields || {}, uid = String(r.document.name || '').split('/').pop();
+          var row = rowFields({ name: field(f, 'name'), avatar: field(f, 'avatar'), icon: field(f, 'icon') }, 0), score = cleanInt(field(f, 'score'), 10000000);
+          if (score > 0) out.push({ uid: uid, name: row.name, avatar: row.avatar, icon: row.icon, score: score });
+        });
+        return out;
+      });
+    }
+    return { rowFields: rowFields, fingerprint: fingerprint, publish: publish, top: top, recordWin: recordWin, topWins: topWins, topFast: topFast, topScore: topScore };
   }
 
   // Игры, где считаются победы онлайн
@@ -116,5 +130,19 @@
     }).then(function () { return true; }, function () { return false; });
   }
 
-  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, reportWin: reportWin, reportWinLegacy: reportWinLegacy, WIN_GAMES: WIN_GAMES, MAX_NAME: MAX_NAME };
+  // Новый лучший счёт в 2048 или «Блоках» — серверу (он проверяет правдоподобность и ставит в топ игры). Только при серверном балансе (вход через Google).
+  // Не чаще раза в 20 секунд на игру: последний счёт уходит отложенно; force — сразу (конец партии, уход со страницы)
+  var scoreSent = {}, scoreWait = {};
+  function reportScore(game, score, force) {
+    var S = root.PlatformWalletSync;
+    score = Math.floor(Number(score));
+    if (!S || !S.status || S.status() !== 'server' || !(score > 0)) return;
+    var st = scoreSent[game] || (scoreSent[game] = { score: 0, at: 0 });
+    if (score <= st.score) return;
+    var send = function () { scoreWait[game] = null; if (score <= st.score) return; st.score = score; st.at = Date.now(); S.call('score', { source: game, score: score }).catch(function () { st.score = 0; }); };
+    if (scoreWait[game]) { clearTimeout(scoreWait[game]); scoreWait[game] = null; }
+    if (force || Date.now() - st.at >= 20000) send(); else scoreWait[game] = setTimeout(send, 20000 - (Date.now() - st.at));
+  }
+
+  root.PlatformRating = { create: create, rowFields: rowFields, fingerprint: fingerprint, reportWin: reportWin, reportWinLegacy: reportWinLegacy, reportScore: reportScore, WIN_GAMES: WIN_GAMES, MAX_NAME: MAX_NAME };
 })(typeof window !== 'undefined' ? window : globalThis);

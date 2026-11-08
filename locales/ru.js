@@ -279,6 +279,8 @@ root.LOCALES.ru = {
   'rating.wins': 'Победы онлайн',
   'rating.top.balance': 'Топ по балансу',
   'rating.wins.empty': 'Станьте первым',
+  'rating.score': 'Лучший счёт',
+  'rating.score.empty': 'Рекордов пока нет — станьте первым',
   'cal.title': 'Серия',
   'cal.count': '{n} {days} подряд',
   'cal.none': 'Серии пока нет',
