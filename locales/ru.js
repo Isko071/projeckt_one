@@ -277,6 +277,7 @@ root.LOCALES.ru = {
   'rating.empty': 'В рейтинге пока никого нет.',
   'rating.retry': 'Обновить',
   'rating.wins': 'Победы онлайн',
+  'rating.wins.leader': 'Лидер по победам',
   'rating.top.balance': 'Топ по балансу',
   'rating.wins.empty': 'Станьте первым',
   'rating.score': 'Лучший счёт',

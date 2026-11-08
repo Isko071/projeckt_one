@@ -1,12 +1,13 @@
 // Рейтинг в меню игры: постоянная плашка (внизу на телефоне, в правом верхнем углу на широком экране) с топ-5.
 //   PlatformRatingWidget.mount({ game, kind, visible })   kind: 'balance' (топ по балансу, общий для всех игр), 'wins' (победы онлайн в игре game)
 //   или 'score' (лучший счёт в игре game: 2048, «Блоки»);
-//   visible() → true, пока на экране меню игры
+//   visible() → true, пока на экране меню игры; top — сколько мест показать (по умолчанию 5; 1 — только лидер, плашка не раскрывается)
 // Показывается только вошедшим игрокам и только если рейтинг доступен (правила базы: docs/google-login.md); обновляется раз в минуту.
 (function (root) {
-  var TOP = 5, REFRESH_MS = 300000;      // топ обновляется раз в 5 минут (лимит чтений бесплатной базы)
+  var REFRESH_MS = 300000;               // топ обновляется раз в 5 минут (лимит чтений бесплатной базы)
 
   function mount(opts) {
+    var TOP = Math.max(1, Math.min(10, opts.top || 5));
     var I = root.I18n, t = I.t, P = root.PlatformProfile, C = root.PlatformCloud, doc = root.document;
     var el = doc.createElement('aside'), shown = false, loadedAt = 0, loading = false, rows = null;
     el.className = 'rw'; el.hidden = true;
@@ -14,15 +15,16 @@
     var narrow = function () { try { return root.matchMedia('(max-width: 1039px)').matches; } catch (e) { return true; } };
     // Кнопкой плашка становится только на телефоне (там она раскрывается); на широком экране она всегда открыта и в обходе с клавиатуры не участвует
     function syncRole() {
-      if (narrow()) { el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); }
+      if (narrow() && TOP > 1) { el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); }
       else { el.removeAttribute('role'); el.removeAttribute('tabindex'); el.removeAttribute('aria-expanded'); }
     }
-    function toggle() { if (!narrow()) return; el.classList.toggle('open'); syncRole(); }
+    function toggle() { if (!narrow() || TOP === 1) return; el.classList.toggle('open'); syncRole(); }
     syncRole();
     root.addEventListener('resize', syncRole);
     el.addEventListener('click', toggle);
     el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { if (!narrow()) return; e.preventDefault(); toggle(); } });
-    var kind = opts.kind === 'wins' || opts.kind === 'score' ? opts.kind : 'balance', titleKey = { wins: 'rating.wins', score: 'rating.score', balance: 'rating.top.balance' }[kind];
+    var kind = opts.kind === 'wins' || opts.kind === 'score' ? opts.kind : 'balance', titleKey = TOP === 1 && kind === 'wins' ? 'rating.wins.leader' : { wins: 'rating.wins', score: 'rating.score', balance: 'rating.top.balance' }[kind];
+    if (TOP === 1) el.classList.add('one');
     el.setAttribute('aria-label', t(titleKey));
     doc.body.appendChild(el);
 

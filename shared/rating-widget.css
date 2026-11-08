@@ -14,6 +14,7 @@ body.rw-on { padding-bottom: 52px; }
 @media (max-width: 1039px) {
   .rw { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .rw-title::after { content: ' \25B4'; }
+  .rw.one .rw-title::after { content: ''; }            /* только лидер: раскрывать нечего */
   .rw.open .rw-title::after { content: ' \25BE'; }
   .rw:not(.open) .rw-row:nth-child(n+2) { display: none; }
   .rw.open { flex-direction: column; align-items: stretch; gap: 4px; padding-bottom: 10px; box-shadow: 0 -6px 18px oklch(0.3 0.03 260 / .14); }
@@ -29,3 +30,4 @@ body.rw-on { padding-bottom: 52px; }
   .rw-row .nm { flex: 1; max-width: none; }
   body.rw-on { padding-bottom: 0; }
 }
+.rw.one { cursor: default; }
