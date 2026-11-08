@@ -25,6 +25,9 @@ const SEED_BEFORE = Date.parse(process.env.WALLET_SEED_BEFORE || '2026-10-12T00:
 // предела уровня (секунды) и не больше, чем игрок мог играть с момента первого хода (сервер ставит отметку на первом ходе партии) плюс запас
 const TOP_WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers', 'durak'];
 const FAST_MIN = { novice: 5, amateur: 15, expert: 35 }, FAST_MAX = 99 * 60 + 59, FAST_SLACK = 2;
+// Лучший счёт в 2048 и «Блоках» (топ в каждой игре): партия идёт в браузере, поэтому сервер принимает счёт, только если его можно было набрать
+// за прошедшее время — не быстрее rate очков в секунду от начала партии (countPlay) или от прошлого принятого рекорда; не больше cap
+const SCORE_GAMES = { '2048': { rate: 60, cap: 400000 }, blocks: { rate: 100, cap: 2000000 } }, SCORE_FREE = 1500, SCORE_DAY_MAX = 60;
 const WIN_DAY_MAX = 40, FAST_DAY_MAX = 30;                      // в сутки на игрока: побед онлайн в топ по одной игре и рекордов «Сапёра»
 const RATING_MS = Number(process.env.WALLET_RATING_MS) || 300000;    // как часто баланс уходит в рейтинг: раз в 5 минут (лимит записей бесплатной базы)
 const TZ_LOCK_MS = 12 * 3600000, MAX_HOLDS = 3, RID_KEEP = 200, IDLE_MS = 30 * 60000;
@@ -58,6 +61,9 @@ class WalletService {
     this.holdsLoaded = false;
     this.winQ = new Map();              // 'игра|uid' → побед, ждущих отправки в топ
     this.fastQ = new Map();             // 'уровень|uid' → лучшее время, ждущее отправки
+    this.scoreBest = new Map();         // uid → { игра: { score, at } } — лучший принятый счёт (коллекция scores)
+    this.scoreQ = new Map();            // 'игра|uid' → счёт, ждущий отправки в топ
+    this.scoreDay = new Map();          // 'игра|uid' → { day, n }: сколько рекордов принято за сутки
     this.fastBest = new Map();          // uid → лучшие времена игрока ({ novice, amateur, expert })
     this.winDay = new Map();            // 'игра|uid' → { day, n }: сколько побед засчитано в топ сегодня
     this.fastDay = new Map();           // uid → { day, n }: сколько рекордов «Сапёра» принято сегодня
@@ -106,7 +112,7 @@ class WalletService {
     // иначе после паузы законная награда за долгую партию пропадала бы, а дневные пределы сбрасывались бы простым ожиданием
     this.touched.forEach((at, uid) => {
       if (t - at <= IDLE_MS || this.queues.has(uid)) return;
-      this.cache.delete(uid); this.fastBest.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid);
+      this.cache.delete(uid); this.fastBest.delete(uid); this.scoreBest.delete(uid); this.shifts.delete(uid); this.rids.delete(uid); this.ratedLast.delete(uid); this.seeds.delete(uid); this.seeded.delete(uid);
       if (t - at > 86400000) { this.rounds.delete(uid); this.pokers.delete(uid); this.msStart.delete(uid); this.timed.delete(uid); this.tzs.delete(uid); this.experts.delete(uid); this.fastDay.delete(uid); this.touched.delete(uid); }
     });
   }
@@ -235,6 +241,11 @@ class WalletService {
           const earned = await this.mutate(uid, (W) => W.earn(m.source, W.CONFIG.rewards[m.source][m.level], now, expert), null, rid);
           if (m.source === 'minesweeper') { try { await this.noteFast(uid, m.level, m.time, now); } catch (e) { /* награда уже выдана: рекорд лучше потерять, чем показать ложную ошибку */ } this.msStart.delete(uid); }      // каждой победе нужна своя отметка начала партии
           return earned;
+        }
+        case 'score': {
+          if (!has(SCORE_GAMES, m.source) || !Number.isInteger(m.score) || m.score <= 0) throw fail('bad-request');
+          const ok = await this.noteScore(uid, m.source, m.score, now);
+          return { state: await this.load(uid), result: { recorded: ok } };
         }
         case 'reward': {
           const kinds = has(REWARD, m.source) ? REWARD[m.source] : null, kind = m.kind || 'win';
@@ -460,6 +471,33 @@ class WalletService {
     this.fastQ.set(level + '|' + uid, time);
     return true;
   }
+  async loadScores(uid) {
+    if (this.scoreBest.has(uid)) return this.scoreBest.get(uid);
+    let rec = null;
+    try { rec = await this.ledger.get('scores', uid); } catch (e) { throw fail('ledger'); }
+    const out = {};
+    Object.keys(SCORE_GAMES).forEach((g) => { const r = rec && rec[g]; if (r && Number.isInteger(r.score) && r.score > 0) out[g] = { score: r.score, at: Number(r.at) || 0 }; });
+    this.scoreBest.set(uid, out);
+    return out;
+  }
+  // Новый лучший счёт в 2048 или «Блоках»: правдоподобный — запоминается и уходит в топ игры
+  async noteScore(uid, game, score, now) {
+    const cfg = SCORE_GAMES[game];
+    if (score > cfg.cap) return false;
+    const best = await this.loadScores(uid), prev = best[game];
+    if (prev && prev.score >= score) return false;
+    const start = ((this.timed.get(uid) || {})[game] || {}).t;
+    const allowed = Math.max(SCORE_FREE, start ? cfg.rate * (now - start) / 1000 : 0, prev ? prev.score + cfg.rate * (now - prev.at) / 1000 : 0);
+    if (score > allowed) return false;
+    const day = Math.floor(now / 86400000), k = game + '|' + uid, d = this.scoreDay.get(k), dr = d && d.day === day ? d : { day, n: 0 };
+    if (dr.n >= SCORE_DAY_MAX) return false;
+    dr.n++; this.scoreDay.set(k, dr);
+    const next = Object.assign({}, best, { [game]: { score, at: now } });
+    try { await this.ledger.commit([{ op: 'set', coll: 'scores', id: uid, data: next }]); } catch (e) { this.scoreBest.delete(uid); return false; }
+    this.scoreBest.set(uid, next);
+    this.scoreQ.set(k, score);
+    return true;
+  }
   // Отправка накопленного в топы (из того же таймера, что и рейтинг по балансу)
   async flushTops() {
     if (this.flushingTops) return 0;
@@ -477,6 +515,12 @@ class WalletService {
       const [level, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
       this.fastQ.delete(k);
       try { await this.ledger.setFast(level, uid, t); sent++; } catch (e) { if (!this.fastQ.has(k)) this.fastQ.set(k, t); }
+    }
+    for (const [k, sc] of Array.from(this.scoreQ.entries())) {
+      const [game, uid] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
+      this.scoreQ.delete(k);
+      if (!this.ledger.setScore) continue;
+      try { await this.ledger.setScore(game, uid, sc); sent++; } catch (e) { if (!this.scoreQ.has(k)) this.scoreQ.set(k, sc); }
     }
     return sent;
   }

@@ -129,3 +129,28 @@ test('топы: накопленные победы уходят пачкой; �
   await svc.flushTops();
   assert.strictEqual(ledger.winsTop.get('poker-simple|C'), 40, 'суточный предел');
 });
+
+test('топ лучшего счёта в 2048 и «Блоках»: правдоподобный рекорд принимается и уходит в топ своей игры; слишком быстрый — нет', async () => {
+  const { MemLedger } = require('../ledger');
+  const { WalletService } = require('../wallet-service');
+  const ledger = new MemLedger(), svc = new WalletService({ ledger });
+  await svc.init();
+  let t = 1000000; svc.now = () => t;
+  await svc.act('A', { op: 'countPlay', source: '2048' });              // начало партии
+  t += 60000;                                                            // минута игры: до 3 600 очков (60 в секунду)
+  assert.strictEqual((await svc.act('A', { op: 'score', source: '2048', score: 9000 })).result.recorded, false, 'за минуту 9 000 не набрать');
+  assert.strictEqual((await svc.act('A', { op: 'score', source: '2048', score: 3200 })).result.recorded, true);
+  assert.strictEqual((await svc.act('A', { op: 'score', source: '2048', score: 3000 })).result.recorded, false, 'не лучше прежнего — не пишется');
+  t += 120000;
+  assert.strictEqual((await svc.act('A', { op: 'score', source: '2048', score: 9000 })).result.recorded, true, 'ещё две минуты — можно');
+  await svc.act('A', { op: 'countPlay', source: 'blocks' }); t += 30000;
+  assert.strictEqual((await svc.act('A', { op: 'score', source: 'blocks', score: 2500 })).result.recorded, true);
+  await assert.rejects(svc.act('A', { op: 'score', source: 'minesweeper', score: 10 }), /bad-request/);
+  await assert.rejects(svc.act('A', { op: 'score', source: '2048', score: -5 }), /bad-request/);
+  assert.strictEqual(await svc.flushTops(), 2, 'отдельно в топ 2048 и в топ «Блоков»');
+  assert.strictEqual(ledger.scoreTop.get('2048|A'), 9000);
+  assert.strictEqual(ledger.scoreTop.get('blocks|A'), 2500);
+  // рекорд хранится в базе: после перезапуска сервера прежний лучший счёт известен
+  const svc2 = new WalletService({ ledger }); await svc2.init(); svc2.now = () => t + 1000;
+  assert.strictEqual((await svc2.act('A', { op: 'score', source: '2048', score: 8000 })).result.recorded, false);
+});

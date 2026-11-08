@@ -48,6 +48,8 @@ function newGame() {
 }
 function noteBest() {
   if (app.game.score > app.best) { app.best = app.game.score; window.PlatformStorage.set(BEST_KEY, app.best); }
+  // новый рекорд этой партии — в топ «Лучший счёт» (сервер проверяет); в конце партии — сразу
+  if (app.game.score >= app.best && window.PlatformRating && window.PlatformRating.reportScore) window.PlatformRating.reportScore('2048', app.game.score, app.game.over);
 }
 // Награда за плитки 512, 1024, 2048 — один раз за партию каждая; уровень нужен серверу, чтобы выдать её по своей таблице
 function rewardMilestones() {
@@ -255,3 +257,6 @@ window.PlatformTheme.onChange(function () { render(); });
 W.onShown(function (v) { var els = appEl.querySelectorAll('.bal [data-bal]'); for (var i = 0; i < els.length; i++) els[i].textContent = fmtNum(v); });
 app.game = loadSaved();
 render();
+
+// Уход со страницы: отложенный рекорд отправляем сразу
+window.addEventListener('pagehide', function () { if (app.game && app.game.score >= app.best && window.PlatformRating && window.PlatformRating.reportScore) window.PlatformRating.reportScore('2048', app.game.score, true); });

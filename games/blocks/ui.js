@@ -31,7 +31,11 @@ function balanceChipHtml() {
 function loadSaved() { try { return B.sanitize(window.PlatformStorage.get(SAVE_KEY, null)); } catch (e) { return null; } }
 function save() { if (app.game && !app.game.over) window.PlatformStorage.set(SAVE_KEY, B.plain(app.game)); else window.PlatformStorage.remove(SAVE_KEY); }
 function newGame() { app.game = B.create(); app.modal = null; app.toast = null; save(); }
-function noteBest() { if (app.game.score > app.best) { app.best = app.game.score; window.PlatformStorage.set(BEST_KEY, app.best); } }
+function noteBest() {
+  if (app.game.score > app.best) { app.best = app.game.score; window.PlatformStorage.set(BEST_KEY, app.best); }
+  // новый рекорд этой партии — в топ «Лучший счёт» (сервер проверяет); в конце партии — сразу
+  if (app.game.score >= app.best && window.PlatformRating && window.PlatformRating.reportScore) window.PlatformRating.reportScore('blocks', app.game.score, app.game.over);
+}
 // Награда за очки 1000, 2500, 5000 — один раз за партию каждая; уровень нужен серверу, чтобы выдать её по своей таблице
 function rewardMilestones() {
   var got = B.newMilestones(app.game), total = 0;
@@ -281,3 +285,6 @@ W.onShown(function (v) { var els = appEl.querySelectorAll('.bal [data-bal]'); fo
 window.addEventListener('resize', function () { cancelDrag(); });
 app.game = loadSaved();
 render();
+
+// Уход со страницы: отложенный рекорд отправляем сразу
+window.addEventListener('pagehide', function () { if (app.game && app.game.score >= app.best && window.PlatformRating && window.PlatformRating.reportScore) window.PlatformRating.reportScore('blocks', app.game.score, true); });

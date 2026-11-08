@@ -4,7 +4,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var dialog = $('rating-dialog'), body = $('rating-body');
   var TOP = 30, SECTION = 5, token = 0, tab = 'balance';
-  var WIN_GAMES = ['yahtzee', 'blackjack', 'poker-simple', 'battleship', 'checkers'], LEVELS = ['novice', 'amateur', 'expert'];
+  var WIN_GAMES = ['durak', 'checkers', 'yahtzee', 'battleship', 'blackjack', 'poker-simple'], LEVELS = ['novice', 'amateur', 'expert'];
   var tabsEl = $('rating-tabs');
 
   function fmt(n) { return Number(n).toLocaleString('ru-RU'); }
@@ -35,11 +35,15 @@
       if (hadFocus && k === tab) b.focus();                      // клавиатурный фокус остаётся на выбранной вкладке
     });
   }
-  // Раздел с заголовком и пятёркой лучших; rows — [{...}], value(r) → текст справа
+  // Раздел игры (или уровня): свёрнут — видно название и лидера; по нажатию раскрывается пятёрка лучших. rows — [{...}], value(r) → текст справа
   function sectionEl(title, rows, me, value) {
-    var sec = document.createElement('section'); sec.className = 'rating-sec';
-    var h = document.createElement('h3'); h.className = 'rating-sec-title'; h.textContent = title; sec.appendChild(h);
-    if (!rows.length) { var e = document.createElement('p'); e.className = 'rating-note'; e.textContent = t('rating.section.empty'); sec.appendChild(e); return sec; }
+    var sec = document.createElement('details'); sec.className = 'rating-sec';
+    var sum = document.createElement('summary'), h = document.createElement('span'), lead = document.createElement('span');
+    h.className = 'rating-sec-title'; h.textContent = title;
+    lead.className = 'rating-sec-lead';
+    lead.textContent = rows.length ? (rows[0].name || t('profile.defaultName')) + ' · ' + value(rows[0]) : t('rating.section.empty');
+    sum.appendChild(h); sum.appendChild(lead); sec.appendChild(sum);
+    if (!rows.length) return sec;
     var ol = document.createElement('ol'); ol.className = 'rating-list short';
     rows.forEach(function (r, i) { ol.appendChild(rowEl(r, i, me, value(r))); });
     sec.appendChild(ol);

@@ -16,6 +16,7 @@ class MemLedger {
     this.ratings = new Map();              // uid → баланс в рейтинге (для проверок)
     this.winsTop = new Map();              // 'игра|uid' → победы онлайн (для проверок)
     this.fastTop = new Map();              // 'уровень|uid' → лучшее время (для проверок)
+    this.scoreTop = new Map();             // 'игра|uid' → лучший счёт в 2048 / «Блоках» (для проверок)
     this.sinces = (o && o.sinces) || {};   // для проверок: uid → когда создан аккаунт (мс); по умолчанию «давно»
   }
   async get(coll, id) { const v = this.data.get(coll + '/' + id); return v ? JSON.parse(JSON.stringify(v)) : null; }
@@ -37,6 +38,7 @@ class MemLedger {
   async setRating(uid, balance) { this.ratings.set(uid, balance); }
   async addWins(game, uid, n) { const k = game + '|' + uid; this.winsTop.set(k, (this.winsTop.get(k) || 0) + n); }
   async setFast(level, uid, seconds) { this.fastTop.set(level + '|' + uid, seconds); }
+  async setScore(game, uid, score) { this.scoreTop.set(game + '|' + uid, score); }
 }
 
 // Firestore через REST: токен получаем из ключа сервисного аккаунта (JSON из консоли Firebase), без сторонних библиотек
@@ -149,6 +151,15 @@ class FirestoreLedger {
     const mask = ['time', 'src', 'updatedAt', 'name', 'avatar', 'icon'].map((k) => 'updateMask.fieldPaths=' + k).join('&');
     await this.call('PATCH', this.base + '/ratings_fast/' + encodeURIComponent(level) + '/rows/' + encodeURIComponent(uid) + '?' + mask, { fields: {
       time: { integerValue: String(Math.max(1, Math.floor(seconds))) }, src: { stringValue: 'server' }, updatedAt: { integerValue: String(this.now()) },
+      name: { stringValue: p.name }, avatar: { integerValue: String(p.avatar) }, icon: { stringValue: p.icon } } });
+  }
+  // Лучший счёт в 2048 и «Блоках»: ratings_fast/{игра}/rows/{uid} с полем score (та же коллекция топов, что у «Сапёра»,
+  // поэтому правила базы менять не нужно: читать могут вошедшие, писать — только сервер)
+  async setScore(game, uid, score) {
+    const p = await this.profileOf(uid);
+    const mask = ['score', 'src', 'updatedAt', 'name', 'avatar', 'icon'].map((k) => 'updateMask.fieldPaths=' + k).join('&');
+    await this.call('PATCH', this.base + '/ratings_fast/' + encodeURIComponent(game) + '/rows/' + encodeURIComponent(uid) + '?' + mask, { fields: {
+      score: { integerValue: String(Math.max(1, Math.floor(score))) }, src: { stringValue: 'server' }, updatedAt: { integerValue: String(this.now()) },
       name: { stringValue: p.name }, avatar: { integerValue: String(p.avatar) }, icon: { stringValue: p.icon } } });
   }
   // Новому игроку: его кошелёк из облачного снимка прогресса (users/{uid}: серия, рекорды, дни, баланс), а если снимка нет, баланс из рейтинга

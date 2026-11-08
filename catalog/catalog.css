@@ -323,8 +323,15 @@
 .rating-tab { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .rating-tab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .rating-tab:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.rating-sec { margin: 0 0 14px; }
-.rating-sec-title { margin: 0 0 4px; font-size: 16px; }
+/* Раздел игры в рейтинге: свёрнут (название и лидер), по нажатию раскрывается топ-5 */
+.rating-sec { margin: 0; border-bottom: 1px solid var(--line); }
+.rating-sec > summary { list-style: none; display: flex; align-items: baseline; gap: 10px; padding: 12px 2px; cursor: pointer; }
+.rating-sec > summary::-webkit-details-marker { display: none; }
+.rating-sec > summary::after { content: '▾'; margin-left: auto; color: var(--muted); transition: transform .2s ease; }
+.rating-sec[open] > summary::after { transform: rotate(180deg); }
+.rating-sec-title { font-size: 16px; font-weight: 700; flex: none; }
+.rating-sec-lead { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 14px; }
+.rating-sec[open] > .rating-list { margin-bottom: 10px; }
 .rating-list.short { max-height: none; overflow: visible; }
 .rating-sub { margin: 0 0 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
 .rating-note { margin: 4px 0 12px; color: var(--muted); }
