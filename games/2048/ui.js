@@ -195,6 +195,8 @@ function modalHtml() {
 }
 
 function render() {
+  // во время партии страница не прокручивается и не обновляется потягиванием вниз — весь экран отдан под свайпы
+  document.documentElement.classList.toggle('playing', app.screen === 'game');
   var scr = appEl.querySelector('.screen');
   if (app.screen === 'game' && scr && scr.getAttribute('data-screen') === 'game') {
     // поле уже на экране: обновляем только шапку, счёт и окна
@@ -238,10 +240,11 @@ document.addEventListener('keydown', function (e) {
   e.preventDefault();
   doMove(dir);
 });
-// Свайп по полю: направление по большей составляющей, короткие касания не считаются
+// Свайп по всему экрану партии (не только по полю): направление по большей составляющей, короткие касания не считаются.
+// Кнопки, ссылки и окна свайп не начинают
 var swipe = null;
 appEl.addEventListener('pointerdown', function (e) {
-  if (!e.target.closest('.board') || app.modal) return;
+  if (app.screen !== 'game' || app.modal || e.target.closest('button, a, input, .overlay')) return;
   swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
 });
 appEl.addEventListener('pointerup', function (e) {

@@ -157,6 +157,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
   position: relative; width: min(100%, 460px); aspect-ratio: 1; border-radius: 16px; background: var(--board); box-shadow: var(--game-shadow);
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none;
 }
+/* Во время партии: свайп по всему экрану; потягивание вниз не обновляет страницу, экран не прокручивается */
+html.playing, html.playing body { overscroll-behavior: none; }
+html.playing .app, html.playing .screen[data-screen="game"] { touch-action: none; -webkit-user-select: none; user-select: none; }
 .board:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .cells { position: absolute; inset: var(--gap); display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap); }
 .cells i { border-radius: 10px; background: var(--slot); }
