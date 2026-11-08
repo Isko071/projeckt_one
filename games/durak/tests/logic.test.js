@@ -189,3 +189,36 @@ test('боты на 2–6 игроков с обеими колодами: па�
     assert.ok(st.gameOver);
   }
 });
+
+test('несколько карт за один ход: первый — одного достоинства, подкидывание — подходящие к столу; не больше, чем отбивающемуся есть чем крыть', () => {
+  let st = pos({ hands: [['7S', '7C', '7D', '9H', 'KS'], ['8S', '8C', 'AD']], deck: ['6D'] });
+  assert.equal(D.legal(st).max, 3);
+  assert.equal(D.reduce(st, { seat: 0, type: 'attack', cards: ['7S', '9H'] }).ok, false, 'разные достоинства первым ходом нельзя');
+  assert.equal(D.reduce(st, { seat: 0, type: 'attack', cards: ['7S', '7C', '7D', 'KS'] }).ok, false);
+  st = act(st, { type: 'attack', cards: ['7S', '7C'] });
+  assert.equal(st.table.length, 2); assert.equal(st.actor, 1);
+  assert.deepEqual(plain(D.legal(st, 0).attack), ['7D'], 'ходивший может подкинуть, не дожидаясь отбоя');
+  assert.equal(D.legal(st, 0).max, 1, 'у отбивающегося 3 карты, непобитых 2');
+  st = plain(D.reduce(st, { seat: 0, type: 'attack', cards: ['7D'] }).state);
+  assert.equal(st.table.length, 3); assert.equal(st.actor, 1, 'отбивается дальше он же');
+  assert.equal(D.reduce(st, { seat: 0, type: 'attack', card: 'KS' }).ok, false);
+  assert.equal(D.reduce(st, { seat: 0, type: 'pass' }).ok, false, 'пасовать вне очереди нельзя');
+});
+
+test('«подкидывают только соседи»: третий игрок не подкидывает', () => {
+  let st = pos({ hands: [['7S', '8D'], ['QS', 'KH', 'AH'], ['7C', '7H'], ['7D', 'KD']], deck: ['6S'] });
+  st.neighbors = true;
+  st = act(st, { type: 'attack', card: '7S' });
+  assert.deepEqual(plain(D.throwers(st)), [0, 2], 'ходивший и следующий за отбивающимся');
+  assert.ok(D.legal(st, 2).attack.length > 0);
+  assert.equal(D.legal(st, 3).attack.length, 0, 'дальний сосед не подкидывает');
+  const all = plain(st); all.neighbors = false;
+  assert.ok(D.legal(all, 3).attack.length > 0, 'без переключателя подкидывают все');
+  assert.deepEqual(plain(D.parseMode('perevodnoy-52-n')), { variant: 'perevodnoy', deck: 52, neighbors: true });
+  assert.equal(D.makeMode('podkidnoy', 36, true), 'podkidnoy-n');
+  assert.equal(D.init([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { mode: 'podkidnoy-n' }, rngOf(3)).neighbors, true);
+});
+
+test('рука слева направо: козыри от старшего к младшему, потом остальные от старших к младшим', () => {
+  assert.deepEqual(plain(D.sortHand(['6S', 'AH', '9C', '7H', 'KD', '9S'], 'H')), ['AH', '7H', 'KD', '9S', '9C', '6S']);
+});

@@ -18,8 +18,11 @@
 //   Durak.view(state) → стол без чужих карт и колоды (у каждого только число карт); Durak.secrets(state) → { id игрока: его карты }
 //   Durak.legal(state) → что может сделать тот, чья очередь: { seat, attack: [карты], defend: [{ card, target }], transfer: [карты], take, pass }
 (function (root) {
-  // Режим стола (mode) — вариант и колода: 'podkidnoy' | 'perevodnoy', с '-52' — колода 52 карты (от двойки до туза), иначе 36
-  var CONFIG = { minSeats: 2, maxSeats: 6, hand: 6, modes: ['podkidnoy', 'perevodnoy', 'podkidnoy-52', 'perevodnoy-52'], variants: ['podkidnoy', 'perevodnoy'], decks: [36, 52], botLevels: ['easy', 'medium', 'expert'] };
+  // Режим стола (mode) одной строкой: вариант 'podkidnoy' | 'perevodnoy', дальше '-52' — колода 52 карты (от двойки до туза, иначе 36)
+  // и '-n' — подкидывают только соседи отбивающегося (ходивший и следующий за отбивающимся), иначе все
+  var MODES = [];
+  ['podkidnoy', 'perevodnoy'].forEach(function (v) { ['', '-52'].forEach(function (d) { ['', '-n'].forEach(function (n) { MODES.push(v + d + n); }); }); });
+  var CONFIG = { minSeats: 2, maxSeats: 6, hand: 6, modes: MODES, variants: ['podkidnoy', 'perevodnoy'], decks: [36, 52], botLevels: ['easy', 'medium', 'expert'] };
   // Имена ботов за онлайн-столом (их видят все игроки; сервер без словаря, поэтому имена здесь)
   var BOT_NAMES = ['Бот Саша', 'Бот Миша', 'Бот Женя', 'Бот Оля', 'Бот Дима'];
   var PLAYER_ACTIONS = ['attack', 'defend', 'transfer', 'take', 'pass', 'concede'];
@@ -42,15 +45,16 @@
     SUITS.forEach(function (s) { RANKS.slice(from).forEach(function (r) { d.push(r + s); }); });
     return d;
   }
-  function parseMode(m) { m = CONFIG.modes.indexOf(m) >= 0 ? m : 'podkidnoy'; return { variant: m.split('-')[0], deck: /-52$/.test(m) ? 52 : 36 }; }
+  function parseMode(m) { m = CONFIG.modes.indexOf(m) >= 0 ? m : 'podkidnoy'; return { variant: m.split('-')[0], deck: /-52\b/.test(m) ? 52 : 36, neighbors: /-n$/.test(m) }; }
+  function makeMode(variant, deck, neighbors) { return (variant === 'perevodnoy' ? 'perevodnoy' : 'podkidnoy') + (deck === 52 ? '-52' : '') + (neighbors ? '-n' : ''); }
   function shuffle(a, rng) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-  // Сортировка руки для показа: некозыри по масти и достоинству, козыри в конце
+  // Рука для показа слева направо: сначала козыри от старшего к младшему, потом остальные от старших к младшим (одинаковые — по масти)
   function sortHand(hand, trump) {
     return hand.slice().sort(function (a, b) {
       var ta = suit(a) === trump ? 1 : 0, tb = suit(b) === trump ? 1 : 0;
-      if (ta !== tb) return ta - tb;
-      if (suit(a) !== suit(b)) return SUITS.indexOf(suit(a)) - SUITS.indexOf(suit(b));
-      return rank(a) - rank(b);
+      if (ta !== tb) return tb - ta;
+      if (rank(a) !== rank(b)) return rank(b) - rank(a);
+      return SUITS.indexOf(suit(a)) - SUITS.indexOf(suit(b));
     });
   }
 
@@ -73,7 +77,7 @@
     var first = -1, low = 99;
     list.forEach(function (s, i) { s.hand.forEach(function (c) { if (suit(c) === trump && rank(c) < low) { low = rank(c); first = i; } }); });
     if (first < 0) first = Math.floor(rng() * list.length);
-    var st = { v: 1, mode: mode, deckSize: pm.deck, deck: deck, trump: trump, trumpCard: trumpCard, seats: list, discard: 0, table: [], attacker: first, defender: -1, phase: 'attack', actor: first,
+    var st = { v: 1, mode: mode, deckSize: pm.deck, neighbors: pm.neighbors, deck: deck, trump: trump, trumpCard: trumpCard, seats: list, discard: 0, table: [], attacker: first, defender: -1, phase: 'attack', actor: first,
       passed: [], taking: false, limit: 6, moves: 0, bout: 1, out: [], gameOver: false, reason: '', loser: -1, last: null, firstLow: low < 99 ? RANKS[low] + trump : null };
     st.defender = nextAlive(st, first);
     st.limit = Math.min(CONFIG.hand, st.seats[st.defender].hand.length);
@@ -82,11 +86,21 @@
 
   function ranksOnTable(st) { var o = {}; st.table.forEach(function (p) { o[p.a[0]] = true; if (p.d) o[p.d[0]] = true; }); return o; }
   function unbeaten(st) { return st.table.map(function (p, i) { return p.d ? -1 : i; }).filter(function (i) { return i >= 0; }); }
-  // Порядок подкидывающих: ходивший, потом остальные по кругу (без отбивающегося)
+  // Порядок подкидывающих: ходивший, потом остальные по кругу (без отбивающегося). «Только соседи» — ходивший и следующий за отбивающимся
   function throwers(st) {
     var out = [], n = st.seats.length;
+    if (st.neighbors) {
+      [st.attacker, nextAlive(st, st.defender)].forEach(function (i) { if (i >= 0 && i !== st.defender && !st.seats[i].out && out.indexOf(i) < 0) out.push(i); });
+      return out;
+    }
     for (var k = 0; k < n; k++) { var i = (st.attacker + k) % n; if (!st.seats[i].out && i !== st.defender) out.push(i); }
     return out;
+  }
+  // Сколько карт ещё можно положить на стол: не больше лимита захода и не больше, чем отбивающемуся есть чем крыть (если он не забирает)
+  function room(st) {
+    var left = st.limit - st.table.length;
+    if (st.table.length && !st.taking) left = Math.min(left, size(st, st.defender) - unbeaten(st).length);
+    return Math.max(0, left);
   }
   function canThrow(st, seat) {
     if (st.table.length >= st.limit) return [];
@@ -107,10 +121,16 @@
     return st.seats[st.defender].hand.filter(function (c) { return c[0] === r0; });
   }
 
-  // Что может сделать тот, чья очередь
-  function legal(st) {
-    var out = { seat: st.actor, attack: [], defend: [], transfer: [], take: false, pass: false };
-    if (st.gameOver || st.actor < 0) return out;
+  // Что может сделать игрок seat (по умолчанию тот, чья очередь). Кроме очереди: пока отбивающийся кроет, подкидывающие могут подкидывать, не дожидаясь его.
+  // attack — какие карты можно положить; max — сколько карт за один раз (несколько сразу: первый ход — одного достоинства, подкидывание — подходящие к столу)
+  function legal(st, seat) {
+    if (seat === undefined) seat = st.actor;
+    var out = { seat: seat, attack: [], defend: [], transfer: [], take: false, pass: false, max: 0 };
+    if (st.gameOver || st.actor < 0 || !st.seats[seat] || st.seats[seat].out) return out;
+    if (seat !== st.actor) {
+      if (st.phase === 'defend' && !st.taking && st.table.length && throwers(st).indexOf(seat) >= 0) { out.attack = canThrow(st, seat); out.max = out.attack.length ? room(st) : 0; }
+      return out;
+    }
     if (st.phase === 'defend' && st.actor === st.defender) {
       var hand = st.seats[st.defender].hand;
       unbeaten(st).forEach(function (t) { hand.forEach(function (c) { if (beats(c, st.table[t].a, st.trump)) out.defend.push({ card: c, target: t }); }); });
@@ -119,6 +139,7 @@
     } else if (st.phase === 'attack' || st.phase === 'throw') {
       out.attack = canThrow(st, st.actor);
       out.pass = st.phase === 'throw';                // первую карту захода класть обязательно
+      out.max = st.table.length ? room(st) : Math.min(st.limit, size(st, st.defender));
     }
     return out;
   }
@@ -186,18 +207,22 @@
       finish(st, seat, action.type === 'leave' ? 'left' : 'concede', events);
       return { ok: true, state: st, events: events };
     }
-    if (seat !== st.actor) return bad('not-your-turn');
-    var lg = legal(st), card = action.card, me = st.seats[seat];
+    var outOfTurn = seat !== st.actor;
+    if (outOfTurn && action.type !== 'attack') return bad('not-your-turn');
+    var lg = legal(st, seat), card = action.card, me = st.seats[seat];
     st.moves++;
     if (action.type === 'attack') {
-      if (!valid(card) || lg.attack.indexOf(card) < 0) return bad('illegal');
-      take(me.hand, card);
-      st.table.push({ a: card, d: null });
-      st.last = { type: 'attack', seat: seat, card: card };
-      events.push({ type: 'attack', seat: seat, card: card });
+      // одна карта (card) или несколько сразу (cards)
+      var cards = Array.isArray(action.cards) ? action.cards.slice(0, CONFIG.hand) : [card];
+      if (!cards.length || cards.some(function (c, k) { return !valid(c) || lg.attack.indexOf(c) < 0 || cards.indexOf(c) !== k; })) return bad('illegal');
+      if (cards.length > lg.max) return bad('too-many');
+      if (!state.table.length && cards.some(function (c) { return c[0] !== cards[0][0]; })) return bad('illegal');     // первый ход несколькими картами — только одного достоинства
+      cards.forEach(function (c) { take(me.hand, c); st.table.push({ a: c, d: null }); });
+      st.last = { type: 'attack', seat: seat, card: cards[0], cards: cards };
+      events.push({ type: 'attack', seat: seat, card: cards[0], cards: cards });
       st.passed = [];
       if (st.taking) { toThrow(st, events); }                       // отбивающийся уже забирает: можно подкидывать дальше
-      else { st.phase = 'defend'; st.actor = st.defender; }
+      else { st.phase = 'defend'; st.actor = st.defender; }         // подкинули, пока он кроет, — он продолжает отбиваться
     } else if (action.type === 'defend') {
       var t = Math.floor(Number(action.target));
       if (!valid(card) || !lg.defend.some(function (d) { return d.card === card && d.target === t; })) return bad('illegal');
@@ -245,13 +270,14 @@
   function cleanAction(p) {
     var out = { type: p.type };
     if (typeof p.card === 'string') out.card = p.card.slice(0, 2);
+    if (Array.isArray(p.cards)) out.cards = p.cards.slice(0, 6).filter(function (c) { return typeof c === 'string'; }).map(function (c) { return c.slice(0, 2); });
     if (typeof p.target === 'number') out.target = Math.floor(p.target);
     return out;
   }
 
   root.Durak = {
     CONFIG: CONFIG, PLAYER_ACTIONS: PLAYER_ACTIONS, RANKS: RANKS, SUITS: SUITS,
-    init: init, reduce: reduce, view: view, secrets: secrets, legal: legal, size: size, isTrump: isTrump, parseMode: parseMode, deckTotal: deckTotal, beats: beats, rank: rank, suit: suit, sortHand: sortHand, nextAlive: nextAlive, alive: alive,
+    init: init, reduce: reduce, view: view, secrets: secrets, legal: legal, size: size, isTrump: isTrump, parseMode: parseMode, makeMode: makeMode, deckTotal: deckTotal, throwers: throwers, beats: beats, rank: rank, suit: suit, sortHand: sortHand, nextAlive: nextAlive, alive: alive,
     waitingSeats: waitingSeats, progressKey: progressKey, cleanAction: cleanAction, botNames: BOT_NAMES,
     // Ход бота за онлайн-столом (shared/rooms-turns.js): нужен games/durak/bot.js
     botAction: function (st, seat, rng) { return root.DurakBot ? root.DurakBot.choose(st, seat, st.seats[seat].level || 'medium', rng) : null; }

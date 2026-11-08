@@ -4,7 +4,7 @@
 // Карты скрыты: сервер шлёт всем общий вид стола (state) и каждому отдельно его карты (mine). Свободные места займут боты, только если создатель так решил.
 (function () {
   var Cloud = window.PlatformCloud, P = window.PlatformProfile;
-  var on = { screen: 'login', rooms: null, stake: '', private: false, size: 2, variant: 'podkidnoy', deck: 36, bots: false, botLevel: 'medium', code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
+  var on = { screen: 'login', rooms: null, stake: '', private: false, size: 2, variant: app.variant, deck: app.deck, neighbors: app.neighbors, bots: false, botLevel: 'medium', code: '', busy: false, loginError: null, tableError: null, codeError: null, copied: false, banner: null, invite: null };
   var G = null, wsApi = null, pollTimer = null, roomsTimer = null, failing = 0;
 
   function now() { return Date.now(); }
@@ -203,7 +203,7 @@
     if (!api || on.busy || stakeProblem()) { if (!api) { on.tableError = 'missing'; render(); } return; }
     on.busy = true; render();
     var prof = P.getProfile();
-    api.createRoom({ size: on.size, mode: on.variant + (on.deck === 52 ? '-52' : ''), fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
+    api.createRoom({ size: on.size, mode: D.makeMode(on.variant, on.deck, on.neighbors), fillBots: on.bots, botLevel: on.botLevel, private: on.private, stake: stakeValue(), name: prof.name, avatar: prof.avatar }).then(function (res) { attach(res.host, res.code); },
       function (e) { on.busy = false; on.tableError = errorKey(e); on.screen = 'tables'; render(); });
   }
   function joinTable(code) {
@@ -288,6 +288,7 @@
       '<div class="o-field"><div class="field-title">' + esc(tr('start.variant')) + '</div>' + seg('ovariant', D.CONFIG.variants, on.variant, 'start.variant') + '</div>' +
       '<div class="o-field"><div class="field-title">' + esc(tr('start.deck')) + '</div>' + seg('odeck', D.CONFIG.decks, on.deck, 'start.deck') + '</div>' +
       '<div class="o-field"><div class="field-title">' + esc(tr('o.create.players')) + '</div>' + seg('osize', [2, 3, 4, 5, 6], on.size, 'start.players') + '</div>' +
+      '<button class="mode-btn o-mode" data-act="oneighbors" aria-pressed="' + on.neighbors + '"><b>' + esc(tr('settings.neighbors')) + '</b><small>' + esc(tr(on.neighbors ? 'settings.neighborsOn' : 'settings.neighborsOff')) + '</small></button>' +
       '<button class="mode-btn o-mode" data-act="obots" aria-pressed="' + on.bots + '"><b>' + esc(tr('o.create.bots')) + '</b><small>' + esc(tr(on.bots ? 'o.create.botsOn' : 'o.create.botsOff')) + '</small></button>' +
       (on.bots ? '<div class="o-field"><div class="field-title">' + esc(tr('o.create.level')) + '</div>' + seg('olevel', D.CONFIG.botLevels, on.botLevel, 'start.level') + '</div>' : '') +
       '<button class="mode-btn o-mode" data-act="private" aria-pressed="' + on.private + '"><b>' + esc(tr('o.create.private')) + '</b><small>' + esc(tr(on.private ? 'o.create.privateSub' : 'o.create.privateOff')) + '</small></button>' +
@@ -373,6 +374,7 @@
       case 'osize': on.size = Math.max(2, Math.min(6, Number(v) || 2)); render(); return true;
       case 'odeck': on.deck = Number(v) === 52 ? 52 : 36; render(); return true;
       case 'obots': on.bots = !on.bots; render(); return true;
+      case 'oneighbors': on.neighbors = !on.neighbors; render(); return true;
       case 'olevel': on.botLevel = D.CONFIG.botLevels.indexOf(v) >= 0 ? v : 'medium'; render(); return true;
       case 'stake': on.stake = Number(v) ? String(Number(v)) : ''; render(); return true;
       case 'create': createTable(); return true;
