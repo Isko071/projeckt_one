@@ -78,7 +78,7 @@
     list.forEach(function (s, i) { s.hand.forEach(function (c) { if (suit(c) === trump && rank(c) < low) { low = rank(c); first = i; } }); });
     if (first < 0) first = Math.floor(rng() * list.length);
     var st = { v: 1, mode: mode, deckSize: pm.deck, neighbors: pm.neighbors, deck: deck, trump: trump, trumpCard: trumpCard, seats: list, discard: 0, table: [], attacker: first, defender: -1, phase: 'attack', actor: first,
-      passed: [], taking: false, limit: 6, moves: 0, bout: 1, out: [], gameOver: false, reason: '', loser: -1, last: null, firstLow: low < 99 ? RANKS[low] + trump : null };
+      passed: [], mainDone: false, taking: false, limit: 6, moves: 0, bout: 1, out: [], gameOver: false, reason: '', loser: -1, last: null, firstLow: low < 99 ? RANKS[low] + trump : null };
     st.defender = nextAlive(st, first);
     st.limit = Math.min(CONFIG.hand, st.seats[st.defender].hand.length);
     return st;
@@ -128,7 +128,10 @@
     var out = { seat: seat, attack: [], defend: [], transfer: [], take: false, pass: false, max: 0 };
     if (st.gameOver || st.actor < 0 || !st.seats[seat] || st.seats[seat].out) return out;
     if (seat !== st.actor) {
-      if (st.phase === 'defend' && !st.taking && st.table.length && throwers(st).indexOf(seat) >= 0) { out.attack = canThrow(st, seat); out.max = out.attack.length ? room(st) : 0; }
+      // вне очереди: пока главный атакующий не закончил, подкидывает только он; когда закончил — остальные без очереди
+      var free = throwers(st).indexOf(seat) >= 0 && (seat === st.attacker || st.mainDone);
+      if (free && st.phase === 'defend' && !st.taking && st.table.length) { out.attack = canThrow(st, seat); out.max = out.attack.length ? room(st) : 0; }
+      else if (free && st.phase === 'throw' && st.mainDone && st.passed.indexOf(seat) < 0) { out.attack = canThrow(st, seat); out.max = out.attack.length ? room(st) : 0; out.pass = true; }
       return out;
     }
     if (st.phase === 'defend' && st.actor === st.defender) {
@@ -144,8 +147,14 @@
     return out;
   }
 
-  // Следующий подкидывающий, у которого есть что подкинуть; никого — заход окончен
+  // Кто подкидывает дальше. Сначала только главный атакующий (ходивший); когда он закончил (спасовал или ему нечего класть) —
+  // остальные без очереди: очередь (actor) стоит у первого из них, но положить или спасовать может любой. Никого не осталось — заход окончен
   function nextThrower(st) {
+    if (!st.mainDone) {
+      if (st.passed.indexOf(st.attacker) < 0 && canThrow(st, st.attacker).length) return st.attacker;
+      st.mainDone = true;
+      if (st.passed.indexOf(st.attacker) < 0) st.passed.push(st.attacker);
+    }
     var order = throwers(st);
     for (var k = 0; k < order.length; k++) {
       var s = order[k];
@@ -173,7 +182,7 @@
     else st.discard += st.table.reduce(function (a, p) { return a + (p.d ? 2 : 1); }, 0);
     events.push({ type: took ? 'took' : 'bito', seat: def, cards: st.table.length });
     st.last = { type: took ? 'took' : 'bito', seat: def };
-    st.table = []; st.passed = []; st.taking = false;
+    st.table = []; st.passed = []; st.mainDone = false; st.taking = false;
     draw(st);
     // кто остался без карт при пустой колоде — вышел
     if (!st.deck.length) st.seats.forEach(function (s, i) { if (!s.out && !s.hand.length) { s.out = true; st.out.push(i); events.push({ type: 'out', seat: i }); } });
@@ -208,7 +217,7 @@
       return { ok: true, state: st, events: events };
     }
     var outOfTurn = seat !== st.actor;
-    if (outOfTurn && action.type !== 'attack') return bad('not-your-turn');
+    if (outOfTurn && action.type !== 'attack' && !(action.type === 'pass' && st.phase === 'throw' && st.mainDone)) return bad('not-your-turn');
     var lg = legal(st, seat), card = action.card, me = st.seats[seat];
     st.moves++;
     if (action.type === 'attack') {
@@ -239,7 +248,7 @@
       st.last = { type: 'transfer', seat: seat, card: card };
       st.attacker = seat; st.defender = nextAlive(st, seat);
       st.limit = Math.max(st.table.length, Math.min(CONFIG.hand, st.seats[st.defender].hand.length));   // карт на столе не больше, чем новому отбивающемуся есть чем крыть
-      st.actor = st.defender; st.phase = 'defend'; st.passed = [];
+      st.actor = st.defender; st.phase = 'defend'; st.passed = []; st.mainDone = false;
     } else if (action.type === 'take') {
       if (!lg.take) return bad('illegal');
       st.taking = true; st.passed = [];
@@ -248,6 +257,7 @@
       toThrow(st, events);
     } else if (action.type === 'pass') {
       if (!lg.pass) return bad('illegal');
+      if (seat === st.attacker) st.mainDone = true;              // главный атакующий закончил: дальше подкидывают остальные без очереди
       st.passed.push(seat);
       st.last = { type: 'pass', seat: seat };
       events.push({ type: 'pass', seat: seat });

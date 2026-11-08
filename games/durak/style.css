@@ -177,7 +177,8 @@ button.pair .pcard.a { box-shadow: 0 0 0 3px var(--ok); animation: pulse 1.1s ea
 /* Рука: карты внахлёст, сколько бы их ни было — в одну линию по ширине экрана */
 .hand { --cw: clamp(46px, 13vw, 64px); display: flex; justify-content: center; padding: 30px 8px 8px; min-height: 120px; }
 /* Места мало — кнопки карт сжимаются, а сами карты сохраняют ширину и ложатся внахлёст; последняя видна целиком */
-.hc { position: relative; padding: 0; border: 0; background: none; cursor: pointer; flex: 0 1 calc(var(--cw) + 4px); min-width: 14px; height: calc(var(--cw) * 1.4);
+/* Рука внахлёст, как в настоящей руке: каждая карта ложится на предыдущую, самая правая — сверху; карт много — нахлёст сильнее */
+.hc { position: relative; padding: 0; border: 0; background: none; cursor: pointer; flex: 0 1 calc(var(--cw) * 0.56); min-width: 14px; height: calc(var(--cw) * 1.4);
   transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); transform-origin: 50% 130%; transition: transform .22s ease; touch-action: none; -webkit-user-select: none; user-select: none; }
 .hc:last-child { flex: 0 0 var(--cw); }
 .hc .pcard { --w: var(--cw); position: absolute; left: 0; top: 0; transition: transform .22s ease, box-shadow .22s ease; }

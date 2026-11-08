@@ -210,6 +210,9 @@ test('«подкидывают только соседи»: третий игр�
   st.neighbors = true;
   st = act(st, { type: 'attack', card: '7S' });
   assert.deepEqual(plain(D.throwers(st)), [0, 2], 'ходивший и следующий за отбивающимся');
+  st = act(st, { type: 'defend', card: 'QS', target: 0 });
+  // у ходившего нечего подкинуть — он закончил; дальше сосед (место 2), а дальнему (место 3) нельзя
+  assert.equal(st.mainDone, true); assert.equal(st.actor, 2);
   assert.ok(D.legal(st, 2).attack.length > 0);
   assert.equal(D.legal(st, 3).attack.length, 0, 'дальний сосед не подкидывает');
   const all = plain(st); all.neighbors = false;
@@ -217,6 +220,28 @@ test('«подкидывают только соседи»: третий игр�
   assert.deepEqual(plain(D.parseMode('perevodnoy-52-n')), { variant: 'perevodnoy', deck: 52, neighbors: true });
   assert.equal(D.makeMode('podkidnoy', 36, true), 'podkidnoy-n');
   assert.equal(D.init([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { mode: 'podkidnoy-n' }, rngOf(3)).neighbors, true);
+});
+
+test('порядок подкидывания: сначала только главный атакующий; когда он закончил — остальные без очереди', () => {
+  let st = pos({ hands: [['7S', '7D', '9C'], ['QS', 'KH', 'AH', 'QD'], ['7C', 'KS'], ['7H', 'KD']], deck: ['6S'], trump: 'H' });
+  st = act(st, { type: 'attack', card: '7S' });
+  assert.equal(D.legal(st, 2).attack.length, 0, 'пока главный не закончил, другие не подкидывают');
+  assert.deepEqual(plain(D.legal(st, 0).attack), ['7D'], 'главный может подкинуть, не дожидаясь отбоя');
+  st = act(st, { type: 'defend', card: 'QS', target: 0 });
+  assert.equal(st.phase, 'throw'); assert.equal(st.actor, 0, 'всё побито: сначала решает главный');
+  assert.equal(D.reduce(st, { seat: 2, type: 'attack', card: '7C' }).ok, false);
+  st = act(st, { type: 'pass' });                                         // главный закончил
+  assert.equal(st.mainDone, true);
+  // теперь оба остальных могут без очереди: кладёт место 3, хотя очередь у места 2
+  assert.equal(st.actor, 2);
+  st = plain(D.reduce(st, { seat: 3, type: 'attack', card: '7H' }).state);
+  assert.equal(st.table.length, 2); assert.equal(st.actor, 1);
+  assert.ok(D.legal(st, 2).attack.length > 0, 'во время отбоя тоже без очереди');
+  st = act(st, { type: 'defend', card: 'AH', target: 1 });
+  st = plain(D.reduce(st, { seat: 3, type: 'pass' }).state);             // спасовал не тот, у кого очередь
+  assert.deepEqual(plain(st.passed), [3]);
+  while (st.table.length) st = act(st, { type: 'pass' });                 // остальные тоже пасуют — бито
+  assert.equal(st.attacker, 1, 'отбился — ходит он');
 });
 
 test('рука слева направо: козыри от старшего к младшему, потом остальные от старших к младшим', () => {
