@@ -59,3 +59,13 @@ test('значок сайта: SVG, PNG 48/192, favicon.ico, иконка для
   const man = JSON.parse(fs.readFileSync(path.join(root, 'site.webmanifest'), 'utf8'));
   man.icons.forEach((i) => assert.ok(fs.existsSync(path.join(root, i.src)), 'иконка из manifest: ' + i.src));
 });
+
+test('sitemap.txt — те же адреса, что в sitemap.xml; обе карты указаны в robots.txt', () => {
+  const xml = fs.readFileSync(path.join(root, 'sitemap.xml'), 'utf8');
+  const fromXml = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g), (m) => m[1]);
+  const txt = fs.readFileSync(path.join(root, 'sitemap.txt'), 'utf8').trim().split('\n');
+  assert.deepEqual(txt, fromXml);
+  const robots = fs.readFileSync(path.join(root, 'robots.txt'), 'utf8');
+  assert.match(robots, /Sitemap: https:\/\/partejka\.pages\.dev\/sitemap\.xml/);
+  assert.match(robots, /Sitemap: https:\/\/partejka\.pages\.dev\/sitemap\.txt/);
+});

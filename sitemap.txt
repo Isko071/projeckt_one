@@ -1,0 +1,11 @@
+https://partejka.pages.dev/
+https://partejka.pages.dev/games/checkers/
+https://partejka.pages.dev/games/durak/
+https://partejka.pages.dev/games/yahtzee/
+https://partejka.pages.dev/games/minesweeper/
+https://partejka.pages.dev/games/2048/
+https://partejka.pages.dev/games/blocks/
+https://partejka.pages.dev/games/blackjack/
+https://partejka.pages.dev/games/poker-simple/
+https://partejka.pages.dev/games/battleship/
+https://partejka.pages.dev/games/mines/
