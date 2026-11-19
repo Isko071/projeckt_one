@@ -5,7 +5,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const pages = ['index.html', 'games/yahtzee/index.html', 'games/minesweeper/index.html', 'games/blackjack/index.html', 'admin/index.html', 'games/poker-simple/index.html', 'games/battleship/index.html', 'games/mines/index.html', 'games/2048/index.html', 'games/checkers/index.html', 'games/blocks/index.html'];
+// все страницы игр находятся сами, чтобы новая игра не осталась со старой версией
+const pages = ['index.html', 'admin/index.html', '404.html'].concat(
+  fs.readdirSync(path.join(root, 'games'), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, 'games', d.name, 'index.html')))
+    .map((d) => 'games/' + d.name + '/index.html'));
 const version = process.argv[2];
 if (!/^\d+$/.test(version || '')) { console.error('Использование: node tools/set-version.js <номер>'); process.exit(1); }
 

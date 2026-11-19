@@ -60,7 +60,7 @@ function moveScript() {
     'if(n)d="#move="+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(o)))));localStorage.setItem("platform:moved","1");}}catch(e){}' +
     'location.replace(' + JSON.stringify(BASE) + '+p+location.search+(d||h));})();</script>';
 }
-const EXTRA = ['admin/index.html'];        // страницы без блока seo, которым тоже нужен переход со старого адреса
+const EXTRA = ['admin/index.html', '404.html'];        // страницы без блока seo, которым тоже нужен переход со старого адреса
 
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function block(p) {

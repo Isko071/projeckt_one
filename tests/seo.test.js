@@ -69,3 +69,14 @@ test('sitemap.txt — те же адреса, что в sitemap.xml; обе ка
   assert.match(robots, /Sitemap: https:\/\/partejka\.pages\.dev\/sitemap\.xml/);
   assert.match(robots, /Sitemap: https:\/\/partejka\.pages\.dev\/sitemap\.txt/);
 });
+
+test('404.html: не индексируется, пути от корня сайта, тексты из словаря', () => {
+  const html = fs.readFileSync(path.join(root, '404.html'), 'utf8');
+  assert.match(html, /<meta name="robots" content="noindex">/);
+  const local = Array.from(html.matchAll(/(?:src|href)="([^"]+)"/g), (m) => m[1]).filter((u) => !/^https?:/.test(u));
+  assert.ok(local.length > 0);
+  local.forEach((u) => assert.ok(u.startsWith('/'), 'путь не от корня: ' + u));
+  const ctx2 = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(root, 'locales', 'ru.js'), 'utf8'), ctx2);
+  Array.from(html.matchAll(/data-i18n="([^"]+)"/g), (m) => m[1]).forEach((k) => assert.ok(ctx2.LOCALES.ru[k], 'нет текста ' + k));
+});
