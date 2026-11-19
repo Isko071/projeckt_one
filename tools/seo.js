@@ -115,4 +115,6 @@ const day = new Date().toISOString().slice(0, 10);
 const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
   PAGES.map((p) => '  <url><loc>' + BASE + p.path + '</loc><lastmod>' + day + '</lastmod><priority>' + (p.path ? '0.8' : '1.0') + '</priority></url>').join('\n') + '\n</urlset>\n';
 fs.writeFileSync(path.join(root, 'sitemap.xml'), sitemap);
-console.log('SEO: ' + PAGES.length + ' страниц, адрес ' + BASE + ', sitemap.xml обновлён');
+// запасная карта сайта простым списком адресов: Search Console иногда читает её, когда с XML сбоит
+fs.writeFileSync(path.join(root, 'sitemap.txt'), PAGES.map((p) => BASE + p.path).join('\n') + '\n');
+console.log('SEO: ' + PAGES.length + ' страниц, адрес ' + BASE + ', sitemap.xml и sitemap.txt обновлены');
