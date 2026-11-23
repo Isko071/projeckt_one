@@ -80,3 +80,18 @@ test('404.html: не индексируется, пути от корня сай
   vm.runInContext(fs.readFileSync(path.join(root, 'locales', 'ru.js'), 'utf8'), ctx2);
   Array.from(html.matchAll(/data-i18n="([^"]+)"/g), (m) => m[1]).forEach((k) => assert.ok(ctx2.LOCALES.ru[k], 'нет текста ' + k));
 });
+
+test('у главной и каждой игры текст в HTML (без скриптов): заголовок, описание; у игр — как играть и ссылки на другие игры', () => {
+  const pages = ['index.html'].concat(games.map((g) => 'games/' + g.id + '/index.html'));
+  pages.forEach((f) => {
+    const html = fs.readFileSync(path.join(root, f), 'utf8');
+    const m = html.match(/<section class="seo-about"[^]*?<\/section>/);
+    assert.ok(m, 'нет текста на ' + f);
+    const text = m[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    assert.ok(text.length > 200, 'мало текста на ' + f + ': ' + text.length);
+    if (f !== 'index.html') {
+      assert.match(m[0], /<ol><li>/, 'нет «Как играть» на ' + f);
+      games.filter((g) => 'games/' + g.id + '/index.html' !== f).forEach((g) => assert.ok(m[0].includes('href="/games/' + g.id + '/"'), f + ': нет ссылки на ' + g.id));
+    }
+  });
+});
