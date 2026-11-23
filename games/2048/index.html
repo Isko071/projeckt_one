@@ -34,6 +34,17 @@
 <body>
 <noscript><p class="noscript">Для работы игры нужен включённый JavaScript.</p></noscript>
 <main class="app" id="app"></main>
+<!-- about: создано tools/seo.js из словаря locales/ru.js (ключи seo.*), правьте там -->
+<section class="seo-about" aria-labelledby="seo-about-h">
+<h2 id="seo-about-h">2048 онлайн — головоломка с числами</h2>
+<p>Знаменитая головоломка с плитками на поле 4×4. Управление свайпом или стрелками, счёт, рекорд и рейтинг игроков. Незаконченная партия сохраняется.</p>
+<h3>Как играть</h3>
+<ol><li>Свайп сдвигает все плитки до упора в одну сторону.</li><li>Две одинаковые плитки сливаются в одну с суммой: 2 и 2 дают 4.</li><li>После каждого хода появляется новая плитка.</li><li>Соберите плитку 2048 — и продолжайте ради рекорда.</li></ol>
+<h3>Другие игры</h3>
+<ul class="seo-links"><li><a href="/games/checkers/">Шашки</a></li><li><a href="/games/durak/">Дурак</a></li><li><a href="/games/yahtzee/">Кости</a></li><li><a href="/games/minesweeper/">Сапёр</a></li><li><a href="/games/blocks/">Блоки</a></li><li><a href="/games/blackjack/">Блэкджек</a></li><li><a href="/games/poker-simple/">Покер: Чожук</a></li><li><a href="/games/battleship/">Морской бой</a></li><li><a href="/games/mines/">Мины</a></li><li><a href="/">Все игры Партейки</a></li></ul>
+</section>
+<style>.seo-about{box-sizing:border-box;max-width:680px;margin:0 auto;padding:28px 16px 36px;border-top:1px solid var(--line);color:var(--muted);font-size:14px;line-height:1.55;text-align:left}.seo-about h2{margin:0 0 8px;color:var(--ink);font-size:18px;line-height:1.3}.seo-about h3{margin:18px 0 6px;color:var(--ink);font-size:15px}.seo-about p{margin:0 0 8px}.seo-about ol{margin:0;padding-left:20px}.seo-about li{margin:2px 0}.seo-about .seo-links{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}.seo-about .seo-links a{display:inline-block;padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--ink);text-decoration:none;background:var(--surface)}.seo-about .seo-links a:hover{border-color:var(--accent)}.seo-about a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}body.rw-on .seo-about{padding-bottom:96px}</style>
+<!-- /about -->
 
 <script src="../../locales/ru.js?v=188"></script>
 <script src="ru.js?v=188"></script>

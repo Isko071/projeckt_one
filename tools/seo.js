@@ -1,6 +1,6 @@
 // Запуск: node tools/seo.js [адрес сайта]
 // Для поисковиков и превью ссылок (Google, Яндекс, Telegram, WhatsApp): в <head> каждой страницы вписывает заголовок, описание,
-// канонический адрес, Open Graph (картинка и текст превью) и разметку schema.org; создаёт sitemap.xml.
+// канонический адрес, Open Graph (картинка и текст превью) и разметку schema.org; под игрой — текст об игре; создаёт sitemap.xml и sitemap.txt.
 // Блок в <head> между <!-- seo --> и <!-- /seo --> переписывается целиком, остальное не трогается.
 // Сменился адрес сайта (свой домен, Cloudflare Pages) — запустить с новым адресом.
 const fs = require('node:fs');
@@ -108,6 +108,51 @@ EXTRA.forEach((f) => {
   const blockText = tag + '\n' + moveScript() + '\n<!-- /move -->';
   if (/<!-- move[^]*?<!-- \/move -->/.test(html)) html = html.replace(/<!-- move[^]*?<!-- \/move -->/, blockText);
   else html = html.replace(/(<meta charset="utf-8">\n)/, '$1' + blockText + '\n');
+  fs.writeFileSync(file, html);
+});
+
+// Текст о сайте и об игре прямо в HTML (под игрой, на главной — над подвалом): поисковик видит содержание страницы без скриптов.
+// Тексты берутся из словаря locales/ru.js (ключи seo.*), блок между <!-- about --> и <!-- /about --> переписывается целиком.
+const vm = require('node:vm');
+const dictCtx = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(root, 'locales', 'ru.js'), 'utf8'), dictCtx);
+const T = dictCtx.LOCALES.ru;
+function tr(key) { if (typeof T[key] !== 'string') throw new Error('Нет текста в locales/ru.js: ' + key); return T[key]; }
+function gameId(p) { return p.path.split('/')[1]; }
+const ABOUT_CSS = '<style>' +
+  '.seo-about{box-sizing:border-box;max-width:680px;margin:0 auto;padding:28px 16px 36px;border-top:1px solid var(--line);color:var(--muted);font-size:14px;line-height:1.55;text-align:left}' +
+  '.seo-about h2{margin:0 0 8px;color:var(--ink);font-size:18px;line-height:1.3}' +
+  '.seo-about h3{margin:18px 0 6px;color:var(--ink);font-size:15px}' +
+  '.seo-about p{margin:0 0 8px}.seo-about ol{margin:0;padding-left:20px}.seo-about li{margin:2px 0}' +
+  '.seo-about .seo-links{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}' +
+  '.seo-about .seo-links a{display:inline-block;padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--ink);text-decoration:none;background:var(--surface)}' +
+  '.seo-about .seo-links a:hover{border-color:var(--accent)}.seo-about a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}' +
+  'body.rw-on .seo-about{padding-bottom:96px}' +
+  '</style>';
+function about(p) {
+  const out = ['<!-- about: создано tools/seo.js из словаря locales/ru.js (ключи seo.*), правьте там -->', '<section class="seo-about" aria-labelledby="seo-about-h">'];
+  if (!p.game) {
+    out.push('<h2 id="seo-about-h">' + esc(tr('seo.home.h')) + '</h2>', '<p>' + esc(tr('seo.home.p1')) + '</p>', '<p>' + esc(tr('seo.home.p2')) + '</p>');
+  } else {
+    const id = gameId(p), steps = [];
+    for (let i = 1; T['seo.' + id + '.how' + i]; i++) steps.push('<li>' + esc(T['seo.' + id + '.how' + i]) + '</li>');
+    out.push('<h2 id="seo-about-h">' + esc(tr('seo.' + id + '.h')) + '</h2>', '<p>' + esc(tr('seo.' + id + '.p')) + '</p>');
+    if (steps.length) out.push('<h3>' + esc(tr('seo.how')) + '</h3>', '<ol>' + steps.join('') + '</ol>');
+    const links = PAGES.filter((x) => x.game && x !== p).map((x) => '<li><a href="/' + x.path + '">' + esc(tr('games.' + gameId(x) + '.title')) + '</a></li>');
+    links.push('<li><a href="/">' + esc(tr('seo.all')) + '</a></li>');
+    out.push('<h3>' + esc(tr('seo.more')) + '</h3>', '<ul class="seo-links">' + links.join('') + '</ul>');
+  }
+  out.push('</section>', ABOUT_CSS, '<!-- /about -->');
+  return out.join('\n');
+}
+PAGES.forEach((p) => {
+  const file = path.join(root, p.path, 'index.html');
+  let html = fs.readFileSync(file, 'utf8');
+  const text = about(p);
+  if (/<!-- about[^]*?<!-- \/about -->/.test(html)) html = html.replace(/<!-- about[^]*?<!-- \/about -->/, () => text);
+  else if (!p.game) html = html.replace(/(\n\s*)(<footer)/, (m, sp, tag) => sp + text + sp + tag);
+  else html = html.replace(/(<main class="app" id="app"><\/main>\n)/, (m) => m + text + '\n');
+  if (!html.includes('<!-- /about -->')) throw new Error('Не нашлось места для текста: ' + file);
   fs.writeFileSync(file, html);
 });
 
