@@ -21,7 +21,8 @@ test('словарь игры: все ключи tr(...) из ui.js сущест
   ui.replace(/\btr\('([\w.]+)'\s*[,)]/g, (m, k) => { keys.add(k); return m; });
   assert.ok(keys.size > 20, 'ключей найдено мало: ' + keys.size);
   keys.forEach((k) => assert.ok(('games.mines.' + k) in dict, 'нет в словаре: ' + k));
-  [1, 2, 3, 4, 5].forEach((k) => assert.ok(dict['games.mines.rules.step' + k]));
+  ['intro', 'ex', 'take'].forEach((k) => assert.ok(dict['games.mines.rules.v.' + k]));
+  assert.ok(dict['games.mines.rules.step3']);
   ['title', 'description'].forEach((k) => assert.ok(dict['games.mines.' + k], 'каталог: ' + k));
   assert.ok(dict['wallet.src.mines'] && dict['admin.col.mines']);
 });

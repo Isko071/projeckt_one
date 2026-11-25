@@ -27,7 +27,7 @@ test('словарь игры: все ключи, которые использ�
 test('словарь игры: динамические ключи (комбинации, масти, шаги правил, статусы круга) на месте', () => {
   ['royalFlush', 'straightFlush', 'quads', 'fullHouse', 'flush', 'straight', 'trips', 'twoPair', 'pair', 'high'].forEach((k) => assert.ok(dict[PREFIX + 'hand.' + k], 'hand.' + k));
   ['S', 'H', 'D', 'C'].forEach((k) => assert.ok(dict[PREFIX + 'suit.' + k], 'suit.' + k));
-  [1, 2, 3, 4, 5].forEach((k) => assert.ok(dict[PREFIX + 'rules.step' + k], 'rules.step' + k));
+  ['intro', 'mine', 'board', 'ex', 'bets', 'mand'].forEach((k) => assert.ok(dict[PREFIX + 'rules.v.' + k], 'rules.v.' + k));
   ['pre', 'flop', 'turn', 'river', 'show', 'wait'].forEach((k) => assert.ok(dict[PREFIX + 'round.' + k], 'round.' + k));
   assert.ok(dict['wallet.src.poker-simple'] && dict['games.poker-simple.title'] && dict['games.poker-simple.description'] && dict['theme.toLight'] && dict['theme.toDark']);
 });

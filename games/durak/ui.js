@@ -45,6 +45,19 @@ function cardHtml(c, cls, attrs) {
 }
 function backHtml(cls) { return '<span class="pcard back' + (cls ? ' ' + cls : '') + '"></span>'; }
 
+// Правила: коротко и с примерами — как отбиться мастью и козырем
+function rulesHtml() {
+  function beat(a, d, trump) {
+    return '<span class="rv-flow"><span>' + cardHtml(a) + '<span class="rv-cap">' + esc(tr('rules.v.attack')) + '</span></span><span class="rv-arrow">→</span>' +
+      '<span>' + cardHtml(d) + '<span class="rv-cap">' + esc(tr(trump ? 'rules.v.byTrump' : 'rules.v.bySuit')) + '</span></span></span>';
+  }
+  return '<div class="scrim"><div class="modal rules-modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow">' + beat('7S', 'TS', false) + beat('9D', '6H', true) + '</div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.take')) + '</li><li>' + esc(tr('rules.v.throw')) + '</li><li>' + esc(tr('rules.v.transfer')) + '</li><li>' + esc(tr('rules.v.end')) + '</li></ul></div>' +
+    '<button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+}
+
 // ===== Экран партии =====
 function mySeat() { return app.ctrl ? app.ctrl.seat : 0; }
 function myTurn(v) { return !!app.ctrl && !v.gameOver && v.actor === mySeat() && !app.ctrl.busy && !holdLeft(); }
@@ -197,8 +210,7 @@ function modalHtml() {
       '<button class="btn primary full" data-act="closeSettings">' + esc(tr('settings.done')) + '</button></div></div>';
   }
   if (app.rules) {
-    out += '<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2><ol>' +
-      [1, 2, 3, 4, 5, 6, 7].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+    out += rulesHtml();
   }
   return out;
 }

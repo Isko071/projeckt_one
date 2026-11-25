@@ -126,8 +126,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .dialog.rules { max-width: 560px; max-height: 88vh; overflow: auto; border-radius: 24px 24px 0 0; padding: 22px; gap: 16px; }
 .rules-head { display: flex; justify-content: space-between; align-items: center; }
 .rules-head h2 { font-size: 26px; }
-.rule { display: flex; flex-direction: column; gap: 6px; }
-.rule span { color: var(--muted); line-height: 1.5; }
+.rv-grid { padding: 4px; border-radius: 10px; background: var(--board); }
+.rv-grid > i { border-radius: 7px; background: var(--slot); color: var(--tink); }
+.rv-grid > i.t2 { background: var(--t2); } .rv-grid > i.t4 { background: var(--t4); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }

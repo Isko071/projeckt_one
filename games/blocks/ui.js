@@ -175,12 +175,23 @@ function paintTray() {
   }
 }
 
+// Правила: коротко и с примером — фигура закрывает ряд, ряд исчезает
 function rulesHtml() {
   var rw = W.CONFIG.rewards.blocks;
+  // клетки поля 6×3: 'b' — занято, 'p' — новая фигура, '' — пусто
+  function grid(cells) {
+    return '<span class="rv-grid" style="--n:6;--c:26px" aria-hidden="true">' + cells.map(function (c) { return '<i class="' + (c === 'b' ? 'b c5' : c === 'p' ? 'b c2' : '') + '"></i>'; }).join('') + '</span>';
+  }
+  var before = ['b', '', '', 'b', '', '',   'b', 'b', 'b', 'p', 'p', 'b',   'b', 'b', '', 'b', '', ''];
+  var after =  ['b', '', '', 'b', '', '',   '', '', '', '', '', '',         'b', 'b', '', 'b', '', ''];
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus>' + esc(tr('close')) + '</button></div>' +
-    [1, 2, 3, 4, 5].map(function (k) { return '<div class="rule"><b>' + esc(tr('rules.' + k + '.title')) + '</b><span>' + esc(tr('rules.' + k + '.text', { a: rw.s1000, b: rw.s2500, c: rw.s5000 })) + '</span></div>'; }).join('') + '</div></div>';
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow">' + grid(before) + '<span class="rv-arrow">→</span>' + grid(after) + '</div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.combo')) + '</li><li>' + esc(tr('rules.v.end')) + '</li><li>' + esc(tr('rules.v.reward', { a: rw.s1000, b: rw.s2500, c: rw.s5000 })) + '</li></ul></div>' +
+    '</div></div>';
 }
+
 function modalHtml() {
   var g = app.game;
   if (app.modal === 'rules') return rulesHtml();

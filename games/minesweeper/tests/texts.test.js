@@ -29,10 +29,7 @@ test('словарь игры: все ключи, которые использ�
 
 test('словарь игры: сложности, правила, подсказки и состояния клеток на месте', () => {
   M.LEVEL_IDS.forEach((id) => assert.ok(dict[PREFIX + 'level.' + id], 'нет сложности ' + id));
-  ['goal', 'digits', 'flags', 'controls', 'first'].forEach((b) => {
-    assert.ok(dict[PREFIX + 'rules.' + b + '.title'], 'нет заголовка правил ' + b);
-    assert.ok(dict[PREFIX + 'rules.' + b + '.text'], 'нет текста правил ' + b);
-  });
+  ['intro', 'ex', 'tap', 'first', 'chord'].forEach((k) => assert.ok(dict[PREFIX + 'rules.v.' + k], 'нет текста правил rules.v.' + k));
   [1, 2, 3, 4, 5].forEach((k) => assert.ok(dict[PREFIX + 'hint.key' + k]));
   ['closed', 'flag', 'zero', 'mine', 'boom', 'wrong'].forEach((s) => assert.ok(dict[PREFIX + 'cell.' + s]));
   assert.ok(dict['games.minesweeper.title']);

@@ -167,10 +167,18 @@ function renderHud() {
   if (h) { var s = h.querySelector('[data-score]'), b = h.querySelector('[data-best]'); if (s) s.textContent = fmtNum(app.game.score); if (b) b.textContent = fmtNum(app.best); }
   if (t) { var tmp = document.createElement('div'); tmp.innerHTML = toastHtml(); t.replaceWith(tmp.firstChild); }
 }
+// Правила: коротко и с примером — ряд плиток до и после свайпа влево
 function rulesHtml() {
+  var r = W.CONFIG.rewards['2048'];
+  function row(vals) {
+    return '<span class="rv-grid" style="--n:4;--c:40px" aria-hidden="true">' + vals.map(function (v) { return '<i class="' + (v ? 't' + v : 'empty') + '">' + (v || '') + '</i>'; }).join('') + '</span>';
+  }
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus>' + esc(tr('close')) + '</button></div>' +
-    [1, 2, 3, 4, 5].map(function (k) { return '<div class="rule"><b>' + esc(tr('rules.' + k + '.title')) + '</b><span>' + esc(tr('rules.' + k + '.text', { a: W.CONFIG.rewards['2048'].t512, b: W.CONFIG.rewards['2048'].t1024, c: W.CONFIG.rewards['2048'].t2048 })) + '</span></div>'; }).join('') + '</div></div>';
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow">' + row([2, 2, 4, 0]) + '<span class="rv-arrow">←</span>' + row([4, 4, 0, 0]) + '</div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.new')) + '</li><li>' + esc(tr('rules.v.end')) + '</li><li>' + esc(tr('rules.v.reward', { a: r.t512, b: r.t1024, c: r.t2048 })) + '</li></ul></div>' +
+    '</div></div>';
 }
 function modalHtml() {
   var g = app.game;

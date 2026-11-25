@@ -281,14 +281,14 @@ function rulesHtml() {
   var online = window.YahtzeeOnlineUI && app.screen === 'online' ? '<li>' + esc(tr('rules.online.text')) + '</li>' : '';
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus data-key="close">' + esc(tr('close')) + '</button></div>' +
-    '<p class="rintro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
     // пример 1: ход — оставили три пятёрки, остальные перебрасываются
-    '<div class="rcard">' + ruleDiceHtml([2, 5, 5, 1, 5], ['', 'held', 'held', '', 'held']) + '<p>' + esc(tr('rules.v.turn')) + '</p></div>' +
-    '<table class="rtable"><tbody>' + rows + '</tbody></table>' +
+    '<div class="rv-card">' + ruleDiceHtml([2, 5, 5, 1, 5], ['', 'held', 'held', '', 'held']) + '<p>' + esc(tr('rules.v.turn')) + '</p></div>' +
+    '<table class="rv-table"><tbody>' + rows + '</tbody></table>' +
     // пример 2: фулл-хаус
-    '<div class="rcard"><div class="rcard-head"><b>' + esc(label('fullHouse')) + '</b><span class="rpts">' + esc(tr('rules.v.ptsN', { n: Y.scoreRaw('fullHouse', fh) })) + '</span></div>' +
+    '<div class="rv-card"><div class="rv-head"><b>' + esc(label('fullHouse')) + '</b><span class="rv-pts">' + esc(tr('rules.v.ptsN', { n: Y.scoreRaw('fullHouse', fh) })) + '</span></div>' +
     ruleDiceHtml(fh) + '</div>' +
-    '<ul class="rnotes"><li>' + esc(tr('rules.v.bonus')) + '</li><li>' + esc(tr('rules.v.zero')) + '</li><li>' + esc(tr('rules.v.again')) + '</li>' + online + '</ul>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.bonus')) + '</li><li>' + esc(tr('rules.v.zero')) + '</li><li>' + esc(tr('rules.v.again')) + '</li>' + online + '</ul></div>' +
     '</div></div>';
 }
 
