@@ -94,3 +94,24 @@ html.wallet-wait :is(.bal, .bal-chip, .bal-line, .stackline, #wallet-open, .wall
    рисованные обложки и значки она принимает за иконки и инвертирует (белые карты становятся тёмными). Картинки просим не трогать —
    у сайта своя тёмная тема, а обложки одинаково хороши на любом фоне. */
 img { color-scheme: only light; }
+
+/* Правила с картинками (общие детали для всех игр): вступление, карточка-пример, «было → стало», короткие пункты, мини-поле */
+.rv { display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.rv-intro { margin: 0; color: var(--muted); line-height: 1.5; }
+.rv-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); }
+.rv-card p { margin: 0; line-height: 1.45; font-size: 15px; }
+.rv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.rv-head b { font-size: 16px; }
+.rv-pts { flex: none; padding: 3px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 14px; }
+.rv-flow { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.rv-arrow { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+.rv-cap { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); text-align: center; }
+.rv-notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); line-height: 1.45; font-size: 15px; }
+.rv-grid { display: grid; grid-template-columns: repeat(var(--n, 4), var(--c, 30px)); gap: 3px; }
+.rv-grid > i { width: var(--c, 30px); height: var(--c, 30px); border-radius: 6px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: calc(var(--c, 30px) * .45); background: var(--line); color: var(--ink); }
+.rv-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 15px; }
+.rv-table th, .rv-table td { padding: 8px 6px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.rv-table tr:first-child th, .rv-table tr:first-child td { border-top: none; }
+.rv-table th { width: 40%; font-weight: 700; }
+.rv-table td { color: var(--muted); }
+.rv-table td:last-child { width: 26%; color: var(--accent); font-weight: 700; text-align: right; }

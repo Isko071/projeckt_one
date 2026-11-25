@@ -227,8 +227,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .dialog.rules { max-width: 560px; max-height: 88vh; overflow: auto; border-radius: 24px 24px 0 0; padding: 22px; gap: 16px; }
 .rules-head { display: flex; justify-content: space-between; align-items: center; }
 .rules-head h2 { font-size: 26px; }
-.rule { display: flex; flex-direction: column; gap: 6px; }
-.rule span { color: var(--muted); line-height: 1.5; }
+.rv-grid > i { border-radius: 8px; background: var(--cell); box-shadow: inset 0 2px 0 var(--cellHi), inset 0 -2px 0 var(--cellEdge); }
+.rv-grid > i.flag { color: var(--flag); }
+.rv-grid > i.open { background: var(--open); box-shadow: inset 0 0 0 1px var(--openLine); }
+.rv-grid > i.n2 { color: var(--n2); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }

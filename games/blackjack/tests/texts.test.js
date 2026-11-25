@@ -27,7 +27,7 @@ test('словарь игры: все ключи, которые использ�
 test('словарь игры: динамические ключи (результаты, статусы, ошибки, правила, масти) на месте', () => {
   ['win', 'bj', 'push', 'lose', 'bust', 'dealerBj'].forEach((k) => assert.ok(dict[PREFIX + 'res.' + k], 'res.' + k));
   ['notFound', 'full', 'closed', 'denied', 'network', 'other'].forEach((k) => { assert.ok(dict[PREFIX + 'err.' + k]); assert.ok(dict[PREFIX + 'err.' + k + 'Text']); });
-  ['goal', 'cards', 'turn', 'pay', 'dealer'].forEach((k) => { assert.ok(dict[PREFIX + 'rules.' + k + '.title']); assert.ok(dict[PREFIX + 'rules.' + k + '.text']); });
+  ['intro', 'ex1', 'ex2', 'bjPts', 'values', 'dealer', 'pay'].forEach((k) => assert.ok(dict[PREFIX + 'rules.v.' + k], 'rules.v.' + k));
   ['s', 'c', 'h', 'd'].forEach((k) => assert.ok(dict[PREFIX + 'suit.' + k]));
   ['error', 'unsupported', 'domain', 'popup'].forEach((k) => assert.ok(dict[PREFIX + 'login.' + k], 'login.' + k));
   assert.ok(dict['wallet.src.blackjack'] && dict['theme.toLight'] && dict['theme.toDark'] && dict['games.blackjack.title']);

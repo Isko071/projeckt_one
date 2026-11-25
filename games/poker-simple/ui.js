@@ -443,10 +443,15 @@ function modalHtml() {
       HANDS.map(function (h, i) { return '<div class="row" data-key="h' + i + '"><span class="n">' + (i + 1) + '</span><span class="name">' + esc(handName(h[0])) + '</span><span class="cards">' + h[1].split(' ').map(function (c) { return cardHtml(c, 'combo-card', 'tiny'); }).join('') + '</span></div>'; }).join('') + '</div></div>';
   }
   if (app.rules) {
+    // Правила: коротко, пример «ваши две карты + пять общих = флеш» и сила комбинаций
+    var cs = function (codes) { return '<span class="rv-cards">' + codes.map(function (c) { return cardHtml(c, 'combo-card', 'tiny'); }).join('') + '</span>'; };
     out += '<div class="scrim" data-key="rulesScrim"><div class="rules" role="dialog" aria-label="' + esc(tr('rules.title')) + '" data-key="rules"><div class="head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn" data-act="closeRules" data-key="rulesX">' + esc(tr('rules.close')) + '</button></div>' +
-      '<ol>' + [1, 2, 3, 4, 5].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol>' +
-      '<div style="font-weight:700">' + esc(tr('rules.strength')) + '</div><div class="hands">' + HANDS.map(function (h, i) { return '<div class="hand-row" data-key="rh' + i + '"><b>' + esc(handName(h[0])) + '</b><span class="mini-cards">' + h[1].split(' ').map(miniHtml).join('') + '</span></div>'; }).join('') + '</div>' +
-      '<div class="note-card"><div style="font-weight:700">' + esc(tr('rules.mandTitle')) + '</div><p>' + esc(tr('rules.mandText', { n: app.prefs.ante * 2 })) + '</p></div></div></div>';
+      '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+      '<div class="rv-card"><div class="rv-flow"><span>' + cs(['AH', 'KH']) + '<span class="rv-cap">' + esc(tr('rules.v.mine')) + '</span></span><span class="rv-arrow">+</span>' +
+      '<span>' + cs(['QH', 'JH', '2C', '7H', '9S']) + '<span class="rv-cap">' + esc(tr('rules.v.board')) + '</span></span></div>' +
+      '<div class="rv-head"><b>' + esc(handName('flush')) + '</b></div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+      '<ul class="rv-notes"><li>' + esc(tr('rules.v.bets')) + '</li><li>' + esc(tr('rules.v.mand', { n: app.prefs.ante * 2 })) + '</li></ul>' +
+      '<b>' + esc(tr('rules.strength')) + '</b><div class="hands">' + HANDS.map(function (h, i) { return '<div class="hand-row" data-key="rh' + i + '"><b>' + esc(handName(h[0])) + '</b><span class="mini-cards">' + h[1].split(' ').map(miniHtml).join('') + '</span></div>'; }).join('') + '</div></div></div></div>';
   }
   var m = app.modal;
   if (m) {

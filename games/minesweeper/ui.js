@@ -225,13 +225,17 @@ function gameHtml() {
     '<p class="hint-keys muted-text">' + [1, 2, 3, 4, 5].map(function (k) { return esc(tr('hint.key' + k)); }).join(' · ') + '</p>';
 }
 
+// Правила: коротко и с примером — цифра 2 и две мины под флажками
 function rulesHtml() {
-  function block(name) {
-    return '<div class="rule"><b>' + esc(tr('rules.' + name + '.title')) + '</b><span>' + esc(tr('rules.' + name + '.text')) + '</span></div>';
-  }
+  var cells = ['f', 'c', 'c', 'c', '2', 'c', 'c', 'c', 'f'].map(function (k) {
+    return k === 'f' ? '<i class="flag">⚑</i>' : k === 'c' ? '<i></i>' : '<i class="open n' + k + '">' + k + '</i>';
+  }).join('');
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus data-key="close">' + esc(tr('close')) + '</button></div>' +
-    block('goal') + block('digits') + block('flags') + block('controls') + block('first') + '</div></div>';
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow"><span class="rv-grid" style="--n:3;--c:44px" aria-hidden="true">' + cells + '</span></div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.tap')) + '</li><li>' + esc(tr('rules.v.first')) + '</li><li>' + esc(tr('rules.v.chord')) + '</li></ul></div>' +
+    '</div></div>';
 }
 function confirmHtml(kind) {
   var exit = kind === 'exit';

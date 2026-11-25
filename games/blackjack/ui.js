@@ -721,11 +721,17 @@ function gameHtml() {
 }
 
 // ===== Окна =====
+// Правила: коротко и с примерами на картах — добор до 21 и блэкджек с двух карт
 function rulesModalHtml() {
-  var blocks = ['goal', 'cards', 'turn', 'pay', 'dealer'].map(function (k) { return '<div class="rule"><b>' + esc(tr('rules.' + k + '.title')) + '</b><span>' + esc(tr('rules.' + k + '.text')) + '</span></div>'; }).join('');
+  function cards(codes) { return '<span class="rv-cards">' + codes.map(function (c) { return cardHtml(c, 34); }).join('') + '</span>'; }
+  function pts(n) { return '<span class="rv-pts">' + n + '</span>'; }
   return '<div class="overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="sheet"><div class="head"><h2>' + esc(tr('rules.title')) + '</h2>' +
-    '<button class="icon-btn" data-act="close" data-key="close" data-autofocus aria-label="' + esc(tr('close')) + '">✕</button></div>' + blocks +
-    '<button class="btn accent" style="margin-top:10px;width:100%;min-height:48px" data-act="close" data-key="ok">' + esc(tr('rules.ok')) + '</button></div></div>';
+    '<button class="icon-btn" data-act="close" data-key="close" data-autofocus aria-label="' + esc(tr('close')) + '">✕</button></div>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow">' + cards(['Qh', '6c']) + pts(16) + '<span class="rv-arrow">→</span>' + cards(['Qh', '6c', '5s']) + pts(21) + '</div><p>' + esc(tr('rules.v.ex1')) + '</p></div>' +
+    '<div class="rv-card"><div class="rv-head">' + cards(['As', 'Kd']) + '<span class="rv-pts">' + esc(tr('rules.v.bjPts')) + '</span></div><p>' + esc(tr('rules.v.ex2')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.values')) + '</li><li>' + esc(tr('rules.v.dealer')) + '</li><li>' + esc(tr('rules.v.pay')) + '</li></ul></div>' +
+    '<button class="btn accent" style="margin-top:14px;width:100%;min-height:48px" data-act="close" data-key="ok">' + esc(tr('rules.ok')) + '</button></div></div>';
 }
 function confirmHtml(kind) {
   var map = { exitCatalog: ['confirmCatalog', 'catalog'], leaveTable: ['confirmTable', 'table'], closeTable: ['confirmClose', 'closeTable'] }[kind];

@@ -157,11 +157,21 @@ function gameHtml() {
     errHtml() + '<div class="board' + (shake ? ' shake' : '') + '" role="group">' + cells + '</div>' + take + result + '</div>';
 }
 
+// Правила: коротко и с примером — открыто три камня, четвёртая клетка оказалась миной
+function rulesHtml() {
+  var cells = ['g', 'c', 'c', 'c', 'c', 'c', 'g', 'c', 'c', 'c', 'c', 'c', 'g', 'm', 'c', 'c', 'c', 'c', 'c', 'c', 'c', 'c', 'c', 'c', 'c'].map(function (k) {
+    return k === 'g' ? '<i class="safe">' + GEM_SVG + '</i>' : k === 'm' ? '<i class="boom">' + MINE_SVG + '</i>' : '<i></i>';
+  }).join('');
+  return '<div class="scrim"><div class="modal rules-modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow"><span class="rv-grid" style="--n:5;--c:36px" aria-hidden="true">' + cells + '</span></div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.take')) + '</li><li>' + esc(tr('rules.step3')) + '</li></ul></div>' +
+    '<button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+}
 function modalHtml() {
   var out = '';
   if (app.confirm) out += '<div class="scrim"><div class="modal" role="alertdialog" aria-modal="true"><h2>' + esc(tr('confirm.title')) + '</h2><p>' + esc(tr('confirm.text')) + '</p><div class="row"><button class="btn primary" data-act="stay">' + esc(tr('confirm.stay')) + '</button><button class="btn" data-act="menu">' + esc(tr('confirm.ok')) + '</button></div></div></div>';
-  if (app.rules) out += '<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2><ol>' +
-    [1, 2, 3, 4, 5].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+  if (app.rules) out += rulesHtml();
   return out;
 }
 // Экран перерисовывается целиком; чтобы клавиатурный фокус не терялся, запоминаем, на чём он стоял (клетка или кнопка), и возвращаем после перерисовки

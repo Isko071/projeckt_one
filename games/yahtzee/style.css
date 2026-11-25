@@ -266,8 +266,19 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 }
 .rules-head { display: flex; justify-content: space-between; align-items: center; }
 .rules-head h2 { font-size: 26px; }
-.rule { display: flex; flex-direction: column; gap: 6px; }
-.rule span { color: var(--muted); line-height: 1.5; }
+/* Правила: кубики-примеры (общие детали правил — .rv-* в shared/theme.css) */
+.rd-row { display: flex; gap: 8px; align-items: flex-end; }
+.rd-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 40px; }
+.rd-wrap small { font-size: 9px; font-weight: 700; color: var(--accent); letter-spacing: .04em; }
+.rd {
+  width: 40px; height: 40px; box-sizing: border-box; border-radius: 10px; padding: 12%;
+  background: var(--die); border: 2px solid var(--die-edge); box-shadow: 0 2px 0 var(--line);
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+}
+.rd span { display: flex; align-items: center; justify-content: center; }
+.rd i { width: 70%; aspect-ratio: 1; border-radius: 50%; }
+.rd i.on { background: var(--pip); }
+.rd.held { background: var(--held); border-color: var(--accent); transform: translateY(-6px); }
 
 /* Ссылки на каталог оформлены как кнопки */
 a.theme-btn, a.btn-secondary, a.btn-primary {

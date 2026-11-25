@@ -80,7 +80,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline
 .rules { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 16px; width: 100%; max-width: 560px; max-height: calc(100dvh - 32px); overflow: auto; display: flex; flex-direction: column; gap: 12px; }
 .rules .head { display: flex; justify-content: space-between; align-items: center; }
 .rules h2 { margin: 0; font-size: 20px; }
-.rules ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.4; }
+.rv-cards { display: flex; gap: 3px; }
+.rv-cards .combo-card { --cw: 30px; --ch: 42px; }
 .rules .hands { display: flex; flex-direction: column; gap: 6px; }
 .hand-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
 .hand-row b { font-weight: 600; }

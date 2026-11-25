@@ -27,7 +27,7 @@ test('словарь игры: все ключи, которые использ�
 test('словарь игры: динамические ключи (результат выстрела, итог, шаги правил, подписи полей) на месте', () => {
   ['miss', 'hit', 'sunk'].forEach((k) => assert.ok(dict[PREFIX + 'res.' + k], 'res.' + k));
   ['win.fleet', 'lose.fleet', 'win.concede', 'lose.concede', 'win.left', 'lose.left'].forEach((k) => assert.ok(dict[PREFIX + 'over.' + k], 'over.' + k));
-  [1, 2, 3, 4, 5, 6, 7].forEach((k) => assert.ok(dict[PREFIX + 'rules.step' + k], 'rules.step' + k));
+  ['intro', 'ex', 'fleet', 'weapons', 'win'].forEach((k) => assert.ok(dict[PREFIX + 'rules.v.' + k], 'rules.v.' + k));
   ['shoot', 'radar', 'sub', 'bomber'].forEach((k) => assert.ok(dict[PREFIX + 'fire.' + k] && dict[PREFIX + 'w.' + k], 'w/fire ' + k));
   ['radar', 'sub', 'bomber'].forEach((k) => assert.ok(dict[PREFIX + 'w.' + k + '.d'], 'w.' + k + '.d'));
   assert.equal(dict[PREFIX + 'letters'].length, 10, 'подписи строк поля: 10 букв');

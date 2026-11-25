@@ -431,6 +431,17 @@ function rewardHtml() {
   var p = { n: fmt(r.granted), unit: window.I18n.plural(r.granted, 'wallet.unit') };
   return '<p class="reward" role="status">' + esc(r.granted <= 0 ? tr('over.cap.reached') : (r.capped ? tr('over.cap.cut', p) : tr('over.reward', p))) + '</p>';
 }
+// Правила: коротко и с примером — два попадания в корабль и промахи вокруг
+function rulesHtml() {
+  // поле 6×4: h — попадание, s — корабль (ещё не найден), m — промах
+  var map = ['', 'm', '', '', '', '',   '', 'h', 'h', 's', '', '',   '', '', 'm', '', '', 'm',   '', '', '', '', '', ''];
+  var cells = map.map(function (k) { return '<i class="' + k + '">' + (k === 'h' ? '✕' : k === 'm' ? '•' : '') + '</i>'; }).join('');
+  return '<div class="scrim"><div class="modal rules-modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow"><span class="rv-grid" style="--n:6;--c:32px" aria-hidden="true">' + cells + '</span></div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.fleet')) + '</li><li>' + esc(tr('rules.v.weapons')) + '</li><li>' + esc(tr('rules.v.win')) + '</li></ul></div>' +
+    '<button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+}
 function modalHtml() {
   var out = '';
   var v = app.ctrl ? app.ctrl.view() : null;
@@ -443,10 +454,7 @@ function modalHtml() {
   if (app.confirm) {
     out += '<div class="scrim"><div class="modal" role="alertdialog" aria-modal="true"><h2>' + esc(tr('confirm.title')) + '</h2><p>' + esc(tr('confirm.text')) + '</p><div class="row"><button class="btn primary" data-act="stay">' + esc(tr('confirm.stay')) + '</button><button class="btn" data-act="concede">' + esc(tr('confirm.ok')) + '</button></div></div></div>';
   }
-  if (app.rules) {
-    out += '<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2><ol>' +
-      [1, 2, 3, 4, 5, 6, 7].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
-  }
+  if (app.rules) out += rulesHtml();
   return out;
 }
 

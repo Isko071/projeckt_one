@@ -37,6 +37,29 @@ function pieceSvg(color, king, cls) {
     (king ? '<path d="M28 58 L31 36 L41 47 L50 32 L59 47 L69 36 L72 58Z" class="crown"/>' : '') + '</svg>';
 }
 
+// Правила: коротко и с примером — белая шашка бьёт чёрную через клетку
+function rulesHtml() {
+  // кусок доски 4×4: w — белая, b — чёрная, x — сбитая, t — куда встала
+  function board(map) {
+    var out = '';
+    for (var r = 0; r < 4; r++) for (var c = 0; c < 4; c++) {
+      var k = map[r * 4 + c], dark = (r + c) % 2 === 1;
+      out += '<i class="' + (dark ? 'd' : '') + (k === 't' ? ' dest' : '') + '">' + (k === 'w' ? pieceSvg('w') : k === 'b' ? pieceSvg('b') : k === 'x' ? pieceSvg('b', false, 'taken') : '') + '</i>';
+    }
+    return '<span class="rv-grid" style="--n:4;--c:36px" aria-hidden="true">' + out + '</span>';
+  }
+  var before = [], after = [];
+  for (var i = 0; i < 16; i++) { before.push(''); after.push(''); }
+  before[12] = 'w'; before[9] = 'b'; before[6] = 't';      // тёмные клетки: (3,0), (2,1), (1,2)
+  after[6] = 'w'; after[9] = 'x';
+  return '<div class="scrim"><div class="modal rules-modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2>' +
+    '<div class="rv"><p class="rv-intro">' + esc(tr('rules.v.intro')) + '</p>' +
+    '<div class="rv-card"><div class="rv-flow">' + board(before) + '<span class="rv-arrow">→</span>' + board(after) + '</div><p>' + esc(tr('rules.v.ex')) + '</p></div>' +
+    '<div class="rv-card"><div class="rv-head"><b>' + esc(tr('rules.v.kingTitle')) + '</b><span class="rv-king">' + pieceSvg('w', true) + '</span></div><p>' + esc(tr('rules.v.king')) + '</p></div>' +
+    '<ul class="rv-notes"><li>' + esc(tr('rules.v.win')) + '</li><li>' + esc(tr('rules.v.reward')) + '</li></ul></div>' +
+    '<button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
+}
+
 // ===== Экран партии =====
 function mySeat() { return app.ctrl ? app.ctrl.seat : 0; }
 function legalNow(v) { return app.ctrl && !v.gameOver && v.current === mySeat() && !app.ctrl.busy ? C.legalMoves(v) : []; }
@@ -120,10 +143,7 @@ function modalHtml() {
   if (app.confirm) {
     out += '<div class="scrim"><div class="modal" role="alertdialog" aria-modal="true"><h2>' + esc(tr('confirm.title')) + '</h2><p>' + esc(tr('confirm.text')) + '</p><div class="row"><button class="btn primary" data-act="stay">' + esc(tr('confirm.stay')) + '</button><button class="btn" data-act="concede">' + esc(tr('confirm.ok')) + '</button></div></div></div>';
   }
-  if (app.rules) {
-    out += '<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><h2>' + esc(tr('rules.title')) + '</h2><ol>' +
-      [1, 2, 3, 4, 5, 6, 7].map(function (k) { return '<li>' + esc(tr('rules.step' + k)) + '</li>'; }).join('') + '</ol><button class="btn primary full" data-act="closeRules">' + esc(tr('rules.close')) + '</button></div></div>';
-  }
+  if (app.rules) out += rulesHtml();
   return out;
 }
 
