@@ -256,13 +256,39 @@ function gameOverHtml() {
     '<button class="btn-primary" id="again" data-key="again">' + esc(tr('over.again')) + '</button></div></div></div>';
 }
 
+// ===== Правила с картинками: кубики-примеры, очки считает сама логика игры (scoreRaw), так что примеры всегда совпадают с игрой =====
+// dice — значения; mark — для каждого кубика: 'hl' (входит в комбинацию), 'dim' (не считается), 'held' (оставлен), '' (обычный)
+function ruleDiceHtml(dice, mark) {
+  return '<span class="rd-row" aria-hidden="true">' + dice.map(function (v, i) {
+    var pips = '';
+    for (var k = 0; k < 9; k++) pips += '<span><i class="' + (PIPS[v].indexOf(k) >= 0 ? 'on' : '') + '"></i></span>';
+    var m = mark ? mark[i] : '';
+    return '<span class="rd-wrap' + (m === 'held' ? ' held' : '') + '"><span class="rd' + (m ? ' ' + m : '') + '">' + pips + '</span>' +
+      (m === 'held' ? '<small>' + esc(tr('die.tag')) + '</small>' : '') + '</span>';
+  }).join('') + '</span>';
+}
 function rulesHtml() {
-  function block(name) {
-    return '<div class="rule"><b>' + esc(tr('rules.' + name + '.title')) + '</b><span>' + esc(tr('rules.' + name + '.text')) + '</span></div>';
-  }
+  var Y = window.Yahtzee;
+  // Таблица клеток: название, что нужно, сколько очков (для фиксированных — из логики игры)
+  var rows = [['upperAll', 'need.upper', 'pts.sumThese'], ['threeKind', 'need.threeKind', 'pts.sum'], ['fourKind', 'need.fourKind', 'pts.sum'],
+    ['fullHouse', 'need.fullHouse', 25], ['smallStraight', 'need.smallStraight', 30], ['largeStraight', 'need.largeStraight', 40],
+    ['yahtzee', 'need.yahtzee', 50], ['chance', 'need.chance', 'pts.sum']].map(function (r) {
+    var name = r[0] === 'upperAll' ? tr('rules.v.upperAll') : label(r[0]);
+    var pts = typeof r[2] === 'number' ? String(r[2]) : tr('rules.v.' + r[2]);
+    return '<tr><th scope="row">' + esc(name) + '</th><td>' + esc(tr('rules.v.' + r[1])) + '</td><td>' + esc(pts) + '</td></tr>';
+  }).join('');
+  var fh = [2, 5, 2, 5, 5];
+  var online = window.YahtzeeOnlineUI && app.screen === 'online' ? '<li>' + esc(tr('rules.online.text')) + '</li>' : '';
   return '<div class="overlay sheet-overlay" role="dialog" aria-modal="true" aria-label="' + esc(tr('rules.title')) + '"><div class="dialog rules">' +
     '<div class="rules-head"><h2>' + esc(tr('rules.title')) + '</h2><button class="btn-secondary small" data-act="close" data-autofocus data-key="close">' + esc(tr('close')) + '</button></div>' +
-    block('turn') + block('upper') + block('lower') + block('joker') + block('total') + (window.YahtzeeOnlineUI && app.screen === 'online' ? block('online') : '') +
+    '<p class="rintro">' + esc(tr('rules.v.intro')) + '</p>' +
+    // пример 1: ход — оставили три пятёрки, остальные перебрасываются
+    '<div class="rcard">' + ruleDiceHtml([2, 5, 5, 1, 5], ['', 'held', 'held', '', 'held']) + '<p>' + esc(tr('rules.v.turn')) + '</p></div>' +
+    '<table class="rtable"><tbody>' + rows + '</tbody></table>' +
+    // пример 2: фулл-хаус
+    '<div class="rcard"><div class="rcard-head"><b>' + esc(label('fullHouse')) + '</b><span class="rpts">' + esc(tr('rules.v.ptsN', { n: Y.scoreRaw('fullHouse', fh) })) + '</span></div>' +
+    ruleDiceHtml(fh) + '</div>' +
+    '<ul class="rnotes"><li>' + esc(tr('rules.v.bonus')) + '</li><li>' + esc(tr('rules.v.zero')) + '</li><li>' + esc(tr('rules.v.again')) + '</li>' + online + '</ul>' +
     '</div></div>';
 }
 

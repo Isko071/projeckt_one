@@ -30,10 +30,8 @@ test('словарь игры: все ключи, которые использ�
 test('словарь игры: подписи всех 13 категорий и все блоки правил на месте', () => {
   Y.CATEGORIES.forEach((c) => assert.ok(dict[PREFIX + 'cat.' + c], 'нет подписи категории ' + c));
   assert.equal(Y.CATEGORIES.length, 13);
-  ['turn', 'upper', 'lower', 'joker', 'total'].forEach((b) => {
-    assert.ok(dict[PREFIX + 'rules.' + b + '.title'], 'нет заголовка правил ' + b);
-    assert.ok(dict[PREFIX + 'rules.' + b + '.text'], 'нет текста правил ' + b);
-  });
+  // правила: коротко, таблица клеток и два примера на кубиках
+  ['intro', 'turn', 'upperAll', 'bonus', 'zero', 'again', 'ptsN'].concat(Y.LOWER.filter((c) => c !== 'chance').map((c) => 'need.' + c), ['need.chance']).forEach((k) => assert.ok(dict[PREFIX + 'rules.v.' + k], 'нет текста правил rules.v.' + k));
 });
 
 test('словарь игры: общие ключи платформы для кнопки темы существуют', () => {
