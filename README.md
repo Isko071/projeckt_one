@@ -79,7 +79,6 @@ node --test
 ## Планы
 
 - Новые игры: [идеи](docs/game-ideas.md).
-- Свой домен вместо `partejka.pages.dev`.
 
 ## Как мы работаем
 
